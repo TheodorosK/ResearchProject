@@ -124,13 +124,13 @@ def main():
             if tmp.isValidCode(item):
                 countOfValidPrograms += 1
                 if countOfValidPrograms <= nrOfValidPrograms:
-                    tmpfile = open(args.out+"/valid/" + str(countOfValidPrograms) + ".txt", 'w')
-                    tmpfile.write("%s\n" % item)
+                    with open(args.out+"/valid/" + str(countOfValidPrograms) + ".txt", 'w') as tmpfile:
+                        tmpfile.write("%s\n" % item)
             else:
                 countOfInvalidPrograms += 1
                 if countOfInvalidPrograms <= nrOfInvalidPrograms:
-                    tmpfile = open(args.out+"/invalid/" + str(countOfInvalidPrograms) + ".txt", 'w')
-                    tmpfile.write("%s\n" % item)
+                    with open(args.out+"/invalid/" + str(countOfInvalidPrograms) + ".txt", 'w') as tmpfile:
+                        tmpfile.write("%s\n" % item)
 
 
 if __name__ == '__main__':
