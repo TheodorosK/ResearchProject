@@ -445,11 +445,19 @@ const state = {
 
 /* =========================== Fetching & parsing =========================== */
 
-function fetchWithTimeout(url) {
+/* The abort timer must outlive the header response: a relay can return 200
+   quickly, then stall while streaming the body, so text() stays under the
+   same signal. */
+async function fetchTextWithTimeout(url) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  return fetch(url, { signal: ctrl.signal, redirect: "follow" })
-    .finally(() => clearTimeout(t));
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, redirect: "follow" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 async function fetchFeedXML(feedUrl) {
@@ -460,9 +468,7 @@ async function fetchFeedXML(feedUrl) {
   let lastErr = null;
   for (const idx of attempts) {
     try {
-      const res = await fetchWithTimeout(PROXIES[idx](feedUrl));
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const text = await res.text();
+      const text = await fetchTextWithTimeout(PROXIES[idx](feedUrl));
       if (!text || (!text.includes("<rss") && !text.includes("<feed") && !text.includes("<rdf"))) {
         throw new Error("not a feed");
       }
@@ -718,9 +724,14 @@ function renderTicker() {
 
 function renderChrome() {
   const pill = $("livePill");
-  const anyOk = Object.values(state.sourceStatus).some(s => s === "ok");
-  pill.classList.toggle("stale", !anyOk && state.lastUpdated === null);
-  $("liveLabel").textContent = anyOk || state.lastUpdated ? "LIVE" : "OFFLINE";
+  const statuses = Object.values(state.sourceStatus);
+  const anyOk = statuses.some(s => s === "ok");
+  // Health reflects the *current* refresh, not cached stories: offline once
+  // at least one fetch has resolved and none succeeded. All-pending (initial
+  // load) still reads as LIVE.
+  const offline = statuses.some(s => s === "ok" || s === "error") && !anyOk;
+  pill.classList.toggle("stale", offline);
+  $("liveLabel").textContent = offline ? "OFFLINE" : "LIVE";
   $("updatedAt").textContent = state.lastUpdated
     ? `Updated ${relTime(state.lastUpdated)} · ${absTime(state.lastUpdated)}`
     : "Waiting for feeds…";
