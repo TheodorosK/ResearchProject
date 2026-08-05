@@ -2,8 +2,9 @@ name: Deploy news dashboard to GitHub Pages
 
 on:
   push:
-    branches: [master]
-    paths: ["news-dashboard/**"]
+    # The feature-branch trigger lets Pages go live before the PR merges;
+    # it is inert once the branch is deleted and can be dropped after merge.
+    branches: [master, claude/live-news-dashboard-1u4ue7]
   workflow_dispatch:
 
 permissions:
