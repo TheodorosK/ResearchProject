@@ -846,12 +846,19 @@ function categoryOk(a) {
    ranked by coverage-weighted freshness on Top and by personal affinity on
    For You; plain reverse-chronological on category tabs. */
 function visibleClusters() {
-  const q = state.query.toLowerCase();
+  // Every search term must appear somewhere in title+snippet (AND of terms).
+  // Term-wise matching keeps trending chips searchable: their bigrams skip
+  // stopwords ("israel iran" from "Israel and Iran"), so a literal phrase
+  // substring would never match.
+  const qWords = state.query.toLowerCase().split(/\s+/).filter(Boolean);
   const out = [];
   for (const c of state.clusters) {
-    const members = c.articles.filter(a =>
-      state.enabledSources.has(a.src) && categoryOk(a) &&
-      (!q || a.title.toLowerCase().includes(q) || a.snippet.toLowerCase().includes(q)));
+    const members = c.articles.filter(a => {
+      if (!state.enabledSources.has(a.src) || !categoryOk(a)) return false;
+      if (!qWords.length) return true;
+      const text = (a.title + " " + a.snippet).toLowerCase();
+      return qWords.every(w => text.includes(w));
+    });
     if (!members.length) continue;
     const srcs = [...new Set(members.map(a => a.src))];
     out.push({ rep: members[0], members, cov: srcs.length, srcs });
@@ -949,10 +956,15 @@ function renderStories() {
 async function loadBriefing() {
   try {
     const res = await fetch("briefing.json", { cache: "no-store" });
-    if (!res.ok) return;
+    if (!res.ok) return;                       // transient fetch problem: keep what we have
     const b = await res.json();
-    if (b.unavailable || !Array.isArray(b.briefing)) return;
-    if (Date.now() - new Date(b.generatedAt).getTime() > 26 * 3600e3) return;  // stale
+    const usable = !b.unavailable && Array.isArray(b.briefing) &&
+      Date.now() - new Date(b.generatedAt).getTime() <= 26 * 3600e3;
+    if (!usable) {
+      // a later deploy shipped a stub, or the briefing aged out — stop showing it
+      if (state.briefing) { state.briefing = null; render(); }
+      return;
+    }
     b.arxivMap = new Map((b.arxiv || []).map(x => [normLink(x.link), x.tldr]));
     state.briefing = b;
     render();
@@ -1029,7 +1041,7 @@ function renderKPIs() {
 
 function renderBars() {
   const counts = Object.keys(SOURCES).map(id => ({
-    id, n: state.articles.filter(a => a.src === id && (state.category === "Top" || a.cat === state.category)).length,
+    id, n: state.articles.filter(a => a.src === id && categoryOk(a)).length,
   })).sort((a, b) => b.n - a.n);
   const max = Math.max(1, ...counts.map(c => c.n));
   $("bars").innerHTML = counts.map(c => `
