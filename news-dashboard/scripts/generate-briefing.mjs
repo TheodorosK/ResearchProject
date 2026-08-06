@@ -48,6 +48,26 @@ const FEEDS = [
   { src: "arXiv",           cat: "AI Research", url: "https://rss.arxiv.org/rss/cs.LG", abstracts: true, max: 12 },
   { src: "MIT News",        cat: "AI Research", url: "https://news.mit.edu/rss/topic/artificial-intelligence2" },
   { src: "ScienceDaily",    cat: "AI Research", url: "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml" },
+
+  /* Greece. `url` may be a list of candidates — same fallback behaviour as the
+     browser side; the first one that yields items wins. */
+  { src: "News247",            cat: "Greece", lang: "el", url: ["https://www.news247.gr/feed/", "https://www.news247.gr/rss", "https://www.news247.gr/feed"] },
+  { src: "CNN Greece",         cat: "Greece", lang: "el", url: ["https://www.cnn.gr/rss", "https://www.cnn.gr/feed", "https://www.cnn.gr/rss.xml", "https://www.cnn.gr/news/rss"] },
+  { src: "in.gr",              cat: "Greece", lang: "el", url: ["https://www.in.gr/feed/", "https://www.in.gr/rss", "https://www.in.gr/feed"] },
+  { src: "Greek Reporter",     cat: "Greece", url: ["https://greekreporter.com/feed/", "https://greekreporter.com/rss"] },
+  { src: "Keep Talking Greece",cat: "Greece", url: ["https://www.keeptalkinggreece.com/feed/"] },
+  { src: "NewsNow Greece",     cat: "Greece", url: ["https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece?type=rss", "https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece/rss"] },
+  { src: "Kathimerini EN",     cat: "Greece", url: ["https://www.ekathimerini.com/feed/", "https://www.ekathimerini.com/rss", "https://www.ekathimerini.com/news/feed/"] },
+
+  /* Other countries */
+  { src: "El País EN",      cat: "World",       url: ["https://feeds.elpais.com/mrss-s/pages/ep/site/english.elpais.com/portada", "https://english.elpais.com/rss/"] },
+  { src: "Japan Times",     cat: "World",       url: ["https://www.japantimes.co.jp/feed/", "https://www.japantimes.co.jp/news/feed/"] },
+  { src: "SCMP",            cat: "World",       url: ["https://www.scmp.com/rss/91/feed", "https://www.scmp.com/rss/5/feed"] },
+  { src: "Times of India",  cat: "World",       url: ["https://timesofindia.indiatimes.com/rssfeedstopstories.cms", "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms"] },
+  { src: "Times of Israel", cat: "World",       url: ["https://www.timesofisrael.com/feed/"] },
+  { src: "Africanews",      cat: "World",       url: ["https://www.africanews.com/feed/rss", "https://www.africanews.com/api/en/rss"] },
+  { src: "ABC Australia",   cat: "World",       url: ["https://www.abc.net.au/news/feed/51120/rss.xml", "https://www.abc.net.au/news/feed/2942460/rss.xml"] },
+  { src: "CBC",             cat: "World",       url: ["https://www.cbc.ca/webfeed/rss/rss-world", "https://www.cbc.ca/cmlink/rss-world"] },
 ];
 
 const decode = (s) =>
@@ -69,6 +89,7 @@ function parseItems(xml, feed) {
     const item = {
       source: feed.src,
       category: feed.cat,
+      ...(feed.lang ? { language: feed.lang } : {}),
       title: pick("title"),
       link: pick("link") || (linkAttr ? linkAttr[1] : ""),
       published: pick("pubDate") || pick("dc:date") || pick("published") || pick("updated"),
@@ -79,22 +100,32 @@ function parseItems(xml, feed) {
   return items;
 }
 
-async function fetchFeed(feed) {
+async function fetchOne(url, feed) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 20000);
   try {
-    const res = await fetch(feed.url, {
+    const res = await fetch(url, {
       signal: ctrl.signal,
       headers: { "user-agent": "newsroom-dashboard-briefing/1.0" },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return parseItems(await res.text(), feed);
-  } catch (e) {
-    console.error(`feed failed: ${feed.url} (${e.message})`);
-    return [];
   } finally {
     clearTimeout(t);
   }
+}
+
+async function fetchFeed(feed) {
+  for (const url of Array.isArray(feed.url) ? feed.url : [feed.url]) {
+    try {
+      const items = await fetchOne(url, feed);
+      if (items.length) return items;
+      console.error(`feed empty: ${url}`);
+    } catch (e) {
+      console.error(`feed failed: ${url} (${e.message})`);
+    }
+  }
+  return [];
 }
 
 const BRIEFING_SCHEMA = {
@@ -137,6 +168,53 @@ const BRIEFING_SCHEMA = {
         additionalProperties: false,
       },
     },
+    connections: {
+      type: "array",
+      description:
+        "3-6 hidden connections between stories that are NOT about the same event and that a " +
+        "reader scanning the feed would not notice. The dashboard already detects links through " +
+        "shared names and shared vocabulary, so those are worthless here — find the links that " +
+        "only knowledge and reasoning reveal: a shared upstream cause, one story being the " +
+        "downstream consequence of another, the same pressure showing up in two unrelated " +
+        "sectors, a pattern in how differently outlets frame the same facts, or the same event " +
+        "covered in Greek and in English with materially different emphasis.",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Name the connection, max 9 words" },
+          insight: {
+            type: "string",
+            description:
+              "Three or four sentences: what the link actually is, why it is not obvious, and " +
+              "what it would mean if it holds. Name the stories concretely.",
+          },
+          kind: {
+            type: "string",
+            enum: ["shared-cause", "consequence", "same-pressure", "framing-contrast", "cross-language", "other"],
+            description: "What kind of link this is",
+          },
+          surprise: {
+            type: "integer",
+            description: "1 = an informed reader would already expect this; 5 = genuinely unexpected",
+          },
+          stories: {
+            type: "array",
+            description: "The 2-4 input stories this connection is drawn from",
+            items: {
+              type: "object",
+              properties: {
+                headline: { type: "string", description: "The story's headline, copied from the input" },
+                link: { type: "string", description: "The story's link, copied exactly from the input" },
+              },
+              required: ["headline", "link"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["title", "insight", "kind", "surprise", "stories"],
+        additionalProperties: false,
+      },
+    },
     arxiv: {
       type: "array",
       description: "One entry per arXiv paper provided in the input",
@@ -151,7 +229,7 @@ const BRIEFING_SCHEMA = {
       },
     },
   },
-  required: ["briefing", "signals", "arxiv"],
+  required: ["briefing", "signals", "connections", "arxiv"],
   additionalProperties: false,
 };
 
@@ -185,7 +263,8 @@ async function main() {
     output_config: { format: { type: "json_schema", schema: BRIEFING_SCHEMA } },
     system:
       "You are the analysis engine behind a live news dashboard. You receive the current " +
-      "headlines from fifteen outlets plus today's arXiv AI papers, and produce four things: " +
+      "headlines from around thirty outlets across several countries — including Greek-language " +
+      "outlets whose items are in Greek — plus today's arXiv AI papers, and produce five things: " +
       "a briefing of the five most important stories (judge importance by cross-outlet coverage " +
       "and real-world consequence, not recency alone; synthesize across outlets rather than " +
       "echoing one; for each, pick the single input story it is best matched to and copy that " +
@@ -198,8 +277,20 @@ async function main() {
       "connect seemingly unrelated stories (a supply-chain thread behind separate business " +
       "stories, a policy shift visible across regions, a technology quietly appearing in several " +
       "fields; only report patterns genuinely supported by the given stories, never invent " +
-      "connections), and a plain-English TL;DR for every arXiv paper provided. Be neutral and " +
-      "specific; name the stories a signal draws on.",
+      "connections), a set of hidden connections between individual stories, and a plain-English " +
+      "TL;DR for every arXiv paper provided. " +
+      "For the connections specifically: the dashboard already computes links from shared proper " +
+      "nouns and shared vocabulary and shows them as a graph, so repeating those adds nothing. " +
+      "Look instead for links that require knowing something — a common upstream cause behind two " +
+      "stories filed under different sections, one story being a foreseeable consequence of " +
+      "another, the same economic or regulatory pressure surfacing in unrelated industries, two " +
+      "outlets reporting the same facts with revealingly different emphasis, or a story the Greek " +
+      "outlets cover very differently from the English-language ones. Read the Greek items as " +
+      "carefully as the English ones and write every output in English. Score each connection's " +
+      "surprise honestly: if an informed reader would already expect the link, score it low or " +
+      "leave it out. Never manufacture a connection to fill the list — returning three solid ones " +
+      "is better than six thin ones. Be neutral and specific; name the stories a signal or " +
+      "connection draws on and copy their links exactly.",
     messages: [
       {
         role: "user",
@@ -228,9 +319,11 @@ async function main() {
     ...data,
   });
   const withContext = data.briefing.filter((b) => b.context).length;
+  const conns = data.connections || [];
   console.log(
     `Wrote briefing.json: ${data.briefing.length} briefing items (${withContext} with background ` +
-    `context), ${data.signals.length} signals, ${data.arxiv.length} paper TLDRs ` +
+    `context), ${data.signals.length} signals, ${conns.length} hidden connections ` +
+    `(surprise ${conns.map((c) => c.surprise).join("/") || "–"}), ${data.arxiv.length} paper TLDRs ` +
     `(${response.usage.input_tokens} in / ${response.usage.output_tokens} out tokens).`
   );
 }

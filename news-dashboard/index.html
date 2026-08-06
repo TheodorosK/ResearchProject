@@ -80,6 +80,9 @@
   }
 
   * { box-sizing: border-box; }
+  /* The UA rule for [hidden] is display:none, but any author `display` rule
+     outranks it — .grid sets display:grid, so hiding it needs the override. */
+  [hidden] { display: none !important; }
   html, body { margin: 0; }
   body {
     background: var(--page);
@@ -310,6 +313,119 @@
   .trend .tcount { color: var(--text-muted); font-weight: 700; font-size: 11px; }
   .trend .up { color: var(--status-good); font-weight: 700; }
 
+  /* ---------- Source picker (collapsible, grouped by region) ---------- */
+  .src-picker { margin: -4px 0 14px; }
+  .src-picker > summary {
+    cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .04em; user-select: none;
+  }
+  .src-picker > summary::-webkit-details-marker { display: none; }
+  .src-picker > summary::before { content: "\203a"; display: inline-block; transition: transform .15s ease; }
+  .src-picker[open] > summary::before { transform: rotate(90deg); }
+  .src-picker > summary:hover { color: var(--text-secondary); }
+  .src-actions { display: flex; gap: 8px; margin: 10px 0 8px; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .chip-group {
+    display: flex; gap: 7px; flex-wrap: wrap; align-items: center;
+    border: 1px dashed var(--grid); border-radius: 10px; padding: 7px 10px;
+  }
+  .chip-group-label {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-muted);
+  }
+
+  /* ---------- Connections view ---------- */
+  body.view-connections aside.rail { display: none; }
+  body.view-connections .layout { grid-template-columns: minmax(0, 1fr); }
+
+  .conn-intro { margin-bottom: 16px; }
+  .conn-intro h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .conn-intro p { font-size: 13.5px; color: var(--text-secondary); margin: 0; max-width: 78ch; line-height: 1.5; }
+  .conn-stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--text-muted); }
+  .conn-stats strong { color: var(--text-primary); font-size: 15px; font-weight: 700; }
+
+  .conn-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; margin-bottom: 16px; }
+  .conn-grid.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .panel.wide { margin-bottom: 16px; }
+  .panel.wide > h2 { font-size: 13px; }
+  .hint { font-size: 12.5px; color: var(--text-muted); margin: 8px 0 0; line-height: 1.45; }
+
+  .graph-wrap {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 8px 8px 10px;
+  }
+  svg.graph { width: 100%; height: min(68vh, 620px); display: block; }
+  .graph .edge { stroke: var(--baseline); }
+  .graph .edge.surprising { stroke: var(--accent); stroke-dasharray: 6 4; }
+  .graph .node circle { stroke: var(--surface-1); stroke-width: 1.5; cursor: pointer; }
+  .graph .node:hover circle, .graph .node:focus-visible circle { stroke: var(--text-primary); stroke-width: 2; }
+  .graph .node:focus { outline: none; }
+  .graph .node text {
+    font-size: 10px; fill: var(--text-secondary); pointer-events: none;
+    paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; stroke-linejoin: round;
+  }
+  /* focus mode: dim everything not attached to the selected story */
+  .graph.has-sel .node:not(.sel):not(.nbr) { opacity: .16; }
+  .graph.has-sel .edge:not(.sel) { opacity: .10; }
+  .graph .node.sel circle { stroke: var(--text-primary); stroke-width: 2.5; }
+  .graph .node.sel text, .graph .node.nbr text { fill: var(--text-primary); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; padding: 8px 6px 0; font-size: 11.5px; color: var(--text-muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .lg-line { width: 20px; height: 0; border-top: 2px solid var(--baseline); }
+  .lg-line.dash { border-top: 2px dashed var(--accent); }
+  .lg-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); }
+
+  .sel-panel { position: sticky; top: 76px; }
+  .sel-head { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .sel-head .cat { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; font-weight: 600; }
+  .sel-title { display: block; font-size: 14.5px; font-weight: 650; line-height: 1.35; text-decoration: none; }
+  .sel-title:hover { text-decoration: underline; }
+  .sel-links { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .sel-links li { border-top: 1px solid var(--grid); padding-top: 9px; }
+  .sel-links a { font-size: 13px; font-weight: 600; line-height: 1.35; text-decoration: none; display: block; }
+  .sel-links a:hover { text-decoration: underline; }
+  .sel-links .why { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
+  .sel-links em { color: var(--text-secondary); font-style: normal; font-weight: 600; }
+
+  .surprise-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+  .surprise { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 11px 13px; }
+  .surprise > header { cursor: pointer; margin-bottom: 8px; }
+  .surprise > header:hover .s-cats { text-decoration: underline; }
+  .s-cats { display: block; font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+  .s-terms { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+  .s-terms em { color: var(--accent); font-style: normal; font-weight: 700; }
+  .s-story { display: block; text-decoration: none; padding: 7px 0; border-top: 1px solid var(--grid); }
+  .s-story:hover .s-title { text-decoration: underline; }
+  .s-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+  .s-meta .cat { border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; font-weight: 600; }
+  .s-title { display: block; font-size: 13px; font-weight: 600; line-height: 1.35; margin-top: 3px; }
+  .badge-surprise {
+    border: 1px solid var(--accent); color: var(--accent); border-radius: 999px;
+    padding: 0 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  }
+
+  /* category co-occurrence matrix */
+  .matrix { display: grid; grid-template-columns: 74px repeat(var(--n), minmax(0, 1fr)); gap: 2px; margin-top: 10px; }
+  .m-cell { font-size: 10.5px; display: flex; align-items: center; justify-content: center; min-height: 26px; }
+  .m-head { color: var(--text-muted); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .m-row { justify-content: flex-start; }
+  .m-val {
+    border-radius: 4px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary);
+    background: color-mix(in srgb, var(--accent) calc(var(--o) * 78%), transparent);
+  }
+
+  /* Claude's connections */
+  .cc { border-top: 1px solid var(--grid); padding: 10px 0 2px; }
+  .cc:first-of-type { border-top: 0; padding-top: 0; }
+  .cc h3 { font-size: 14px; font-weight: 650; margin: 0 0 4px; display: flex; align-items: baseline; gap: 8px; }
+  .cc-score { color: var(--accent); font-size: 9px; letter-spacing: 1px; }
+  .cc p { font-size: 13.5px; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+  .cc-stories { margin: 6px 0 0; padding-left: 18px; }
+  .cc-stories li { font-size: 12.5px; line-height: 1.4; margin: 2px 0; }
+  .cc-stories a { color: var(--text-secondary); }
+
   /* ---------- States ---------- */
   .skeleton { border-radius: var(--radius); background: linear-gradient(100deg, var(--surface-1) 40%, var(--grid) 50%, var(--surface-1) 60%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border: 1px solid var(--border); }
   @keyframes shimmer { to { background-position: -200% 0; } }
@@ -339,6 +455,10 @@
     .lead .lead-media { min-height: 180px; }
     .search { margin-left: 0; }
     .search input { width: 100%; }
+    .conn-grid, .conn-grid.two { grid-template-columns: 1fr; }
+    .sel-panel { position: static; }
+    svg.graph { height: 66vh; }
+    .matrix { overflow-x: auto; }
   }
   @media (max-width: 560px) {
     .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -404,12 +524,22 @@
   <!-- Filters: one row above the content -->
   <section class="filters" aria-label="Filters">
     <div class="tabs" role="tablist" aria-label="Category" id="tabs"></div>
-    <div class="chips" id="chips" aria-label="Sources"></div>
+    <label class="visually-hidden" for="regionSel">Region</label>
+    <select class="interval" id="regionSel" title="Filter sources by region"></select>
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <input type="search" id="searchInput" placeholder="Search headlines…" aria-label="Search headlines">
     </div>
   </section>
+
+  <details class="src-picker" id="srcPicker">
+    <summary><span id="srcSummary">Sources</span></summary>
+    <div class="src-actions">
+      <button class="btn small" data-all="on">Select all</button>
+      <button class="btn small" data-all="off">Clear all</button>
+    </div>
+    <div class="chips" id="chips" aria-label="Sources"></div>
+  </details>
 
   <div class="notice" id="notice" role="status"></div>
 
@@ -417,6 +547,7 @@
     <main id="main" aria-label="Stories">
       <div id="briefingSlot"></div>
       <div class="notice" id="fyHint" style="border-left-color: var(--accent)"></div>
+      <div id="connSlot" hidden></div>
       <div id="leadSlot"><div class="skeleton lead-sk"></div></div>
       <div class="grid" id="grid">
         <div class="skeleton card-sk"></div><div class="skeleton card-sk"></div>
@@ -445,7 +576,9 @@
 
   <footer class="site">
     Headlines aggregate public RSS feeds from BBC News, The Guardian, The New York Times, Al Jazeera, NPR, Sky News,
-    arXiv, MIT News, ScienceDaily, Nature, MIT Technology Review, DW, France 24, CNBC and ESPN.
+    DW, France 24, El País, CNBC, ESPN, CBC, ABC Australia, Japan Times, SCMP, Times of India, Times of Israel,
+    Africanews, and — for Greece — News247, CNN Greece, in.gr, Kathimerini, Greek Reporter, Keep Talking Greece and
+    NewsNow, plus research coverage from arXiv, MIT News, ScienceDaily, Nature and MIT Technology Review.
     All stories link to and are © their original publishers. Times shown are your local time.
   </footer>
 </div>
@@ -460,24 +593,49 @@
    deliberately share the neutral swatch — their identity is always carried
    by the visible name, never by color alone. */
 const SOURCES = {
-  bbc:      { name: "BBC News",        slot: 1 },
-  guardian: { name: "Guardian",        slot: 2 },
-  nyt:      { name: "NY Times",        slot: 3 },
-  aljazeera:{ name: "Al Jazeera",      slot: 4 },
-  npr:      { name: "NPR",             slot: 5 },
-  sky:      { name: "Sky News",        slot: 6 },
-  arxiv:    { name: "arXiv",           slot: 7 },
-  mitnews:  { name: "MIT News",        slot: 8 },
-  scidaily: { name: "ScienceDaily" },
-  nature:   { name: "Nature" },
-  techrev:  { name: "MIT Tech Review" },
-  dw:       { name: "DW" },
-  france24: { name: "France 24" },
-  cnbc:     { name: "CNBC" },
-  espn:     { name: "ESPN" },
+  bbc:      { name: "BBC News",        slot: 1, region: "Global" },
+  guardian: { name: "Guardian",        slot: 2, region: "Global" },
+  nyt:      { name: "NY Times",        slot: 3, region: "Global" },
+  aljazeera:{ name: "Al Jazeera",      slot: 4, region: "Global" },
+  npr:      { name: "NPR",             slot: 5, region: "Americas" },
+  sky:      { name: "Sky News",        slot: 6, region: "Europe" },
+  arxiv:    { name: "arXiv",           slot: 7, region: "Research" },
+  mitnews:  { name: "MIT News",        slot: 8, region: "Research" },
+  scidaily: { name: "ScienceDaily",             region: "Research" },
+  nature:   { name: "Nature",                   region: "Research" },
+  techrev:  { name: "MIT Tech Review",          region: "Research" },
+  dw:       { name: "DW",                       region: "Europe" },
+  france24: { name: "France 24",                region: "Europe" },
+  cnbc:     { name: "CNBC",                     region: "Americas" },
+  espn:     { name: "ESPN",                     region: "Americas" },
+
+  /* Greece — the Greek-language outlets publish in Greek; the tokenizer,
+     stopword list and entity extractor are Unicode-aware so their stories
+     cluster and link like any other. */
+  news247:  { name: "News247",                  region: "Greece", lang: "el" },
+  cnngr:    { name: "CNN Greece",               region: "Greece", lang: "el" },
+  ingr:     { name: "in.gr",                    region: "Greece", lang: "el" },
+  greekrep: { name: "Greek Reporter",           region: "Greece" },
+  ktg:      { name: "Keep Talking Greece",      region: "Greece" },
+  newsnow:  { name: "NewsNow Greece",           region: "Greece" },
+  ekathi:   { name: "Kathimerini EN",           region: "Greece" },
+
+  /* Other countries / regions */
+  elpais:   { name: "El País EN",               region: "Europe" },
+  japantimes:{ name: "Japan Times",             region: "Asia" },
+  scmp:     { name: "SCMP",                     region: "Asia" },
+  toi:      { name: "Times of India",           region: "Asia" },
+  toisrael: { name: "Times of Israel",          region: "Middle East" },
+  africanews:{ name: "Africanews",              region: "Africa" },
+  abcau:    { name: "ABC Australia",            region: "Oceania" },
+  cbc:      { name: "CBC",                      region: "Americas" },
 };
 
-const CATEGORIES = ["Top", "For You", "World", "Business", "Technology", "Science", "AI Research", "Sports", "Health"];
+const REGIONS = ["All regions", ...new Set(Object.values(SOURCES).map(s => s.region))];
+
+/* "Connections" is a view, not a filter — it renders the story-graph instead
+   of the card grid. It is kept in CATEGORIES so it shares the tab strip. */
+const CATEGORIES = ["Top", "For You", "Connections", "World", "Greece", "Business", "Technology", "Science", "AI Research", "Sports", "Health"];
 
 const FEEDS = [
   { src: "bbc",       cat: "World",       url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
@@ -520,6 +678,28 @@ const FEEDS = [
   { src: "france24",  cat: "World",       url: "https://www.france24.com/en/rss" },
   { src: "cnbc",      cat: "Business",    url: "https://www.cnbc.com/id/10001147/device/rss/rss.html" },
   { src: "espn",      cat: "Sports",      url: "https://www.espn.com/espn/rss/news" },
+
+  /* Greece. `url` may be a list of candidates: publishers move their feed
+     paths and several of these sites expose no documented feed URL, so each
+     candidate is tried in order and the first one that parses as a feed is
+     remembered for the session. */
+  { src: "news247",   cat: "Greece",      url: ["https://www.news247.gr/feed/", "https://www.news247.gr/rss", "https://www.news247.gr/feed"] },
+  { src: "cnngr",     cat: "Greece",      url: ["https://www.cnn.gr/rss", "https://www.cnn.gr/feed", "https://www.cnn.gr/rss.xml", "https://www.cnn.gr/news/rss"] },
+  { src: "ingr",      cat: "Greece",      url: ["https://www.in.gr/feed/", "https://www.in.gr/rss", "https://www.in.gr/feed"] },
+  { src: "greekrep",  cat: "Greece",      url: ["https://greekreporter.com/feed/", "https://greekreporter.com/rss"] },
+  { src: "ktg",       cat: "Greece",      url: ["https://www.keeptalkinggreece.com/feed/"] },
+  { src: "newsnow",   cat: "Greece",      url: ["https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece?type=rss", "https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece/rss"] },
+  { src: "ekathi",    cat: "Greece",      url: ["https://www.ekathimerini.com/feed/", "https://www.ekathimerini.com/rss", "https://www.ekathimerini.com/news/feed/"] },
+
+  /* Other countries */
+  { src: "elpais",    cat: "World",       url: ["https://feeds.elpais.com/mrss-s/pages/ep/site/english.elpais.com/portada", "https://english.elpais.com/rss/"] },
+  { src: "japantimes",cat: "World",       url: ["https://www.japantimes.co.jp/feed/", "https://www.japantimes.co.jp/news/feed/"] },
+  { src: "scmp",      cat: "World",       url: ["https://www.scmp.com/rss/91/feed", "https://www.scmp.com/rss/5/feed"] },
+  { src: "toi",       cat: "World",       url: ["https://timesofindia.indiatimes.com/rssfeedstopstories.cms", "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms"] },
+  { src: "toisrael",  cat: "World",       url: ["https://www.timesofisrael.com/feed/"] },
+  { src: "africanews",cat: "World",       url: ["https://www.africanews.com/feed/rss", "https://www.africanews.com/api/en/rss"] },
+  { src: "abcau",     cat: "World",       url: ["https://www.abc.net.au/news/feed/51120/rss.xml", "https://www.abc.net.au/news/feed/2942460/rss.xml"] },
+  { src: "cbc",       cat: "World",       url: ["https://www.cbc.ca/webfeed/rss/rss-world", "https://www.cbc.ca/cmlink/rss-world"] },
 ];
 
 /* Public CORS relays, tried in order; the first that works is remembered
@@ -531,7 +711,7 @@ const PROXIES = [
 ];
 
 const FETCH_TIMEOUT_MS = 15000;
-const FETCH_CONCURRENCY = 8;      // be gentle with the public CORS relays
+const FETCH_CONCURRENCY = 10;     // be gentle with the public CORS relays
 const MAX_ITEMS_PER_FEED = 25;
 const MAX_GRID_CARDS = 60;
 
@@ -542,14 +722,20 @@ const state = {
   sourceStatus: {},             // srcId -> "ok" | "error" | "pending"
   category: "Top",
   enabledSources: new Set(Object.keys(SOURCES)),
+  region: "All regions",
   query: "",
   lastUpdated: null,
   refreshing: false,
   timerId: null,
   intervalSec: 300,
   preferredProxy: null,
+  resolvedFeedUrl: {},          // feed url-list index -> the candidate that worked
   clusters: [],
   briefing: null,
+  graph: null,                  // cached connection graph + its cache key
+  graphKey: "",
+  connRenderedKey: "",          // graph key the Connections markup was built from
+  graphSel: null,               // selected node id in the connections view
 };
 
 /* =========================== Story intelligence =========================== */
@@ -564,10 +750,26 @@ const STOPWORDS = new Set(("the a an and or but for nor with without from into o
   "gone come comes came still even ever never again back down over out off other others another " +
   "because through around across along among within between behind above below since until upon " +
   "here want wants like likes need needs know knows call calls calling look looking find finds " +
-  "found show shows shown revealed reveals biggest best worst more less than").split(/\s+/));
+  "found show shows shown revealed reveals biggest best worst more less than " +
+  /* Greek — the Greek-language outlets need their own function words filtered
+     out or every Greek headline "matches" every other one. */
+  "ενα μια ενας τον την τους τις των στο στη στην στον στους στις που για απο " +
+  "προς κατα μετα πριν οταν οπως ειναι ηταν εχει εχουν θα δεν και μαζι ολα ολο " +
+  "αυτο αυτη αυτος αυτα ποιο ποια ποιος περισσοτερα σημερα χθες αυριο νεα νεο " +
+  "ειδησεις ζωντανα τωρα ολες τελευταια πρωτο πρωτη μεγαλη μεγαλο ακομη ξανα " +
+  "μονο επισης καθως ωστε αλλα αλλο αλλη ενω μεσα εξω πανω κατω δηλωσε ανακοινωσε"
+  ).split(/\s+/));
 
+/* Strip diacritics and fold Greek final sigma, so "Ελλάδας", "ΕΛΛΑΔΑΣ" and
+   "ελλαδασ" all tokenize to the same string. */
+const deaccent = (s) =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").normalize("NFC").replace(/\u03c2/g, "\u03c3");
+
+/* Unicode-aware: keeps Greek (and any other script) rather than deleting it,
+   which would leave non-Latin headlines with an empty token set and silently
+   exclude them from clustering, trending and the connection graph. */
 const words = (text) =>
-  text.toLowerCase().replace(/['’]s\b/g, "").replace(/[^a-z0-9\s-]/g, " ")
+  deaccent(text.toLowerCase()).replace(/['’]s\b/g, "").replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .split(/\s+/).filter((w) => w.length > 3 && !STOPWORDS.has(w));
 
 function tokenize(a) {
@@ -675,6 +877,249 @@ function computeTrending() {
   return picked;
 }
 
+/* =========================== Connection graph =========================== */
+/* Clustering answers "which stories are the same story". This answers the
+   different question the Connections tab is about: which *separate* stories
+   are quietly related — by a shared actor, place, company or term — especially
+   when they sit in categories you would never expect to be linked. */
+
+/* Domain groups drive the surprise score: a Business↔Technology link is
+   ordinary, a Sports↔Science one is not. */
+const CAT_GROUP = {
+  "World": "geo", "Greece": "geo",
+  "Business": "econ",
+  "Technology": "tech", "AI Research": "tech",
+  "Science": "sci", "Health": "sci",
+  "Sports": "sport",
+};
+
+const GRAPH_NODES     = 55;   // most important clusters considered
+const GRAPH_WINDOW_H  = 48;   // only stories from the last N hours
+const GRAPH_MIN_SCORE = 2.2;  // minimum shared-term weight for an edge
+const GRAPH_MAX_DEG   = 4;    // keep the picture readable
+
+/* Proper nouns: people, places, organizations, products. Works for Greek as
+   well as Latin script — \p{Lu} is any uppercase letter. */
+function extractEntities(text) {
+  const out = new Set();
+  const re = /\p{Lu}[\p{L}'’-]+(?:\s+\p{Lu}[\p{L}'’-]+)*/gu;
+  for (const m of text.matchAll(re)) {
+    const phrase = m[0].trim();
+    const low = deaccent(phrase.toLowerCase());
+    // A single capitalized word is usually just the start of the headline.
+    if (!phrase.includes(" ") && (low.length < 4 || STOPWORDS.has(low))) continue;
+    out.add(low);
+  }
+  return out;
+}
+
+function catDistance(a, b) {
+  if (a === b) return 0;
+  return CAT_GROUP[a] === CAT_GROUP[b] ? 0.45 : 1;
+}
+
+/* Inverse document frequency: a term shared by half the graph says nothing,
+   a term shared by exactly two stories says a lot. */
+function idfMap(sets, n) {
+  const df = new Map();
+  for (const s of sets) for (const t of s) df.set(t, (df.get(t) || 0) + 1);
+  const idf = new Map();
+  for (const [t, d] of df) idf.set(t, d >= n * 0.25 ? 0 : Math.log(n / d));
+  return idf;
+}
+
+function buildGraph() {
+  const now = Date.now();
+  const pool = visibleClusters()
+    .filter(v => v.rep.date && now - v.rep.date.getTime() < GRAPH_WINDOW_H * 3600e3)
+    .sort((x, y) => topScore(y) - topScore(x))
+    .slice(0, GRAPH_NODES);
+
+  const nodes = pool.map((v, i) => {
+    const text = v.rep.title + " " + v.rep.snippet.slice(0, 200);
+    return {
+      id: i, v, a: v.rep, cat: v.rep.cat, src: v.rep.src, cov: v.cov,
+      toks: new Set(words(text)),
+      ents: extractEntities(text),
+      deg: 0,
+    };
+  });
+
+  const n = nodes.length;
+  if (n < 3) return { nodes: [], edges: [], bridges: [], matrix: [] };
+
+  const tokIdf = idfMap(nodes.map(x => x.toks), n);
+  const entIdf = idfMap(nodes.map(x => x.ents), n);
+
+  const shared = (A, B, idf, mult) => {
+    const terms = [];
+    let score = 0;
+    const [small, large] = A.size <= B.size ? [A, B] : [B, A];
+    for (const t of small) {
+      if (!large.has(t)) continue;
+      const w = (idf.get(t) || 0) * mult;
+      if (w <= 0) continue;
+      score += w;
+      terms.push({ t, w });
+    }
+    return { score, terms };
+  };
+
+  const candidates = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const A = nodes[i], B = nodes[j];
+      // Same-event pairs the clusterer nearly merged are not "connections".
+      if (overlap(A.toks, B.toks) >= 0.45) continue;
+      const e = shared(A.ents, B.ents, entIdf, 1.7);
+      const t = shared(A.toks, B.toks, tokIdf, 1.0);
+      const score = e.score + t.score;
+      if (score < GRAPH_MIN_SCORE) continue;
+      const dist = catDistance(A.cat, B.cat);
+      const terms = [...e.terms, ...t.terms].sort((x, y) => y.w - x.w).slice(0, 4).map(x => x.t);
+      candidates.push({
+        a: i, b: j, score, dist, terms,
+        // an entity-carried link across domains is the interesting case
+        surprise: score * (0.35 + dist) * (e.score > 0 ? 1.25 : 1),
+        viaEntity: e.score > 0,
+      });
+    }
+  }
+
+  // Strongest first, then cap each node's degree so no hub swallows the view.
+  candidates.sort((x, y) => y.score - x.score);
+  const edges = [];
+  for (const c of candidates) {
+    if (nodes[c.a].deg >= GRAPH_MAX_DEG || nodes[c.b].deg >= GRAPH_MAX_DEG) continue;
+    nodes[c.a].deg++; nodes[c.b].deg++;
+    edges.push(c);
+    if (edges.length >= 90) break;
+  }
+  for (const e of edges) e.surprising = e.dist > 0 && e.surprise >= 3.4;
+
+  /* Bridge terms: single terms that show up across the most distinct
+     categories — the vocabulary that stitches unrelated beats together. */
+  const bridge = new Map();
+  for (const nd of nodes) {
+    for (const t of new Set([...nd.ents, ...nd.toks])) {
+      if (((entIdf.get(t) ?? tokIdf.get(t)) || 0) <= 0) continue;
+      let e = bridge.get(t);
+      if (!e) bridge.set(t, (e = { cats: new Set(), srcs: new Set(), nodes: [], ent: false }));
+      e.cats.add(nd.cat); e.srcs.add(nd.src); e.nodes.push(nd.id);
+      if (nd.ents.has(t)) e.ent = true;
+    }
+  }
+  const bridges = [];
+  const usedWords = new Set();
+  const ranked = [...bridge.entries()]
+    .filter(([, e]) => e.cats.size >= 2 && e.nodes.length >= 2)
+    .map(([t, e]) => ({ term: t, cats: [...e.cats], srcs: e.srcs.size, n: e.nodes.length, ent: e.ent }))
+    // Named actors outrank bare vocabulary, and multi-word entities are ranked
+    // above their own component words so "taiwan semiconductor" claims
+    // "taiwan" and "semiconductor" before they can appear as duplicate rows.
+    .sort((x, y) => y.cats.length - x.cats.length || (y.ent - x.ent) || y.n - x.n ||
+                    y.term.split(" ").length - x.term.split(" ").length);
+  const stem = (w) => w.replace(/s$/, "");          // wildfire / wildfires
+  for (const b of ranked) {
+    if (bridges.length >= 8) break;
+    const ws = b.term.split(" ").map(stem);
+    if (ws.some(w => usedWords.has(w))) continue;
+    ws.forEach(w => usedWords.add(w));
+    bridges.push(b);
+  }
+
+  /* Category co-occurrence: how many links run between each pair of beats. */
+  const cats = [...new Set(nodes.map(x => x.cat))].sort();
+  const idx = new Map(cats.map((c, i) => [c, i]));
+  const matrix = cats.map(() => cats.map(() => 0));
+  for (const e of edges) {
+    const i = idx.get(nodes[e.a].cat), j = idx.get(nodes[e.b].cat);
+    matrix[i][j]++; if (i !== j) matrix[j][i]++;
+  }
+
+  layoutGraph(nodes, edges);
+  return { nodes, edges, bridges, cats, matrix };
+}
+
+/* Force-directed layout, run to completion once (not animated): repulsion
+   between all nodes, springs along edges, mild pull to centre. n is capped at
+   55, so the O(n²) inner loop is a few hundred thousand cheap operations. */
+function layoutGraph(nodes, edges) {
+  const W = 1000, H = 620, n = nodes.length;
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  nodes.forEach((nd, i) => {                     // deterministic phyllotaxis seed
+    const r = 260 * Math.sqrt((i + 0.5) / n);
+    nd.x = W / 2 + r * Math.cos(i * golden);
+    nd.y = H / 2 + r * Math.sin(i * golden);
+    nd.r = 5 + Math.min(11, Math.log2(nd.cov + 1) * 5 + nd.deg * 0.9);
+  });
+
+  const ITER = 320;
+  for (let step = 0; step < ITER; step++) {
+    const cool = 1 - step / ITER;
+    for (let i = 0; i < n; i++) {
+      const A = nodes[i];
+      for (let j = i + 1; j < n; j++) {
+        const B = nodes[j];
+        let dx = A.x - B.x, dy = A.y - B.y;
+        let d2 = dx * dx + dy * dy;
+        if (d2 < 1) { dx = (i - j) || 1; dy = 1; d2 = 2; }
+        const f = 9000 / d2;
+        const d = Math.sqrt(d2);
+        A.x += (dx / d) * f * cool; A.y += (dy / d) * f * cool;
+        B.x -= (dx / d) * f * cool; B.y -= (dy / d) * f * cool;
+      }
+    }
+    for (const e of edges) {
+      const A = nodes[e.a], B = nodes[e.b];
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const d = Math.hypot(dx, dy) || 1;
+      // stronger links sit closer together
+      const rest = 190 - Math.min(90, e.score * 12);
+      const f = ((d - rest) / d) * 0.045 * cool;
+      A.x += dx * f; A.y += dy * f;
+      B.x -= dx * f; B.y -= dy * f;
+    }
+    for (const nd of nodes) {
+      nd.x += (W / 2 - nd.x) * 0.006 * cool;
+      nd.y += (H / 2 - nd.y) * 0.006 * cool;
+      const m = nd.r + 6;
+      nd.x = Math.min(W - m, Math.max(m, nd.x));
+      nd.y = Math.min(H - m, Math.max(m, nd.y));
+    }
+  }
+
+  /* The force constants fix the *relative* distances, not the scale, so the
+     result is usually a small blob in the middle of the canvas. Rescale it to
+     fill the viewBox — radii stay fixed so node sizes remain comparable. */
+  const pad = 46;
+  const xs = nodes.map(n => n.x), ys = nodes.map(n => n.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const s = Math.min((W - 2 * pad) / Math.max(1, maxX - minX),
+                     (H - 2 * pad) / Math.max(1, maxY - minY));
+  const offX = (W - (maxX - minX) * s) / 2, offY = (H - (maxY - minY) * s) / 2;
+  for (const nd of nodes) {
+    nd.x = offX + (nd.x - minX) * s;
+    nd.y = offY + (nd.y - minY) * s;
+  }
+}
+
+/* Rebuild only when the underlying data or the filters actually changed —
+   otherwise the minute-by-minute timestamp re-render would reshuffle the
+   layout under the reader's cursor. */
+function graphData() {
+  const key = [
+    state.lastUpdated?.getTime(), state.query, state.region,
+    [...state.enabledSources].sort().join(","),
+  ].join("|");
+  if (state.graphKey !== key || !state.graph) {
+    state.graph = buildGraph();
+    state.graphKey = key;
+  }
+  return state.graph;
+}
+
 /* =========================== Fetching & parsing =========================== */
 
 /* The abort timer must outlive the header response: a relay can return 200
@@ -709,6 +1154,28 @@ async function fetchFeedXML(feedUrl) {
     } catch (e) { lastErr = e; }
   }
   throw lastErr || new Error("all proxies failed");
+}
+
+/* A feed entry's `url` may be a single string or a list of candidates (some
+   publishers document no feed path, and paths move). Candidates are tried in
+   order; whichever parses first is pinned for the rest of the session so the
+   dead ones are not re-fetched on every refresh. */
+async function fetchFeedCandidates(feed, key) {
+  const urls = Array.isArray(feed.url) ? feed.url : [feed.url];
+  const pinned = state.resolvedFeedUrl[key];
+  const order = pinned ? [pinned, ...urls.filter(u => u !== pinned)] : urls;
+
+  let lastErr = null;
+  for (const u of order) {
+    try {
+      const xml = await fetchFeedXML(u);
+      const articles = parseFeed(xml, feed);
+      if (!articles.length) throw new Error("feed parsed but empty");
+      state.resolvedFeedUrl[key] = u;
+      return articles;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error("no candidate feed URL worked");
 }
 
 function stripHTML(html) {
@@ -777,7 +1244,7 @@ async function mapPool(items, limit, fn) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {
       const i = next++;
-      out[i] = await fn(items[i]).catch(() => ({ failed: true }));
+      out[i] = await fn(items[i], i).catch(() => ({ failed: true }));
     }
   }));
   return out;
@@ -791,8 +1258,8 @@ async function refresh() {
     if (state.sourceStatus[id] !== "ok") state.sourceStatus[id] = "pending";
   }
 
-  const results = await mapPool(FEEDS, FETCH_CONCURRENCY, async feed =>
-    ({ feed, articles: parseFeed(await fetchFeedXML(feed.url), feed) }));
+  const results = await mapPool(FEEDS, FETCH_CONCURRENCY, async (feed, i) =>
+    ({ feed, articles: await fetchFeedCandidates(feed, i) }));
 
   const bySource = {};
   const collected = [];
@@ -855,8 +1322,17 @@ function absTime(date) {
   return date ? date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
 }
 
+/* "Top", "For You" and "Connections" span every beat; the rest are literal
+   category filters. Kept in one place so the grid, the source chart and the
+   graph never disagree about what is in view. */
+const SPANNING = new Set(["Top", "For You", "Connections"]);
+
 function categoryOk(a) {
-  return state.category === "Top" || state.category === "For You" || a.cat === state.category;
+  return SPANNING.has(state.category) || a.cat === state.category;
+}
+
+function regionOk(a) {
+  return state.region === "All regions" || SOURCES[a.src].region === state.region;
 }
 
 /* Cluster views surviving the active filters: one card per story-cluster,
@@ -871,7 +1347,7 @@ function visibleClusters() {
   const out = [];
   for (const c of state.clusters) {
     const members = c.articles.filter(a => {
-      if (!state.enabledSources.has(a.src) || !categoryOk(a)) return false;
+      if (!state.enabledSources.has(a.src) || !categoryOk(a) || !regionOk(a)) return false;
       if (!qWords.length) return true;
       const text = (a.title + " " + a.snippet).toLowerCase();
       return qWords.every(w => text.includes(w));
@@ -1012,6 +1488,220 @@ function renderBriefing() {
     </section>`;
 }
 
+/* ---------- Connections view: the story graph ---------- */
+
+const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
+
+function renderGraphSVG(g) {
+  const { nodes, edges } = g;
+  const sel = state.graphSel;
+  const nbr = new Set();
+  if (sel !== null) {
+    for (const e of edges) {
+      if (e.a === sel) nbr.add(e.b);
+      if (e.b === sel) nbr.add(e.a);
+    }
+  }
+
+  const edgeEls = edges.map((e, i) => {
+    const A = nodes[e.a], B = nodes[e.b];
+    const on = sel !== null && (e.a === sel || e.b === sel);
+    return `<line class="edge${e.surprising ? " surprising" : ""}${on ? " sel" : ""}"
+      x1="${A.x.toFixed(1)}" y1="${A.y.toFixed(1)}" x2="${B.x.toFixed(1)}" y2="${B.y.toFixed(1)}"
+      stroke-width="${Math.min(3.4, 0.7 + e.score * 0.28).toFixed(2)}" data-edge="${i}"
+      ><title>${esc(A.a.title)}\n↕ linked by: ${esc(e.terms.join(", "))}\n${esc(B.a.title)}</title></line>`;
+  }).join("");
+
+  // Label the nodes that carry the picture; the rest reveal on hover/click.
+  const labelled = new Set([...nodes].sort((x, y) => y.deg - x.deg || y.cov - x.cov)
+    .slice(0, 16).map(x => x.id));
+
+  const nodeEls = nodes.map(nd => {
+    const cls = nd.id === sel ? " sel" : nbr.has(nd.id) ? " nbr" : "";
+    const label = (labelled.has(nd.id) || nd.id === sel || nbr.has(nd.id))
+      ? `<text x="${nd.x.toFixed(1)}" y="${(nd.y + nd.r + 11).toFixed(1)}" text-anchor="middle">${esc(truncate(nd.a.title, 34))}</text>`
+      : "";
+    return `<g class="node${cls}" data-node="${nd.id}" tabindex="0" role="button"
+      aria-label="${esc(nd.a.title)} — ${esc(SOURCES[nd.src].name)}, ${esc(nd.cat)}, ${nd.deg} connections">
+      <circle cx="${nd.x.toFixed(1)}" cy="${nd.y.toFixed(1)}" r="${nd.r.toFixed(1)}"
+        fill="${srcColor(nd.src)}"></circle>
+      <title>${esc(nd.a.title)}\n${esc(SOURCES[nd.src].name)} · ${esc(nd.cat)} · ${nd.deg} connection${nd.deg === 1 ? "" : "s"}</title>
+      ${label}</g>`;
+  }).join("");
+
+  return `<svg class="graph${sel !== null ? " has-sel" : ""}" id="graphSvg" viewBox="0 0 1000 620"
+      role="img" aria-label="Network of ${nodes.length} stories linked by shared people, places and terms">
+      <g class="edges">${edgeEls}</g><g class="nodes">${nodeEls}</g></svg>`;
+}
+
+function renderNodeDetail(g) {
+  const sel = state.graphSel;
+  if (sel === null || !g.nodes[sel]) {
+    return `<p class="hint">Select a story in the graph to see what it is connected to, and why.</p>`;
+  }
+  const nd = g.nodes[sel];
+  const links = g.edges
+    .filter(e => e.a === sel || e.b === sel)
+    .sort((x, y) => y.score - x.score)
+    .map(e => {
+      const o = g.nodes[e.a === sel ? e.b : e.a];
+      return `<li>
+        <a href="${esc(o.a.link)}" data-link="${esc(o.a.link)}" target="_blank" rel="noopener noreferrer">${esc(o.a.title)}</a>
+        <span class="why">${esc(SOURCES[o.src].name)} · ${esc(o.cat)} — linked by <em>${esc(e.terms.join(", "))}</em>${e.surprising ? ` <span class="badge-surprise">unexpected</span>` : ""}</span>
+      </li>`;
+    }).join("");
+  return `
+    <div class="sel-head">
+      <span class="src-badge" style="--sc:${srcColor(nd.src)}">${esc(SOURCES[nd.src].name)}</span>
+      <span class="cat">${esc(nd.cat)}</span>
+    </div>
+    <a class="sel-title" href="${esc(nd.a.link)}" data-link="${esc(nd.a.link)}" target="_blank" rel="noopener noreferrer">${esc(nd.a.title)}</a>
+    <ul class="sel-links">${links || `<li class="hint">No links above the threshold.</li>`}</ul>`;
+}
+
+function renderSurprises(g) {
+  const list = g.edges.filter(e => e.surprising)
+    .sort((x, y) => y.surprise - x.surprise).slice(0, 8);
+  if (!list.length) {
+    return `<p class="hint">No cross-domain links cleared the threshold in this window. Widen the source or region filter, or check back after the next refresh.</p>`;
+  }
+  return `<div class="surprise-grid">${list.map(e => {
+    const A = g.nodes[e.a], B = g.nodes[e.b];
+    const side = (nd) => `
+      <a class="s-story" href="${esc(nd.a.link)}" data-link="${esc(nd.a.link)}" target="_blank" rel="noopener noreferrer">
+        <span class="s-meta"><span class="src-badge" style="--sc:${srcColor(nd.src)}">${esc(SOURCES[nd.src].name)}</span><span class="cat">${esc(nd.cat)}</span></span>
+        <span class="s-title">${esc(nd.a.title)}</span></a>`;
+    return `<article class="surprise" data-pair="${e.a},${e.b}">
+      <header><span class="s-cats">${esc(A.cat)} <span aria-hidden="true">↔</span> ${esc(B.cat)}</span>
+        <span class="s-terms">${e.viaEntity ? "shared actor" : "shared theme"}: <em>${esc(e.terms.join(", "))}</em></span></header>
+      ${side(A)}${side(B)}
+    </article>`;
+  }).join("")}</div>`;
+}
+
+function renderBridges(g) {
+  if (!g.bridges.length) return `<p class="hint">Not enough cross-beat vocabulary yet.</p>`;
+  const max = Math.max(...g.bridges.map(b => b.cats.length));
+  return `<div class="bars">${g.bridges.map(b => `
+    <div class="bar-row" title="${esc(b.term)} — in ${b.n} stories across ${esc(b.cats.join(", "))}">
+      <span class="bar-label">${esc(b.term)}</span>
+      <span class="bar-track"><span class="bar-fill" style="--sc:var(--accent);width:${(b.cats.length / max * 100).toFixed(1)}%"></span></span>
+      <span class="bar-val">${b.cats.length}</span>
+    </div>`).join("")}</div>
+    <p class="hint">Beats each term appears in. High counts are the vocabulary stitching unrelated sections together.</p>`;
+}
+
+function renderMatrix(g) {
+  const cats = g.cats || [];
+  if (cats.length < 2) return "";
+  const max = Math.max(1, ...g.matrix.flat());
+  const short = (c) => c.replace("AI Research", "AI Res.").slice(0, 9);
+  const head = `<div class="m-cell m-corner"></div>` +
+    cats.map(c => `<div class="m-cell m-head" title="${esc(c)}">${esc(short(c))}</div>`).join("");
+  const rows = cats.map((c, i) => `<div class="m-cell m-head m-row" title="${esc(c)}">${esc(short(c))}</div>` +
+    cats.map((c2, j) => {
+      const v = g.matrix[i][j];
+      return `<div class="m-cell m-val" style="--o:${(v / max).toFixed(3)}"
+        title="${esc(c)} ↔ ${esc(c2)}: ${v} link${v === 1 ? "" : "s"}">${v || ""}</div>`;
+    }).join("")).join("");
+  return `<div class="matrix" style="--n:${cats.length}">${head}${rows}</div>
+    <p class="hint">Links between beats. The off-diagonal cells are where a story in one section turns out to share ground with another.</p>`;
+}
+
+function renderClaudeConnections() {
+  const b = state.briefing;
+  const conns = b?.connections || [];
+  const signals = b?.signals || [];
+  if (!conns.length && !signals.length) return "";
+  return `
+    <section class="panel wide">
+      <h2>Claude's read on the links</h2>
+      ${conns.map(c => `
+        <div class="cc">
+          <h3>${esc(c.title)}${c.surprise ? `<span class="cc-score" title="How unexpected Claude judged this link, 1–5">${"●".repeat(Math.max(1, Math.min(5, c.surprise)))}</span>` : ""}</h3>
+          <p>${esc(c.insight)}</p>
+          ${(c.stories || []).length ? `<ul class="cc-stories">${c.stories.map(s => `
+            <li><a href="${esc(s.link)}" data-link="${esc(s.link)}" target="_blank" rel="noopener noreferrer">${esc(s.headline)}</a></li>`).join("")}</ul>` : ""}
+        </div>`).join("")}
+      ${signals.length ? `<div class="b-signals">
+        <h3>Signals</h3>
+        ${signals.map(s => `<p><strong>${esc(s.title)}:</strong> ${esc(s.insight)}</p>`).join("")}
+      </div>` : ""}
+      <p class="b-foot">Claude reads the same headlines the graph does and proposes links the term-overlap maths cannot see — including across languages. Treat them as leads to check, not findings.</p>
+    </section>`;
+}
+
+function renderConnections() {
+  const g = graphData();
+  const slot = $("connSlot");
+
+  // The minute-by-minute re-render exists to refresh relative timestamps, which
+  // this view barely shows. Rebuilding its markup anyway would throw away the
+  // reader's selection focus and scroll position, so bail out when nothing that
+  // feeds the view has changed. selectNode() patches the graph in place.
+  if (state.connRenderedKey === state.graphKey && slot.childElementCount) return;
+  state.connRenderedKey = state.graphKey;
+
+  if (!g.nodes.length) {
+    slot.innerHTML = `<div class="empty"><strong>Not enough recent stories to map</strong>
+      The graph needs a few dozen stories from the last ${GRAPH_WINDOW_H} hours. Try widening the source or region filter, then Refresh.</div>`;
+    return;
+  }
+
+  const surprising = g.edges.filter(e => e.surprising).length;
+  slot.innerHTML = `
+    <section class="conn-intro">
+      <h2>Connections</h2>
+      <p>Every node is a story from the last ${GRAPH_WINDOW_H} hours; every line is a shared person,
+      place, organization or distinctive term. Same-story duplicates are already collapsed, so a line
+      means two <em>different</em> stories share ground. Dashed accent lines cross domain boundaries —
+      those are the ones worth a second look.</p>
+      <div class="conn-stats">
+        <span><strong>${g.nodes.length}</strong> stories</span>
+        <span><strong>${g.edges.length}</strong> links</span>
+        <span><strong>${surprising}</strong> cross-domain</span>
+        <span><strong>${g.bridges.length}</strong> bridge terms</span>
+      </div>
+    </section>
+
+    ${renderClaudeConnections()}
+
+    <div class="conn-grid">
+      <div class="graph-wrap">
+        <div id="graphHost">${renderGraphSVG(g)}</div>
+        <div class="legend">
+          <span><span class="lg-line"></span> shared term</span>
+          <span><span class="lg-line dash"></span> crosses domains</span>
+          <span><span class="lg-dot"></span> node size = outlets covering it</span>
+        </div>
+      </div>
+      <div class="panel sel-panel" id="nodeDetail">${renderNodeDetail(g)}</div>
+    </div>
+
+    <section class="panel wide">
+      <h2>Surprising connections</h2>
+      <p class="hint">Pairs whose link runs across unrelated beats — ranked by how strong the shared
+      ground is and how far apart the sections are.</p>
+      ${renderSurprises(g)}
+    </section>
+
+    <div class="conn-grid two">
+      <section class="panel"><h2>Bridge terms</h2>${renderBridges(g)}</section>
+      <section class="panel"><h2>Where the links run</h2>${renderMatrix(g)}</section>
+    </div>`;
+}
+
+/* Repaint only the graph and its detail panel, never the whole view: a full
+   re-render would rebuild (and so relayout) the picture on every click. */
+function selectNode(id) {
+  state.graphSel = state.graphSel === id ? null : id;
+  const g = graphData();
+  const host = $("graphHost");
+  if (host) host.innerHTML = renderGraphSVG(g);
+  const detail = $("nodeDetail");
+  if (detail) detail.innerHTML = renderNodeDetail(g);
+}
+
 /* ---------- Trending topics panel ---------- */
 
 function renderTrending() {
@@ -1037,6 +1727,7 @@ function renderKPIs() {
   $("kpiTotalSub").textContent =
     state.category === "Top" ? `in ${list.length} story clusters`
     : state.category === "For You" ? "ranked for you"
+    : state.category === "Connections" ? `in ${list.length} clusters, mapped`
     : `in ${state.category}`;
   $("kpiSources").textContent = `${okSources}/${totalSources}`;
   const down = Object.entries(state.sourceStatus).filter(([, s]) => s === "error").map(([id]) => SOURCES[id].name);
@@ -1062,9 +1753,12 @@ function renderKPIs() {
 }
 
 function renderBars() {
+  // With ~30 outlets a full list is a wall of near-empty bars; show the ones
+  // actually contributing to the current view, deepest first.
   const counts = Object.keys(SOURCES).map(id => ({
-    id, n: state.articles.filter(a => a.src === id && categoryOk(a)).length,
-  })).sort((a, b) => b.n - a.n);
+    id, n: state.articles.filter(a => a.src === id && categoryOk(a) && regionOk(a)).length,
+  })).filter(c => c.n > 0).sort((a, b) => b.n - a.n).slice(0, 12);
+  if (!counts.length) { $("bars").innerHTML = `<span style="font-size:12.5px;color:var(--text-muted)">No stories in this view.</span>`; return; }
   const max = Math.max(1, ...counts.map(c => c.n));
   $("bars").innerHTML = counts.map(c => `
     <div class="bar-row" title="${esc(SOURCES[c.id].name)}: ${c.n} stories">
@@ -1075,7 +1769,8 @@ function renderBars() {
 }
 
 function renderTicker() {
-  const latest = state.articles.filter(a => state.enabledSources.has(a.src)).slice(0, 8);
+  const latest = state.articles
+    .filter(a => state.enabledSources.has(a.src) && regionOk(a)).slice(0, 8);
   $("ticker").innerHTML = latest.map(a => `
     <a href="${esc(a.link)}" data-link="${esc(a.link)}" target="_blank" rel="noopener noreferrer">
       <span class="t-title">${esc(a.title)}</span>
@@ -1104,6 +1799,13 @@ function renderChrome() {
     notice.classList.add("show");
   } else notice.classList.remove("show");
 
+  const inRegion = Object.entries(SOURCES)
+    .filter(([, m]) => state.region === "All regions" || m.region === state.region);
+  const onCount = inRegion.filter(([id]) => state.enabledSources.has(id)).length;
+  $("srcSummary").textContent =
+    `Sources — ${onCount} of ${inRegion.length} on` +
+    (state.region === "All regions" ? "" : ` in ${state.region}`);
+
   // source chips reflect status
   for (const [id, meta] of Object.entries(SOURCES)) {
     const chip = document.querySelector(`.chip[data-src="${id}"]`);
@@ -1114,10 +1816,16 @@ function renderChrome() {
 }
 
 function render() {
+  const conn = state.category === "Connections";
+  document.body.classList.toggle("view-connections", conn);
+  $("connSlot").hidden = !conn;
+  $("leadSlot").hidden = conn;
+  $("grid").hidden = conn;
+
   renderChrome();
   renderKPIs();
   renderBriefing();
-  renderStories();
+  if (conn) renderConnections(); else renderStories();
   renderBars();
   renderTicker();
   renderTrending();
@@ -1134,16 +1842,28 @@ function buildTabs() {
     const b = e.target.closest(".tab");
     if (!b) return;
     state.category = b.dataset.cat;
+    state.graphSel = null;
+    state.connRenderedKey = "";        // force a repaint when returning to the view
     document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t === b ? "true" : "false"));
     render();
   });
 }
 
+/* ~30 outlets is too many for one flat row, so the picker collapses and the
+   chips are grouped by region — the same grouping the region filter uses. */
 function buildChips() {
-  $("chips").innerHTML = Object.entries(SOURCES).map(([id, m]) => `
-    <button class="chip" data-src="${id}" aria-pressed="true" style="--sc:${srcColor(id)}">
-      <span class="swatch" aria-hidden="true"></span><span class="chip-name">${esc(m.name)}</span>
-    </button>`).join("");
+  const byRegion = {};
+  for (const [id, m] of Object.entries(SOURCES)) (byRegion[m.region] ??= []).push([id, m]);
+
+  $("chips").innerHTML = Object.entries(byRegion).map(([region, list]) => `
+    <div class="chip-group">
+      <span class="chip-group-label">${esc(region)}</span>
+      ${list.map(([id, m]) => `
+        <button class="chip" data-src="${id}" aria-pressed="true" style="--sc:${srcColor(id)}">
+          <span class="swatch" aria-hidden="true"></span><span class="chip-name">${esc(m.name)}</span>
+        </button>`).join("")}
+    </div>`).join("");
+
   $("chips").addEventListener("click", e => {
     const chip = e.target.closest(".chip");
     if (!chip) return;
@@ -1156,6 +1876,27 @@ function buildChips() {
       state.enabledSources.add(id);
       chip.setAttribute("aria-pressed", "true");
     }
+    render();
+  });
+
+  $("srcPicker").querySelector(".src-actions").addEventListener("click", e => {
+    const mode = e.target.closest("[data-all]")?.dataset.all;
+    if (!mode) return;
+    state.enabledSources = mode === "on"
+      ? new Set(Object.keys(SOURCES))
+      : new Set([Object.keys(SOURCES)[0]]);     // never leave the view sourceless
+    document.querySelectorAll(".chip[data-src]").forEach(c =>
+      c.setAttribute("aria-pressed", state.enabledSources.has(c.dataset.src) ? "true" : "false"));
+    render();
+  });
+}
+
+function buildRegions() {
+  $("regionSel").innerHTML = REGIONS.map(r =>
+    `<option value="${esc(r)}">${esc(r === "All regions" ? r : r)}</option>`).join("");
+  $("regionSel").addEventListener("change", e => {
+    state.region = e.target.value;
+    state.graphSel = null;
     render();
   });
 }
@@ -1209,6 +1950,26 @@ function setupControls() {
     if (link) recordClick(link);
   });
 
+  // connections view: select a node from the graph, or jump to one from a
+  // surprising-connection card. Keyboard users get the same via Enter/Space.
+  $("connSlot").addEventListener("click", e => {
+    const node = e.target.closest("[data-node]");
+    if (node) { selectNode(+node.dataset.node); return; }
+    const pair = e.target.closest("header")?.parentElement?.dataset.pair;
+    if (pair) {
+      state.graphSel = null;                 // force a select, not a toggle-off
+      selectNode(+pair.split(",")[0]);
+      $("graphHost")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  });
+  $("connSlot").addEventListener("keydown", e => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const node = e.target.closest("[data-node]");
+    if (!node) return;
+    e.preventDefault();
+    selectNode(+node.dataset.node);
+  });
+
   // trending chips filter the stream via search
   $("trends").addEventListener("click", e => {
     const term = e.target.closest(".trend")?.dataset.term;
@@ -1227,6 +1988,7 @@ function armTimer() {
 /* =========================== Boot =========================== */
 
 buildTabs();
+buildRegions();
 buildChips();
 setupControls();
 armTimer();
