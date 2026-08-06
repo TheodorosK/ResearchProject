@@ -1,10 +1,14 @@
 # Newsroom — Live News Dashboard
 
 A self-contained, zero-dependency live news dashboard. One HTML file, no build
-step, no API keys. It aggregates the public RSS feeds of six major outlets —
-**BBC News, The Guardian, The New York Times, Al Jazeera, NPR and Sky News** —
-and presents them with dashboard UI/UX principles: a KPI summary row, a single
-filter row, a lead story, a card grid, a stories-by-source chart and a live wire.
+step, no API keys. It aggregates 30+ public RSS/Atom feeds from fifteen sources —
+general news from **BBC News, The Guardian, The New York Times, Al Jazeera, NPR,
+Sky News, DW, France 24, CNBC and ESPN**, plus academic and research coverage
+from **arXiv (cs.AI / cs.LG papers), MIT News, ScienceDaily, Nature and MIT
+Technology Review** — and presents them with dashboard UI/UX principles: a KPI
+summary row, a single filter row, a lead story, a card grid, a stories-by-source
+chart and a live wire. Categories span World, Business, Technology, Science,
+AI Research, Sports and Health.
 
 ## Run it
 
@@ -21,14 +25,16 @@ or copy `index.html` to the Pages root).
 
 ## Features
 
-- **Live aggregation** — 19 RSS/Atom feeds fetched in parallel, deduplicated
-  and merged into one reverse-chronological stream.
+- **Live aggregation** — 30+ RSS/Atom feeds fetched through a bounded
+  concurrency pool (8 at a time, to stay friendly to the CORS relays),
+  deduplicated and merged into one reverse-chronological stream. arXiv's
+  daily paper batches are capped per feed so they can't drown the stream.
 - **Auto-refresh** — every 5 minutes by default (configurable: 2/5/10 min or
   manual). Refreshing pauses while the tab is hidden and catches up on return;
   relative timestamps ("4m ago") tick every minute without refetching.
-- **Filtering** — category tabs (Top, World, Business, Technology, Science),
-  per-source toggle chips, and instant headline search, all in one row above
-  the content.
+- **Filtering** — category tabs (Top, World, Business, Technology, Science,
+  AI Research, Sports, Health), per-source toggle chips, and instant headline
+  search, all in one row above the content.
 - **Feed health** — a LIVE/OFFLINE pill, a sources-live stat tile, and a
   non-blocking notice when an outlet can't be reached. A dead feed degrades
   gracefully; the rest of the page stays current.
@@ -36,7 +42,9 @@ or copy `index.html` to the Pages root).
   publishing pace), a 12-hour publishing sparkline, and a stories-by-source
   bar chart with direct labels.
 - **Design system** — validated colorblind-safe categorical palette with a
-  fixed color per source (color follows the entity, never its rank), selected
+  fixed color per source (color follows the entity, never its rank; sources
+  beyond the 8-hue token ceiling share a neutral swatch, with identity always
+  carried by the visible name), selected
   light *and* dark themes (auto via `prefers-color-scheme`, manual toggle
   persisted to `localStorage`), thin marks with rounded data ends, text always
   in ink tokens.
