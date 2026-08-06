@@ -263,6 +263,23 @@
   .briefing ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; }
   .briefing ol li { font-size: 13.5px; color: var(--text-secondary); line-height: 1.45; }
   .briefing ol strong { color: var(--text-primary); font-weight: 650; }
+  .b-foot { font-size: 11px; color: var(--text-muted); margin: 10px 0 0; }
+
+  /* background-context disclosure — used both in the briefing list and on cards */
+  .ctx { margin-top: 5px; }
+  .ctx summary {
+    cursor: pointer; font-size: 12px; font-weight: 700; color: var(--text-muted);
+    list-style: none; display: inline-flex; align-items: center; gap: 4px; user-select: none;
+  }
+  .ctx summary::-webkit-details-marker { display: none; }
+  .ctx summary::before { content: "\203a"; display: inline-block; transition: transform .15s ease; }
+  .ctx[open] summary::before { transform: rotate(90deg); }
+  .ctx summary:hover { color: var(--text-secondary); }
+  .ctx p {
+    font-size: 12.5px; color: var(--text-secondary); margin: 5px 0 0; line-height: 1.4;
+    padding: 6px 9px; border-left: 2px solid var(--baseline);
+    background: color-mix(in srgb, var(--text-muted) 9%, transparent); border-radius: 0 6px 6px 0;
+  }
   .b-signals { margin-top: 12px; padding: 10px 14px; border: 1px dashed var(--baseline); border-radius: 8px; }
   .b-signals h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin: 0 0 6px; }
   .b-signals p { font-size: 13px; color: var(--text-secondary); margin: 5px 0; line-height: 1.45; }
@@ -976,17 +993,22 @@ function renderBriefing() {
   const b = state.briefing;
   const show = b && (state.category === "Top" || state.category === "For You") && !state.query;
   if (!show) { slot.innerHTML = ""; return; }
+  const anyContext = b.briefing.some(i => i.context);
   slot.innerHTML = `
     <section class="briefing" aria-label="AI briefing">
       <div class="b-head"><h2>Claude briefing</h2>
         <span>generated ${relTime(new Date(b.generatedAt))} from ${b.headlineCount || "the latest"} headlines</span></div>
-      <ol>${b.briefing.map(i =>
-        `<li><strong>${esc(i.headline)}</strong> — ${esc(i.detail)}</li>`).join("")}</ol>
+      <ol>${b.briefing.map(i => `<li>
+          <strong>${i.link ? `<a href="${esc(i.link)}" data-link="${esc(i.link)}" target="_blank" rel="noopener noreferrer">${esc(i.headline)}</a>` : esc(i.headline)}</strong>
+          — ${esc(i.detail)}
+          ${i.context ? `<details class="ctx"><summary>Background</summary><p>${esc(i.context)}</p></details>` : ""}
+        </li>`).join("")}</ol>
       ${(b.signals || []).length ? `
       <div class="b-signals">
         <h3>Signals — patterns across today's stories</h3>
         ${b.signals.map(s => `<p><strong>${esc(s.title)}:</strong> ${esc(s.insight)}</p>`).join("")}
       </div>` : ""}
+      ${anyContext ? `<p class="b-foot">Background notes draw on Claude's general knowledge, not the articles above — a starting point, not a citation.</p>` : ""}
     </section>`;
 }
 
