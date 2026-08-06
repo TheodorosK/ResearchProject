@@ -3,3 +3,6 @@
 
 # Python
 *.pyc
+
+# Generated at deploy time by news-dashboard/scripts/generate-briefing.mjs
+news-dashboard/briefing.json
