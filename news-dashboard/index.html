@@ -25,6 +25,8 @@
     --series-4: #eda100;  /* yellow  — Al Jazeera */
     --series-5: #e87ba4;  /* magenta — NPR        */
     --series-6: #008300;  /* green   — Sky News   */
+    --series-7: #4a3aa7;  /* violet  — arXiv      */
+    --series-8: #e34948;  /* red     — MIT News   */
 
     --status-good:     #0ca30c;
     --status-critical: #d03b3b;
@@ -50,6 +52,8 @@
       --series-4: #c98500;
       --series-5: #d55181;
       --series-6: #008300;
+      --series-7: #9085e9;
+      --series-8: #e66767;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.35);
     }
   }
@@ -70,6 +74,8 @@
     --series-4: #c98500;
     --series-5: #d55181;
     --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.35);
   }
 
@@ -373,7 +379,8 @@
   <div class="visually-hidden" role="status" aria-live="polite" id="ariaStatus"></div>
 
   <footer class="site">
-    Headlines aggregate the public RSS feeds of BBC News, The Guardian, The New York Times, Al Jazeera, NPR and Sky News.
+    Headlines aggregate public RSS feeds from BBC News, The Guardian, The New York Times, Al Jazeera, NPR, Sky News,
+    arXiv, MIT News, ScienceDaily, Nature, MIT Technology Review, DW, France 24, CNBC and ESPN.
     All stories link to and are © their original publishers. Times shown are your local time.
   </footer>
 </div>
@@ -383,37 +390,71 @@
 
 /* =========================== Configuration =========================== */
 
+/* Sources with a `slot` get one of the 8 fixed categorical palette colors
+   (never reassigned, never cycled). Sources beyond the 8-hue token ceiling
+   deliberately share the neutral swatch — their identity is always carried
+   by the visible name, never by color alone. */
 const SOURCES = {
-  bbc:      { name: "BBC News",   slot: 1 },
-  guardian: { name: "Guardian",   slot: 2 },
-  nyt:      { name: "NY Times",   slot: 3 },
-  aljazeera:{ name: "Al Jazeera", slot: 4 },
-  npr:      { name: "NPR",        slot: 5 },
-  sky:      { name: "Sky News",   slot: 6 },
+  bbc:      { name: "BBC News",        slot: 1 },
+  guardian: { name: "Guardian",        slot: 2 },
+  nyt:      { name: "NY Times",        slot: 3 },
+  aljazeera:{ name: "Al Jazeera",      slot: 4 },
+  npr:      { name: "NPR",             slot: 5 },
+  sky:      { name: "Sky News",        slot: 6 },
+  arxiv:    { name: "arXiv",           slot: 7 },
+  mitnews:  { name: "MIT News",        slot: 8 },
+  scidaily: { name: "ScienceDaily" },
+  nature:   { name: "Nature" },
+  techrev:  { name: "MIT Tech Review" },
+  dw:       { name: "DW" },
+  france24: { name: "France 24" },
+  cnbc:     { name: "CNBC" },
+  espn:     { name: "ESPN" },
 };
 
-const CATEGORIES = ["Top", "World", "Business", "Technology", "Science"];
+const CATEGORIES = ["Top", "World", "Business", "Technology", "Science", "AI Research", "Sports", "Health"];
 
 const FEEDS = [
-  { src: "bbc",       cat: "World",      url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
-  { src: "bbc",       cat: "Business",   url: "https://feeds.bbci.co.uk/news/business/rss.xml" },
-  { src: "bbc",       cat: "Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml" },
-  { src: "bbc",       cat: "Science",    url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml" },
-  { src: "guardian",  cat: "World",      url: "https://www.theguardian.com/world/rss" },
-  { src: "guardian",  cat: "Business",   url: "https://www.theguardian.com/uk/business/rss" },
-  { src: "guardian",  cat: "Technology", url: "https://www.theguardian.com/uk/technology/rss" },
-  { src: "guardian",  cat: "Science",    url: "https://www.theguardian.com/science/rss" },
-  { src: "nyt",       cat: "World",      url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml" },
-  { src: "nyt",       cat: "Business",   url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml" },
-  { src: "nyt",       cat: "Technology", url: "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml" },
-  { src: "nyt",       cat: "Science",    url: "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml" },
-  { src: "aljazeera", cat: "World",      url: "https://www.aljazeera.com/xml/rss/all.xml" },
-  { src: "npr",       cat: "World",      url: "https://feeds.npr.org/1004/rss.xml" },
-  { src: "npr",       cat: "Business",   url: "https://feeds.npr.org/1006/rss.xml" },
-  { src: "npr",       cat: "Science",    url: "https://feeds.npr.org/1007/rss.xml" },
-  { src: "sky",       cat: "World",      url: "https://feeds.skynews.com/feeds/rss/world.xml" },
-  { src: "sky",       cat: "Business",   url: "https://feeds.skynews.com/feeds/rss/business.xml" },
-  { src: "sky",       cat: "Technology", url: "https://feeds.skynews.com/feeds/rss/technology.xml" },
+  { src: "bbc",       cat: "World",       url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
+  { src: "bbc",       cat: "Business",    url: "https://feeds.bbci.co.uk/news/business/rss.xml" },
+  { src: "bbc",       cat: "Technology",  url: "https://feeds.bbci.co.uk/news/technology/rss.xml" },
+  { src: "bbc",       cat: "Science",     url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml" },
+  { src: "bbc",       cat: "Health",      url: "https://feeds.bbci.co.uk/news/health/rss.xml" },
+  { src: "bbc",       cat: "Sports",      url: "https://feeds.bbci.co.uk/sport/rss.xml" },
+  { src: "guardian",  cat: "World",       url: "https://www.theguardian.com/world/rss" },
+  { src: "guardian",  cat: "Business",    url: "https://www.theguardian.com/uk/business/rss" },
+  { src: "guardian",  cat: "Technology",  url: "https://www.theguardian.com/uk/technology/rss" },
+  { src: "guardian",  cat: "Science",     url: "https://www.theguardian.com/science/rss" },
+  { src: "guardian",  cat: "Sports",      url: "https://www.theguardian.com/uk/sport/rss" },
+  { src: "nyt",       cat: "World",       url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml" },
+  { src: "nyt",       cat: "Business",    url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml" },
+  { src: "nyt",       cat: "Technology",  url: "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml" },
+  { src: "nyt",       cat: "Science",     url: "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml" },
+  { src: "nyt",       cat: "Health",      url: "https://rss.nytimes.com/services/xml/rss/nyt/Health.xml" },
+  { src: "nyt",       cat: "Sports",      url: "https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml" },
+  { src: "aljazeera", cat: "World",       url: "https://www.aljazeera.com/xml/rss/all.xml" },
+  { src: "npr",       cat: "World",       url: "https://feeds.npr.org/1004/rss.xml" },
+  { src: "npr",       cat: "Business",    url: "https://feeds.npr.org/1006/rss.xml" },
+  { src: "npr",       cat: "Science",     url: "https://feeds.npr.org/1007/rss.xml" },
+  { src: "npr",       cat: "Health",      url: "https://feeds.npr.org/1128/rss.xml" },
+  { src: "sky",       cat: "World",       url: "https://feeds.skynews.com/feeds/rss/world.xml" },
+  { src: "sky",       cat: "Business",    url: "https://feeds.skynews.com/feeds/rss/business.xml" },
+  { src: "sky",       cat: "Technology",  url: "https://feeds.skynews.com/feeds/rss/technology.xml" },
+  /* Academic / research AI. arXiv posts hundreds of papers in one daily
+     batch with identical timestamps — cap each feed so the batch can't
+     drown the chronological stream. */
+  { src: "arxiv",     cat: "AI Research", url: "https://rss.arxiv.org/rss/cs.AI", max: 12 },
+  { src: "arxiv",     cat: "AI Research", url: "https://rss.arxiv.org/rss/cs.LG", max: 12 },
+  { src: "mitnews",   cat: "AI Research", url: "https://news.mit.edu/rss/topic/artificial-intelligence2" },
+  { src: "scidaily",  cat: "AI Research", url: "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml" },
+  { src: "scidaily",  cat: "Science",     url: "https://www.sciencedaily.com/rss/top/science.xml" },
+  { src: "nature",    cat: "Science",     url: "https://www.nature.com/nature.rss" },
+  { src: "techrev",   cat: "Technology",  url: "https://www.technologyreview.com/feed/" },
+  /* Additional general outlets */
+  { src: "dw",        cat: "World",       url: "https://rss.dw.com/rdf/rss-en-all" },
+  { src: "france24",  cat: "World",       url: "https://www.france24.com/en/rss" },
+  { src: "cnbc",      cat: "Business",    url: "https://www.cnbc.com/id/10001147/device/rss/rss.html" },
+  { src: "espn",      cat: "Sports",      url: "https://www.espn.com/espn/rss/news" },
 ];
 
 /* Public CORS relays, tried in order; the first that works is remembered
@@ -425,6 +466,7 @@ const PROXIES = [
 ];
 
 const FETCH_TIMEOUT_MS = 15000;
+const FETCH_CONCURRENCY = 8;      // be gentle with the public CORS relays
 const MAX_ITEMS_PER_FEED = 25;
 const MAX_GRID_CARDS = 60;
 
@@ -517,7 +559,7 @@ function parseFeed(xmlText, feed) {
     ? [...doc.getElementsByTagName("item")]
     : [...doc.getElementsByTagName("entry")];       // Atom fallback
 
-  return items.slice(0, MAX_ITEMS_PER_FEED).map(item => {
+  return items.slice(0, feed.max || MAX_ITEMS_PER_FEED).map(item => {
     let link = pickText(item, "link");
     if (!link) {                                     // Atom <link href="">
       const l = item.getElementsByTagName("link")[0];
@@ -537,6 +579,20 @@ function parseFeed(xmlText, feed) {
   }).filter(a => a.title && a.link);
 }
 
+/* Run fn over items with at most `limit` in flight; result order matches
+   items, failures surface as { failed: true } rather than rejecting. */
+async function mapPool(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]).catch(() => ({ failed: true }));
+    }
+  }));
+  return out;
+}
+
 async function refresh() {
   if (state.refreshing) return;
   state.refreshing = true;
@@ -545,21 +601,20 @@ async function refresh() {
     if (state.sourceStatus[id] !== "ok") state.sourceStatus[id] = "pending";
   }
 
-  const settled = await Promise.allSettled(
-    FEEDS.map(async feed => ({ feed, articles: parseFeed(await fetchFeedXML(feed.url), feed) }))
-  );
+  const results = await mapPool(FEEDS, FETCH_CONCURRENCY, async feed =>
+    ({ feed, articles: parseFeed(await fetchFeedXML(feed.url), feed) }));
 
   const bySource = {};
   const collected = [];
-  for (const r of settled) {
-    if (r.status === "fulfilled" && r.value.articles.length) {
-      collected.push(...r.value.articles);
-      bySource[r.value.feed.src] = "ok";
-    } else if (r.status === "rejected") {
-      const feed = FEEDS[settled.indexOf(r)];
-      if (feed && bySource[feed.src] !== "ok") bySource[feed.src] = "error";
+  results.forEach((r, i) => {
+    const src = FEEDS[i].src;
+    if (!r.failed && r.articles.length) {
+      collected.push(...r.articles);
+      bySource[src] = "ok";
+    } else if (r.failed && bySource[src] !== "ok") {
+      bySource[src] = "error";
     }
-  }
+  });
   for (const id of Object.keys(SOURCES)) {
     state.sourceStatus[id] = bySource[id] || (collected.some(a => a.src === id) ? "ok" : "error");
   }
@@ -617,7 +672,10 @@ function visibleArticles() {
   );
 }
 
-function srcColor(id) { return `var(--series-${SOURCES[id].slot})`; }
+function srcColor(id) {
+  const slot = SOURCES[id].slot;
+  return slot ? `var(--series-${slot})` : "var(--text-muted)";
+}
 
 function metaHTML(a) {
   const fresh = a.date && (Date.now() - a.date.getTime()) < 3600e3;
