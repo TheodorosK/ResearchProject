@@ -49,6 +49,17 @@ or copy `index.html` to the Pages root).
   seemingly unrelated stories, rendered under the briefing.
 - **arXiv TL;DRs** — every arXiv paper gets a plain-English one-liner, shown
   inside its card on the AI Research tab.
+- **Background context ("hidden knowledge")** — for each of the five briefing
+  stories, Claude adds background the article text itself wouldn't tell you:
+  who a named figure or organization is and their track record, what a
+  technical/legal/financial term means, precedent from a similar past event,
+  or whether a comparative claim ("worst since 2008") checks out. Shown as a
+  collapsed "Background" disclosure under the story. This draws on Claude's
+  training knowledge rather than the fetched articles — the prompt explicitly
+  tells it to omit the note (`context: null`) rather than state anything it
+  isn't confident is accurate, and the panel carries a visible disclaimer
+  ("a starting point, not a citation") so it's never mistaken for sourced
+  reporting.
 
 To enable the Claude features, add an `ANTHROPIC_API_KEY` repository secret
 (Settings → Secrets and variables → Actions). Without the key the workflow

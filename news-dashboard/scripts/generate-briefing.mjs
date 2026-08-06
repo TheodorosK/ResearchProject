@@ -108,8 +108,19 @@ const BRIEFING_SCHEMA = {
         properties: {
           headline: { type: "string", description: "Short neutral headline, max 12 words" },
           detail: { type: "string", description: "Two sentences: what happened and why it matters" },
+          link: { type: "string", description: "The exact link (copied from the input) of the single input story this briefing item is primarily based on" },
+          context: {
+            type: ["string", "null"],
+            description:
+              "2-3 sentences of background the article text itself would not tell you and that you " +
+              "are confident is accurate from general knowledge: who a named person/organization is " +
+              "and relevant history, what a technical or legal term means, precedent for a similar " +
+              "past event, or whether a comparative claim (e.g. 'worst since 2008') checks out. " +
+              "Never speculate or invent specifics you are not confident about — output null if you " +
+              "have nothing solid to add beyond what the headline and detail already say.",
+          },
         },
-        required: ["headline", "detail"],
+        required: ["headline", "detail", "link", "context"],
         additionalProperties: false,
       },
     },
@@ -174,15 +185,21 @@ async function main() {
     output_config: { format: { type: "json_schema", schema: BRIEFING_SCHEMA } },
     system:
       "You are the analysis engine behind a live news dashboard. You receive the current " +
-      "headlines from fifteen outlets plus today's arXiv AI papers, and produce three things: " +
+      "headlines from fifteen outlets plus today's arXiv AI papers, and produce four things: " +
       "a briefing of the five most important stories (judge importance by cross-outlet coverage " +
       "and real-world consequence, not recency alone; synthesize across outlets rather than " +
-      "echoing one), a set of signals — non-obvious patterns that connect seemingly unrelated " +
-      "stories (a supply-chain thread behind separate business stories, a policy shift visible " +
-      "across regions, a technology quietly appearing in several fields; only report patterns " +
-      "genuinely supported by the given stories, never invent connections), and a plain-English " +
-      "TL;DR for every arXiv paper provided. Be neutral and specific; name the stories a signal " +
-      "draws on.",
+      "echoing one; for each, pick the single input story it is best matched to and copy that " +
+      "story's link exactly), background context for each briefing story drawn from your own " +
+      "knowledge rather than the fetched text — who a named figure or organization is and their " +
+      "relevant track record, what a technical/legal/financial term actually means, precedent " +
+      "from a genuinely similar past event, or whether a comparative claim in the story holds up " +
+      "(err toward omitting a context note entirely, via null, rather than stating anything you " +
+      "are not confident is factually correct), a set of signals — non-obvious patterns that " +
+      "connect seemingly unrelated stories (a supply-chain thread behind separate business " +
+      "stories, a policy shift visible across regions, a technology quietly appearing in several " +
+      "fields; only report patterns genuinely supported by the given stories, never invent " +
+      "connections), and a plain-English TL;DR for every arXiv paper provided. Be neutral and " +
+      "specific; name the stories a signal draws on.",
     messages: [
       {
         role: "user",
@@ -210,9 +227,10 @@ async function main() {
     paperCount: papers.length,
     ...data,
   });
+  const withContext = data.briefing.filter((b) => b.context).length;
   console.log(
-    `Wrote briefing.json: ${data.briefing.length} briefing items, ` +
-    `${data.signals.length} signals, ${data.arxiv.length} paper TLDRs ` +
+    `Wrote briefing.json: ${data.briefing.length} briefing items (${withContext} with background ` +
+    `context), ${data.signals.length} signals, ${data.arxiv.length} paper TLDRs ` +
     `(${response.usage.input_tokens} in / ${response.usage.output_tokens} out tokens).`
   );
 }
