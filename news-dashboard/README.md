@@ -23,6 +23,40 @@ python3 -m http.server 8000
 It also works as a GitHub Pages site (`Settings → Pages`, point at this folder
 or copy `index.html` to the Pages root).
 
+## Intelligence features
+
+**Client-side (no keys, computed in your browser):**
+
+- **Story clustering** — stories about the same event are grouped across
+  outlets by title/snippet similarity; each cluster renders once, with an
+  "N sources" badge (hover it to see the other outlets' headlines).
+- **Coverage-weighted Top tab** — Top ranks clusters by how many outlets are
+  covering them, decayed by age, instead of raw recency.
+- **Trending now** — terms gaining cross-source traction over the last 24
+  hours, with an ↑ marker for accelerating ones; click a chip to filter.
+- **For You tab** — learns from which stories you open (topic tokens, sources,
+  categories, with gradual forgetting) and re-ranks the feed. The profile
+  lives entirely in `localStorage`; nothing leaves the browser.
+
+**Claude-powered (via the deploy workflow):**
+
+- **Claude briefing** — every deploy (and on a 3-hour schedule) the workflow
+  runs `scripts/generate-briefing.mjs`, which fetches all feeds server-side,
+  sends the corpus to Claude (`claude-opus-5`, structured outputs), and writes
+  `briefing.json` into the published site: the five most important stories,
+  synthesized across outlets.
+- **Signals** — the same call asks Claude for non-obvious patterns connecting
+  seemingly unrelated stories, rendered under the briefing.
+- **arXiv TL;DRs** — every arXiv paper gets a plain-English one-liner, shown
+  inside its card on the AI Research tab.
+
+To enable the Claude features, add an `ANTHROPIC_API_KEY` repository secret
+(Settings → Secrets and variables → Actions). Without the key the workflow
+still deploys cleanly and the dashboard simply hides the briefing panel.
+Rough cost at current pricing: a few cents per generation, ~8 generations/day
+on the default 3-hour schedule. Adjust the `cron` line in
+`.github/workflows/deploy-pages.yml` to change the cadence.
+
 ## Features
 
 - **Live aggregation** — 30+ RSS/Atom feeds fetched through a bounded

@@ -2,9 +2,12 @@ name: Deploy news dashboard to GitHub Pages
 
 on:
   push:
-    # The feature-branch trigger lets Pages go live before the PR merges;
-    # it is inert once the branch is deleted and can be dropped after merge.
-    branches: [master, claude/live-news-dashboard-1u4ue7]
+    branches: [master]
+    paths: [".github/workflows/deploy-pages.yml", "news-dashboard/**"]
+  schedule:
+    # Regenerate the AI briefing and redeploy every 3 hours (off-minute to
+    # avoid the top-of-hour thundering herd).
+    - cron: "23 */3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -24,6 +27,17 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate AI briefing
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        # The script never fails the deploy: without a key (or on any error)
+        # it writes an "unavailable" stub and the dashboard hides the panel.
+        run: |
+          npm install --no-audit --no-fund @anthropic-ai/sdk
+          node news-dashboard/scripts/generate-briefing.mjs
       - uses: actions/configure-pages@v5
         with:
           enablement: true
