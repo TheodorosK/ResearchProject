@@ -34,6 +34,18 @@ order and whichever one parses is pinned for the session. A source whose
 candidates all fail degrades to an `!` on its chip and a notice — the rest of
 the page stays current.
 
+The last candidate for the Greek outlets (and Times of Israel) is a Google News
+per-site search feed. Measured against the live web: `in.gr` and Keep Talking
+Greece serve their native feeds fine; `news247.gr`, `greekreporter.com`,
+`ekathimerini.com` and `timesofisrael.com` answer **403** to anything that is
+not a browser, which includes the CORS relays and the deploy runner; `cnn.gr`
+returns **404** at every conventional feed path. The Google News fallback keeps
+those outlets contributing their own stories under their own chip — its items
+redirect to the original publisher. Native feeds are always tried first, so a
+publisher that unblocks (or starts publishing a feed) is picked up
+automatically with no code change. The server-side generator also sends a
+conventional browser user-agent, which clears some of the 403s on its own.
+
 ## Run it
 
 Open `index.html` in any modern browser, or serve the folder:
