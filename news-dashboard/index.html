@@ -637,6 +637,17 @@ const REGIONS = ["All regions", ...new Set(Object.values(SOURCES).map(s => s.reg
    of the card grid. It is kept in CATEGORIES so it shares the tab strip. */
 const CATEGORIES = ["Top", "For You", "Connections", "World", "Greece", "Business", "Technology", "Science", "AI Research", "Sports", "Health"];
 
+/* Last-resort feed candidate. Several publishers front their site with a bot
+   filter that answers 403 to anything that is not a browser — including the
+   CORS relays — and cnn.gr publishes no feed at any conventional path. Google
+   News exposes a per-site search feed whose items redirect to the original
+   outlet, so that outlet's own stories still reach the dashboard under its own
+   chip. Native feeds are always tried first; this only runs when they fail. */
+const GNEWS = (q, hl, gl) =>
+  `https://news.google.com/rss/search?q=${encodeURIComponent(q + " when:2d")}&hl=${hl}&gl=${gl}&ceid=${gl}:${hl.split("-")[0]}`;
+const GNEWS_EL = (q) => GNEWS(q, "el", "GR");
+const GNEWS_EN = (q) => GNEWS(q, "en-US", "US");
+
 const FEEDS = [
   { src: "bbc",       cat: "World",       url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
   { src: "bbc",       cat: "Business",    url: "https://feeds.bbci.co.uk/news/business/rss.xml" },
@@ -683,20 +694,20 @@ const FEEDS = [
      paths and several of these sites expose no documented feed URL, so each
      candidate is tried in order and the first one that parses as a feed is
      remembered for the session. */
-  { src: "news247",   cat: "Greece",      url: ["https://www.news247.gr/feed/", "https://www.news247.gr/rss", "https://www.news247.gr/feed"] },
-  { src: "cnngr",     cat: "Greece",      url: ["https://www.cnn.gr/rss", "https://www.cnn.gr/feed", "https://www.cnn.gr/rss.xml", "https://www.cnn.gr/news/rss"] },
-  { src: "ingr",      cat: "Greece",      url: ["https://www.in.gr/feed/", "https://www.in.gr/rss", "https://www.in.gr/feed"] },
-  { src: "greekrep",  cat: "Greece",      url: ["https://greekreporter.com/feed/", "https://greekreporter.com/rss"] },
-  { src: "ktg",       cat: "Greece",      url: ["https://www.keeptalkinggreece.com/feed/"] },
-  { src: "newsnow",   cat: "Greece",      url: ["https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece?type=rss", "https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece/rss"] },
-  { src: "ekathi",    cat: "Greece",      url: ["https://www.ekathimerini.com/feed/", "https://www.ekathimerini.com/rss", "https://www.ekathimerini.com/news/feed/"] },
+  { src: "news247",   cat: "Greece",      url: ["https://www.news247.gr/feed/", "https://www.news247.gr/rss", "https://www.news247.gr/feed", GNEWS_EL("site:news247.gr")] },
+  { src: "cnngr",     cat: "Greece",      url: ["https://www.cnn.gr/rss", "https://www.cnn.gr/feed", "https://www.cnn.gr/rss.xml", "https://www.cnn.gr/news/rss", GNEWS_EL("site:cnn.gr")] },
+  { src: "ingr",      cat: "Greece",      url: ["https://www.in.gr/feed/", "https://www.in.gr/rss", "https://www.in.gr/feed", GNEWS_EL("site:in.gr")] },
+  { src: "greekrep",  cat: "Greece",      url: ["https://greekreporter.com/feed/", "https://greekreporter.com/rss", GNEWS_EN("site:greekreporter.com")] },
+  { src: "ktg",       cat: "Greece",      url: ["https://www.keeptalkinggreece.com/feed/", GNEWS_EN("site:keeptalkinggreece.com")] },
+  { src: "newsnow",   cat: "Greece",      url: ["https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece?type=rss", "https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece/rss", GNEWS_EN("Greece")] },
+  { src: "ekathi",    cat: "Greece",      url: ["https://www.ekathimerini.com/feed/", "https://www.ekathimerini.com/rss", "https://www.ekathimerini.com/news/feed/", GNEWS_EN("site:ekathimerini.com")] },
 
   /* Other countries */
   { src: "elpais",    cat: "World",       url: ["https://feeds.elpais.com/mrss-s/pages/ep/site/english.elpais.com/portada", "https://english.elpais.com/rss/"] },
   { src: "japantimes",cat: "World",       url: ["https://www.japantimes.co.jp/feed/", "https://www.japantimes.co.jp/news/feed/"] },
   { src: "scmp",      cat: "World",       url: ["https://www.scmp.com/rss/91/feed", "https://www.scmp.com/rss/5/feed"] },
   { src: "toi",       cat: "World",       url: ["https://timesofindia.indiatimes.com/rssfeedstopstories.cms", "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms"] },
-  { src: "toisrael",  cat: "World",       url: ["https://www.timesofisrael.com/feed/"] },
+  { src: "toisrael",  cat: "World",       url: ["https://www.timesofisrael.com/feed/", GNEWS_EN("site:timesofisrael.com")] },
   { src: "africanews",cat: "World",       url: ["https://www.africanews.com/feed/rss", "https://www.africanews.com/api/en/rss"] },
   { src: "abcau",     cat: "World",       url: ["https://www.abc.net.au/news/feed/51120/rss.xml", "https://www.abc.net.au/news/feed/2942460/rss.xml"] },
   { src: "cbc",       cat: "World",       url: ["https://www.cbc.ca/webfeed/rss/rss-world", "https://www.cbc.ca/cmlink/rss-world"] },
@@ -1156,6 +1167,19 @@ async function fetchFeedXML(feedUrl) {
   throw lastErr || new Error("all proxies failed");
 }
 
+/* Google News titles carry a " - Publisher" suffix and its snippets are just
+   an outlet list. Left alone the suffix would tokenize into every headline
+   from that source and inflate their similarity, so it is stripped here — the
+   chip already says which outlet the story came from. */
+function tidyGoogleNews(articles, url) {
+  if (!url.includes("news.google.com")) return articles;
+  return articles.map(a => ({
+    ...a,
+    title: a.title.replace(/\s+-\s+[^-]{2,40}$/, "").trim() || a.title,
+    snippet: "",
+  }));
+}
+
 /* A feed entry's `url` may be a single string or a list of candidates (some
    publishers document no feed path, and paths move). Candidates are tried in
    order; whichever parses first is pinned for the rest of the session so the
@@ -1169,7 +1193,7 @@ async function fetchFeedCandidates(feed, key) {
   for (const u of order) {
     try {
       const xml = await fetchFeedXML(u);
-      const articles = parseFeed(xml, feed);
+      const articles = tidyGoogleNews(parseFeed(xml, feed), u);
       if (!articles.length) throw new Error("feed parsed but empty");
       state.resolvedFeedUrl[key] = u;
       return articles;

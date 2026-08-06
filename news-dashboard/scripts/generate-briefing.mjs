@@ -11,6 +11,14 @@ import { fileURLToPath } from "node:url";
 
 const OUT_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "briefing.json");
 
+/* Last-resort candidate — see the matching comment in ../index.html. Google
+   News' per-site search feed links back to the original outlet, so a publisher
+   whose own feed is bot-blocked or absent still contributes its own stories. */
+const GNEWS = (q, hl, gl) =>
+  `https://news.google.com/rss/search?q=${encodeURIComponent(q + " when:2d")}&hl=${hl}&gl=${gl}&ceid=${gl}:${hl.split("-")[0]}`;
+const GNEWS_EL = (q) => GNEWS(q, "el", "GR");
+const GNEWS_EN = (q) => GNEWS(q, "en-US", "US");
+
 const FEEDS = [
   { src: "BBC News",        cat: "World",       url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
   { src: "BBC News",        cat: "Business",    url: "https://feeds.bbci.co.uk/news/business/rss.xml" },
@@ -51,20 +59,20 @@ const FEEDS = [
 
   /* Greece. `url` may be a list of candidates — same fallback behaviour as the
      browser side; the first one that yields items wins. */
-  { src: "News247",            cat: "Greece", lang: "el", url: ["https://www.news247.gr/feed/", "https://www.news247.gr/rss", "https://www.news247.gr/feed"] },
-  { src: "CNN Greece",         cat: "Greece", lang: "el", url: ["https://www.cnn.gr/rss", "https://www.cnn.gr/feed", "https://www.cnn.gr/rss.xml", "https://www.cnn.gr/news/rss"] },
-  { src: "in.gr",              cat: "Greece", lang: "el", url: ["https://www.in.gr/feed/", "https://www.in.gr/rss", "https://www.in.gr/feed"] },
-  { src: "Greek Reporter",     cat: "Greece", url: ["https://greekreporter.com/feed/", "https://greekreporter.com/rss"] },
-  { src: "Keep Talking Greece",cat: "Greece", url: ["https://www.keeptalkinggreece.com/feed/"] },
-  { src: "NewsNow Greece",     cat: "Greece", url: ["https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece?type=rss", "https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece/rss"] },
-  { src: "Kathimerini EN",     cat: "Greece", url: ["https://www.ekathimerini.com/feed/", "https://www.ekathimerini.com/rss", "https://www.ekathimerini.com/news/feed/"] },
+  { src: "News247",            cat: "Greece", lang: "el", url: ["https://www.news247.gr/feed/", "https://www.news247.gr/rss", "https://www.news247.gr/feed", GNEWS_EL("site:news247.gr")] },
+  { src: "CNN Greece",         cat: "Greece", lang: "el", url: ["https://www.cnn.gr/rss", "https://www.cnn.gr/feed", "https://www.cnn.gr/rss.xml", "https://www.cnn.gr/news/rss", GNEWS_EL("site:cnn.gr")] },
+  { src: "in.gr",              cat: "Greece", lang: "el", url: ["https://www.in.gr/feed/", "https://www.in.gr/rss", "https://www.in.gr/feed", GNEWS_EL("site:in.gr")] },
+  { src: "Greek Reporter",     cat: "Greece", url: ["https://greekreporter.com/feed/", "https://greekreporter.com/rss", GNEWS_EN("site:greekreporter.com")] },
+  { src: "Keep Talking Greece",cat: "Greece", url: ["https://www.keeptalkinggreece.com/feed/", GNEWS_EN("site:keeptalkinggreece.com")] },
+  { src: "NewsNow Greece",     cat: "Greece", url: ["https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece?type=rss", "https://www.newsnow.co.uk/h/World+News/Europe/Southern+Europe/Greece/rss", GNEWS_EN("Greece")] },
+  { src: "Kathimerini EN",     cat: "Greece", url: ["https://www.ekathimerini.com/feed/", "https://www.ekathimerini.com/rss", "https://www.ekathimerini.com/news/feed/", GNEWS_EN("site:ekathimerini.com")] },
 
   /* Other countries */
   { src: "El País EN",      cat: "World",       url: ["https://feeds.elpais.com/mrss-s/pages/ep/site/english.elpais.com/portada", "https://english.elpais.com/rss/"] },
   { src: "Japan Times",     cat: "World",       url: ["https://www.japantimes.co.jp/feed/", "https://www.japantimes.co.jp/news/feed/"] },
   { src: "SCMP",            cat: "World",       url: ["https://www.scmp.com/rss/91/feed", "https://www.scmp.com/rss/5/feed"] },
   { src: "Times of India",  cat: "World",       url: ["https://timesofindia.indiatimes.com/rssfeedstopstories.cms", "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms"] },
-  { src: "Times of Israel", cat: "World",       url: ["https://www.timesofisrael.com/feed/"] },
+  { src: "Times of Israel", cat: "World",       url: ["https://www.timesofisrael.com/feed/", GNEWS_EN("site:timesofisrael.com")] },
   { src: "Africanews",      cat: "World",       url: ["https://www.africanews.com/feed/rss", "https://www.africanews.com/api/en/rss"] },
   { src: "ABC Australia",   cat: "World",       url: ["https://www.abc.net.au/news/feed/51120/rss.xml", "https://www.abc.net.au/news/feed/2942460/rss.xml"] },
   { src: "CBC",             cat: "World",       url: ["https://www.cbc.ca/webfeed/rss/rss-world", "https://www.cbc.ca/cmlink/rss-world"] },
@@ -106,7 +114,17 @@ async function fetchOne(url, feed) {
   try {
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { "user-agent": "newsroom-dashboard-briefing/1.0" },
+      // Several publishers (notably the Cloudflare-fronted Greek ones) answer
+      // 403 to a bare tool user-agent from a datacenter IP. A conventional
+      // browser UA plus a feed Accept header is what every feed reader sends
+      // and is what these hosts expect.
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+          "Chrome/124.0.0.0 Safari/537.36 newsroom-dashboard-briefing/1.0",
+        accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5",
+        "accept-language": "en,el;q=0.8",
+      },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return parseItems(await res.text(), feed);
@@ -115,10 +133,16 @@ async function fetchOne(url, feed) {
   }
 }
 
+/* Google News titles carry a " - Publisher" suffix; strip it so the model sees
+   the headline as the outlet wrote it. */
+const tidyGoogleNews = (items, url) =>
+  !url.includes("news.google.com") ? items
+    : items.map((i) => ({ ...i, title: i.title.replace(/\s+-\s+[^-]{2,40}$/, "").trim() || i.title }));
+
 async function fetchFeed(feed) {
   for (const url of Array.isArray(feed.url) ? feed.url : [feed.url]) {
     try {
-      const items = await fetchOne(url, feed);
+      const items = tidyGoogleNews(await fetchOne(url, feed), url);
       if (items.length) return items;
       console.error(`feed empty: ${url}`);
     } catch (e) {
