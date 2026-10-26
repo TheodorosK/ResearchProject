@@ -33,6 +33,24 @@ python -m lumen                    # opens http://127.0.0.1:8765 in your browser
 
 Options: `python -m lumen --port 9000 --no-browser --lan --tray`.
 
+## On a Mac
+
+1. **Python 3.10 or newer.** The `python3` built into macOS is too old. Install it from
+   [python.org](https://www.python.org/downloads/macos/), or with `brew install python@3.12`.
+2. **Double-click `Lumen.command`** in this folder. The first run sets everything up (a few minutes),
+   then Lumen opens in your browser. Keep the Terminal window open while you use it. Close it to stop
+   Lumen. If macOS says the file can't be opened, right-click it and choose **Open**.
+3. **Your Apple Photos library:** add it as a folder. *Apple Photos* is a shortcut in the folder
+   picker. Lumen reads only the original photos inside it, not Photos' own thumbnails and caches.
+   - macOS protects the library. If Lumen says it can't read it, open **System Settings → Privacy &
+     Security → Full Disk Access**, turn on **Terminal** (or **Lumen**, for the desktop app), and
+     restart Lumen.
+   - With **iCloud Photos → Optimize Mac Storage**, most originals live only in iCloud, and Lumen can
+     index only what's on the Mac. Choose **Download Originals to this Mac** in Photos' settings if
+     you have the space, or export the photos you care about to a folder.
+4. **Speed:** on Apple Silicon, Lumen uses the Neural Engine/GPU through Core ML automatically. *Sources →
+   This computer* shows what it's using.
+
 ## Searching
 
 | Type | Finds |

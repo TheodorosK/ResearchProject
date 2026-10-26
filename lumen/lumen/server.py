@@ -245,12 +245,27 @@ def list_folders():
             **{k: f[k] for k in f.keys()},
             "name": os.path.basename(f["path"].rstrip("/\\")) or f["path"],
             "exists": os.path.isdir(f["path"]),
+            "blocked": _blocked(f["path"]),
             "photos": sum(counts.values()),
             "ready": counts.get("ready", 0),
             "pending": counts.get("pending", 0),
             "errors": counts.get("error", 0),
         })
     return out
+
+
+def _blocked(path):
+    """A permission message if the OS won't let Lumen read the folder (e.g. macOS privacy), else None."""
+    try:
+        os.listdir(path)
+        for sub in ("originals", "Masters"):
+            if os.path.isdir(os.path.join(path, sub)):
+                os.listdir(os.path.join(path, sub))
+        return None
+    except PermissionError:
+        return _permission_hint()
+    except OSError:
+        return None
 
 
 class FolderIn(BaseModel):
@@ -308,9 +323,19 @@ def rescan():
     return {"ok": True}
 
 
+def _permission_hint():
+    if platform.system() == "Darwin":
+        return ("macOS is protecting this folder. Open System Settings → Privacy & Security → Full Disk Access, "
+                "turn on the app you started Lumen from (Terminal, or Lumen itself), then restart Lumen.")
+    return "No permission to open that folder"
+
+
 def _roots():
     home = Path.home()
     roots = [{"name": "Home", "path": str(home)}]
+    apple = home / "Pictures" / "Photos Library.photoslibrary"
+    if apple.is_dir():
+        roots.append({"name": "Apple Photos", "path": str(apple)})
     for name in ("Pictures", "Photos", "Desktop", "Downloads", "OneDrive/Pictures"):
         p = home / name
         if p.is_dir():
@@ -345,13 +370,14 @@ def browse(path: str | None = None):
                     continue
                 try:
                     if e.is_dir():
-                        dirs.append({"name": e.name, "path": e.path})
+                        lib = any(e.name.lower().endswith(s) for s in config.LIBRARY_ORIGINALS)
+                        dirs.append({"name": e.name, "path": e.path, "library": lib})
                     elif os.path.splitext(e.name)[1].lower() in config.IMAGE_EXTENSIONS:
                         images += 1
                 except OSError:
                     continue
     except PermissionError:
-        raise HTTPException(403, "No permission to open that folder")
+        raise HTTPException(403, _permission_hint())
     dirs.sort(key=lambda d: d["name"].lower())
     parent = os.path.dirname(p.rstrip("/\\")) if p.rstrip("/\\") else None
     return {"path": p, "parent": parent if parent and parent != p else None, "dirs": dirs,

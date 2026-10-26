@@ -192,3 +192,22 @@ def test_cpu_setting_and_autostart(client, tmp_path, monkeypatch):
         assert autostart.is_enabled()
         autostart.set_enabled(False)
         assert not f.exists()
+
+
+def test_photo_app_libraries_index_only_originals(client):
+    lib = client.root / "Photos Library.photoslibrary"
+    for sub in ("originals/A", "resources/derivatives/A", "database"):
+        (lib / sub).mkdir(parents=True)
+    make(lib / "originals/A/IMG_1.jpg", 1)
+    make(lib / "resources/derivatives/A/IMG_1_thumb.jpg", 1)     # Apple's cached copy: must be skipped
+    (client.root / "Catalog Previews.lrdata").mkdir()
+    make(client.root / "Catalog Previews.lrdata/preview.jpg", 2)  # Lightroom cache
+    (client.root / "@eaDir").mkdir()
+    make(client.root / "@eaDir/SYNOPHOTO_THUMB.jpg", 3)           # Synology thumbnail
+    client.post("/api/scan")
+    s = wait_for(client, lambda s: s["pending"] == 0 and s["state"] == "idle" and s["total"] >= 13)
+    names = set(by_name(client))
+    assert "IMG_1.jpg" in names and s["total"] == 13
+    assert not names & {"IMG_1_thumb.jpg", "preview.jpg", "SYNOPHOTO_THUMB.jpg"}
+    listing = client.get("/api/fs", params={"path": str(client.root)}).json()
+    assert any(d["library"] for d in listing["dirs"] if d["name"].endswith(".photoslibrary"))

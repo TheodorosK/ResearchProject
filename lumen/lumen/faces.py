@@ -1,7 +1,6 @@
 """Face detection, face fingerprints and grouping faces into people. All on-device (OpenCV YuNet + SFace)."""
 import hashlib
 import threading
-import urllib.request
 
 import numpy as np
 
@@ -45,7 +44,7 @@ class FaceEngine:
                     continue
                 self.state = "downloading face models (first run only)"
                 tmp = path.with_suffix(".part")
-                urllib.request.urlretrieve(spec["url"], tmp)
+                download(spec["url"], tmp)
                 if _sha256(tmp) != spec["sha256"]:
                     tmp.unlink(missing_ok=True)
                     raise RuntimeError(f"checksum mismatch for {spec['file']}")
@@ -128,6 +127,18 @@ class FaceEngine:
             p = np.exp(logits - logits.max())
             out.append(p / p.sum())
         return np.stack(out)
+
+
+def download(url, dest):
+    """Fetch a model file. Uses requests' own certificate bundle, because python.org's macOS Python
+    has no trusted certificates until 'Install Certificates.command' has been run."""
+    import requests
+
+    with requests.get(url, stream=True, timeout=60) as r:
+        r.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(1 << 20):
+                f.write(chunk)
 
 
 def _sha256(path):

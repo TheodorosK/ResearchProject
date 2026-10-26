@@ -93,6 +93,22 @@ def _open_original(path):
     return im, {"taken_at": taken, "camera": camera, "lat": lat, "lon": lon}
 
 
+def subfolders_to_scan(dirpath, dirnames, home=None):
+    """Which subfolders of dirpath hold photos worth indexing (skips caches, thumbnails, hidden folders)."""
+    for suffix, originals in config.LIBRARY_ORIGINALS.items():
+        if dirpath.lower().endswith(suffix):
+            return [d for d in dirnames if d in originals]
+    return [d for d in dirnames
+            if not d.startswith(".") and d not in config.SKIP_DIRS
+            and not d.lower().endswith(config.SKIP_DIR_SUFFIXES)
+            and (home is None or os.path.join(dirpath, d) != home)]
+
+
+def _inside_library_cache(dirpath):
+    """True for files directly in a photo-app library's top level (its database, not photos)."""
+    return any(dirpath.lower().endswith(s) for s in config.LIBRARY_ORIGINALS)
+
+
 def _parse_iso6709(s):
     """'+37.9715+023.7257+050.000/' -> (37.9715, 23.7257)."""
     import re
@@ -384,7 +400,9 @@ class Indexer:
             # Unplugged drive or renamed folder: keep the index rather than wiping it.
             return
         for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if not d.startswith(".") and os.path.join(dirpath, d) != home]
+            dirnames[:] = subfolders_to_scan(dirpath, dirnames, home)
+            if _inside_library_cache(dirpath):
+                continue
             self.current = dirpath
             for name in filenames:
                 if name.startswith(".") or os.path.splitext(name)[1].lower() not in config.MEDIA_EXTENSIONS:

@@ -16,6 +16,16 @@ IMAGE_EXTENSIONS = {
     ".heic", ".heif", ".avif",
 }
 
+# Photo-app libraries are folders full of caches; inside them only these subfolders hold originals.
+LIBRARY_ORIGINALS = {
+    ".photoslibrary": ("originals", "Masters"),   # Apple Photos (Masters: libraries from before macOS 10.15)
+    ".photolibrary": ("Masters",),                # iPhoto
+    ".aplibrary": ("Masters",),                   # Aperture
+}
+# Caches and system folders that only hold copies or thumbnails.
+SKIP_DIRS = {"@eaDir", "$RECYCLE.BIN", "System Volume Information", "#recycle"}
+SKIP_DIR_SUFFIXES = (".lrdata",)                  # Lightroom previews and smart previews
+
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".3gp", ".webm", ".mkv", ".avi", ".mts", ".m2ts"}
 MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
 VIDEO_SAMPLE_SECONDS = 5     # one frame every this many seconds...

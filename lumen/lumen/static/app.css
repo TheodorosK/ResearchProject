@@ -418,6 +418,7 @@ main:focus, main:focus-visible { outline: none; }
 .lan-url { font-size: 18px; word-break: break-all; }
 .pin-once { padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); }
 .pin-once strong { font-size: 22px; letter-spacing: .15em; }
+.blocked { margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: rgba(229, 72, 77, .12); color: var(--text); font-size: 13px; }
 .share-progress { display: flex; flex-direction: column; gap: 12px; }
 @media (max-width: 1000px) { .settings-grid { grid-template-columns: 1fr; } }
 

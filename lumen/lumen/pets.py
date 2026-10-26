@@ -43,15 +43,13 @@ def _model():
     global _session, _grid
     with _lock:
         if _session is None:
-            import urllib.request
-
             import onnxruntime as ort
 
             path = config.FACE_DIR / MODEL["file"]
             if not (path.exists() and faces._sha256(path) == MODEL["sha256"]):
                 config.FACE_DIR.mkdir(parents=True, exist_ok=True)
                 tmp = path.with_suffix(".part")
-                urllib.request.urlretrieve(MODEL["url"], tmp)
+                faces.download(MODEL["url"], tmp)
                 if faces._sha256(tmp) != MODEL["sha256"]:
                     tmp.unlink(missing_ok=True)
                     raise RuntimeError("checksum mismatch for the pet detector")

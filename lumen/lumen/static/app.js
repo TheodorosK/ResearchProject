@@ -963,6 +963,7 @@ async function openFolderBrowser({ mode = "add", title, subfolder = "", onPick }
       d.roots.forEach((r) => {
         const b = h(`<button title="${esc(r.path)}">${r.name === "Home" ? "🏠" : r.name === "Pictures" || r.name === "Photos" ? "🖼️" : "💽"} ${esc(r.name)}</button>`);
         b.onclick = () => open(r.path);
+        if (r.name === "Apple Photos") b.innerHTML = "🌅 Apple Photos";
         $(".fb-roots", el).append(b);
       });
       const crumbs = $(".crumbs", el);
@@ -983,7 +984,12 @@ async function openFolderBrowser({ mode = "add", title, subfolder = "", onPick }
       const dirs = $(".fb-dirs", el);
       dirs.innerHTML = "";
       if (d.parent) { const up = h("<button>⬆️ ..</button>"); up.onclick = () => open(d.parent); dirs.append(up); }
-      d.dirs.forEach((x) => { const b = h(`<button>📁 ${esc(x.name)}</button>`); b.onclick = () => open(x.path); dirs.append(b); });
+      d.dirs.forEach((x) => {
+        const label = x.library ? `🌅 ${esc(x.name.replace(/\.(photoslibrary|photolibrary|aplibrary)$/i, ""))} <span class="muted">· photo library, originals only</span>` : `📁 ${esc(x.name)}`;
+        const b = h(`<button>${label}</button>`);
+        b.onclick = () => open(x.path);
+        dirs.append(b);
+      });
       if (!d.dirs.length) dirs.append(h('<p class="muted" style="padding:10px">No subfolders here.</p>'));
       $(".here-text", el).innerHTML = `<strong>${esc(d.path.split(/[\\/]/).filter(Boolean).pop() || d.path)}</strong> · ${d.images ? plural(d.images, "photo") + " right here" : "no photos directly here"}${d.dirs.length ? `, ${plural(d.dirs.length, "subfolder")}` : ""}`;
     } catch (e) { fail(e); }
@@ -1122,6 +1128,7 @@ async function renderSources(view) {
     const pct = f.photos ? (100 * f.ready) / f.photos : 0;
     const row = h(`<div class="folder"><div class="ficon">${f.exists ? "📁" : "⚠️"}</div>
       <div class="meta"><strong>${esc(f.name)}</strong><div class="path" title="${esc(f.path)}">&lrm;${esc(f.path)}</div>
+        ${f.blocked ? `<div class="blocked">🔒 ${esc(f.blocked)}</div>` : ""}
         <div class="muted" style="font-size:13px">${f.exists ? "" : "Not reachable right now (unplugged drive?) · "}${plural(f.photos, "photo")}${f.pending ? ` · ${fmt(f.pending)} to go` : ""}${f.errors ? ` · ${fmt(f.errors)} couldn't be read` : ""}</div>
         ${f.pending ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ""}</div>
       <button class="icon-btn" title="Remove folder" aria-label="Remove folder">${I.trash}</button></div>`);
