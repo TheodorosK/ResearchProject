@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import config, db, duplicates, embedder, faces, jobs, search
+from . import config, db, duplicates, embedder, faces, jobs, quality, search
 from .indexer import delete_photos, preview_path, switch_model, worker
 from .vectors import index
 
@@ -103,7 +103,8 @@ def collection_dict(c, with_preview=True):
     d["count"] = len(ids)
     if with_preview:
         cover = [c["cover_photo_id"]] if c["cover_photo_id"] in ids else []
-        d["preview_ids"] = (cover + [i for i in ids if i not in cover])[:4]
+        best = quality.sort_by_quality(ids[:500])
+        d["preview_ids"] = (cover + [i for i in best if i not in cover])[:4]
     return d
 
 
@@ -309,6 +310,9 @@ def list_photos(
     direction = "ASC" if order == "oldest" else "DESC"
     w = " AND ".join(where)
     total = db.one(f"SELECT COUNT(*) n FROM photos WHERE {w}", args)["n"]
+    if order == "best":
+        ids = quality.sort_by_quality([r["id"] for r in db.q(f"SELECT id FROM photos WHERE {w}", args)])
+        return {"total": total, "items": hydrate(ids[offset : offset + limit])}
     rows = db.q(f"SELECT id FROM photos WHERE {w} ORDER BY taken_at {direction}, id {direction} LIMIT ? OFFSET ?",
                 args + [limit, offset])
     return {"total": total, "items": hydrate([r["id"] for r in rows])}
@@ -343,11 +347,21 @@ def photo_detail(photo_id: int):
         "status": r["status"],
         "error": r["error"],
         "collections": [dict(c) for c in cols],
-        "people": [dict(p) for p in db.q(
-            "SELECT f.id face_id, f.x, f.y, f.w, f.h, p.id, p.name FROM faces f "
+        "people": [_face_entry(p) for p in db.q(
+            "SELECT f.id face_id, f.x, f.y, f.w, f.h, f.expr_probs, p.id, p.name FROM faces f "
             "LEFT JOIN persons p ON p.id=f.person_id WHERE f.photo_id=? AND (p.hidden IS NULL OR p.hidden=0) "
             "ORDER BY f.x", (photo_id,))],
+        "quality": quality.scores().get(photo_id, (None, None))[1],
+        "sharpness": r["sharpness"],
     }
+
+
+def _face_entry(row):
+    d = {k: row[k] for k in row.keys() if k != "expr_probs"}
+    label, prob = faces.expression_of(row["expr_probs"])
+    d["expression"] = label if label and prob >= 0.5 else None
+    d["expression_emoji"] = faces.EXPRESSION_EMOJI.get(d["expression"])
+    return d
 
 
 @app.get("/api/photos/{photo_id}/preview")
@@ -420,22 +434,30 @@ def similar_many(body: IdsIn):
 def do_search(
     q: str, limit: int = Query(300, le=1000), folder_id: int | None = None,
     year_from: int | None = None, year_to: int | None = None, collection_id: int | None = None,
+    sort: str = "relevance",
 ):
     require_model()
-    hits = search.text_search(q, limit, filters_from(folder_id, year_from, year_to, collection_id))
+    hits = search.text_search(q, limit, sort=sort, filters=filters_from(folder_id, year_from, year_to, collection_id))
     positive, negatives = search.parse_query(q)
-    _, people = search.people_in_query(positive)
-    return {"query": q, "parsed": {"positive": positive, "negatives": negatives, "people": people},
+    rest, people = search.people_in_query(positive)
+    label, everyone = search.expression_in_query(rest)
+    expression = {"label": label, "emoji": faces.EXPRESSION_EMOJI[label], "everyone": everyone} if label else None
+    return {"query": q, "parsed": {"positive": positive, "negatives": negatives, "people": people,
+                                   "expression": expression},
             "items": hydrate(hits), "indexed": len(index)}
 
 
 @app.get("/api/home")
 def home():
-    groups = [] if embedder.get().loading else search.explore()
+    loading = embedder.get().loading
+    groups = [] if loading else search.explore()
+    mood_groups = [] if loading else search.moods()
     return {
         "suggestions": search.suggestions(),
         "on_this_day": hydrate(search.on_this_day()),
         "explore": [{**g, "photos": hydrate(g.pop("photo_ids"))} for g in (dict(g) for g in groups)],
+        "moods": [{**g, "photos": hydrate(g.pop("photo_ids"))} for g in (dict(g) for g in mood_groups)],
+        "best": [] if loading else hydrate(quality.best(18)),
         "recent": hydrate([r["id"] for r in db.q(
             "SELECT id FROM photos WHERE status='ready' ORDER BY id DESC LIMIT 12")]),
         "people": list_people()[:12],

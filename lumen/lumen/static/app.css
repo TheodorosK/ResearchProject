@@ -247,6 +247,8 @@ main { padding: 28px 24px 140px; max-width: 1600px; margin: 0 auto; outline: non
 .explore-card .label .e { font-size: 26px; display: block; margin-bottom: 2px; }
 .explore-card .label strong { font-size: 17px; display: block; }
 .explore-card .label span { font-size: 13px; opacity: .85; }
+.moods .explore-card { aspect-ratio: 16 / 10; }
+.moods .explore-card::after { background: linear-gradient(180deg, rgba(0, 0, 0, .05) 30%, rgba(0, 0, 0, .8)); }
 .memory-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
 .memory-strip .tile { height: 180px; }
 
@@ -302,6 +304,8 @@ main { padding: 28px 24px 140px; max-width: 1600px; margin: 0 auto; outline: non
 .lb-people { display: flex; flex-wrap: wrap; gap: 10px; }
 .lb-person { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 72px; text-decoration: none; font-size: 12px; text-align: center; }
 .lb-person img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px rgba(255,255,255,.15); }
+.lb-face { position: relative; }
+.lb-face i { position: absolute; right: -4px; bottom: -2px; font-style: normal; font-size: 18px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
 .lb-person:hover img { box-shadow: 0 0 0 2px var(--accent); }
 .lb-side a { color: inherit; }
 

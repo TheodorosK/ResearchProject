@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
-from . import config, db, embedder, faces
+from . import config, db, embedder, faces, quality
 from .vectors import index
 
 try:  # iPhone photos
@@ -108,7 +108,7 @@ def _prepare(row):
         # Aspect ratio of the preview equals the oriented original; that's all the grid needs.
         prev.parent.mkdir(parents=True, exist_ok=True)
         im.save(prev, "WEBP", quality=config.PREVIEW_QUALITY, method=4)
-        meta.update(width=im.width, height=im.height, phash=dhash(im))
+        meta.update(width=im.width, height=im.height, phash=dhash(im), **quality.measure(im))
         return pid, im, meta
     except Exception as e:  # corrupt, unsupported, vanished...
         return pid, None, {"error": f"{type(e).__name__}: {e}"[:300]}
@@ -121,15 +121,22 @@ def _catch_up(row):
     try:
         if row["meta_v"] >= config.META_VERSION and not want_faces:
             return pid, {}
-        im, meta = _open_original(row["path"])
-        meta["faces"] = faces.engine.detect(im) if want_faces else None
+        # Places and faces need the original; the rest is measured on the preview.
+        im, meta = (None, {})
+        if row["meta_v"] < 2 or want_faces:
+            im, meta = _open_original(row["path"])
+            meta["faces"] = faces.engine.detect(im) if want_faces else None
         prev = preview_path(pid)
         if prev.exists():
             with Image.open(prev) as p:
-                meta["phash"] = dhash(p)
+                p = p.convert("RGB")
         else:
-            im.thumbnail((config.PREVIEW_SIZE, config.PREVIEW_SIZE))
-            meta["phash"] = dhash(im)
+            if im is None:
+                im, _ = _open_original(row["path"])
+            p = im
+            p.thumbnail((config.PREVIEW_SIZE, config.PREVIEW_SIZE))
+        meta["phash"] = dhash(p)
+        meta.update(quality.measure(p))
         return pid, meta
     except Exception:
         # The original is unreadable now (moved, unplugged); try again on a later run.
@@ -139,9 +146,12 @@ def _catch_up(row):
 def _write_meta(c, pid, meta):
     """Store places/fingerprint/faces for one photo inside an open transaction."""
     c.execute(
-        "UPDATE photos SET phash=?, lat=?, lon=?, meta_v=? WHERE id=?",
-        (meta["phash"], meta["lat"], meta["lon"], config.META_VERSION, pid),
+        "UPDATE photos SET phash=?, sharpness=?, brightness=?, hi_clip=?, lo_clip=?, meta_v=? WHERE id=?",
+        (meta["phash"], meta["sharpness"], meta["brightness"], meta["hi_clip"], meta["lo_clip"],
+         config.META_VERSION, pid),
     )
+    if "lat" in meta:
+        c.execute("UPDATE photos SET lat=?, lon=? WHERE id=?", (meta["lat"], meta["lon"], pid))
     if meta.get("faces") is not None and faces.engine.enabled:
         old = [r["id"] for r in c.execute("SELECT id FROM faces WHERE photo_id=?", (pid,))]
         c.execute("DELETE FROM faces WHERE photo_id=?", (pid,))
@@ -247,6 +257,10 @@ class Indexer:
             self._new_faces = 0
             self.current = "Grouping faces into people…"
             faces.cluster_new_faces()
+        if force:
+            self.current = "Reading expressions…"
+            while not self.paused and faces.score_expressions():
+                pass
 
     def _catch_up_all(self):
         while not self.paused and not self._scan_requested.is_set():

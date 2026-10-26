@@ -5,7 +5,7 @@ on-device vision model, and lets you find photos by describing them. You can typ
 phrase ("golden hour at the beach") or a memory ("the morning we took the ferry to the island and it was
 windy"). You can then gather photos into named collections of smart previews.
 
-It also groups faces into **people**, puts photos on a **map**, finds **duplicates**, and copies
+It understands moods, styles and facial expressions, picks out your **best shots**, groups faces into **people**, puts photos on a **map**, finds **duplicates**, and copies
 collections into a folder.
 
 Your photos never leave your computer. The models run locally after a one-time download. The
@@ -36,6 +36,19 @@ Options: `python -m lumen --port 9000 --no-browser`.
 - **Describe anything.** Natural-language search ranks photos into *Spot on*, *Strong* and
   *Possible* matches. The default model (SigLIP 2) is multilingual, so Greek queries work too
   ("ηλιοβασίλεμα στη θάλασσα").
+- **Moods, styles and feelings.** "moody and dark", "cinematic street photography", "melancholic
+  rainy evening", "dreamy pastel", "black and white portrait": the image model understands mood and
+  style as well as subjects. The home page groups your library under **Moods & styles** too.
+- **Expressions.** Every face gets an expression (happy, sad, surprised, angry, neutral…) from a
+  small on-device model. "smiling", "laughing", "crying", "surprised" and "serious" in a search
+  then use the actual faces, so "Maria smiling" finds Maria smiling, and "everyone smiling at
+  dinner" prefers photos where *every* face smiles. Greek works too ("χαμογελαστά παιδιά").
+  Person pages have one-click shortcuts (😊 smiling, 😂 laughing…).
+- **Best shots.** Each photo gets a quality score from the image model's sense of a good photo
+  (composition, appeal) combined with measured focus and exposure. Searches nudge better-looking
+  photos up, and *Best looking first* sorts by it. The home page shows **Your best shots**, the
+  library can sort by quality, collection covers use the best photos, and *Similar shots* in Tidy up
+  keeps the sharpest one.
 - **Leave things out.** `beach -people`, or `-"red car"` for a phrase.
 - **Find similar.** Hover any photo and press ✦, or select several photos and choose *More like these*.
 - **Collections.** Create named collections with an icon and colour.
@@ -111,6 +124,10 @@ query ──▶ text embedding (averaged over caption-style phrasings) ──▶
   face fingerprints ([SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)),
   and grouping. New faces join the nearest existing person, or form new people by centroid
   clustering, so named people never get reshuffled.
+- `lumen/quality.py`: zero-shot aesthetic score (similarity to descriptions of great vs. poor
+  photos, as in CLIP-IQA) plus focus (Laplacian variance of the sharpest regions) and exposure clipping.
+- Expressions: [FER+](https://github.com/onnx/models/tree/main/validated/vision/body_analysis/emotion_ferplus)
+  run with ONNX Runtime on each face thumbnail.
 - `lumen/duplicates.py`: 64-bit difference hashes with locality-sensitive bucketing, confirmed by the
   image model, plus time-window grouping for similar shots.
 - `lumen/jobs.py`: background jobs (copying a collection to a folder).
@@ -131,6 +148,6 @@ python -m pytest tests
 ```
 
 The tests use a deterministic stand-in embedder (`LUMEN_EMBEDDER=fake`), so they run offline and
-without downloading a model. The face test needs the two OpenCV face models. Put them in a folder
+without downloading a model. The face test needs the three face models (YuNet, SFace, FER+). Put them in a folder
 and run `LUMEN_TEST_FACE_MODELS=/path/to/folder python -m pytest tests`; without it, that test is
 skipped. It also needs `scikit-image` for its sample photo.

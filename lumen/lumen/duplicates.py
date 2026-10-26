@@ -2,7 +2,7 @@
 import threading
 import time
 
-from . import db
+from . import db, quality
 from .vectors import index
 
 NEAR_BITS = 6           # max differing bits of the 64-bit hash for "same picture, re-saved or resized"
@@ -103,8 +103,13 @@ def _burst_groups(rows, cos, exclude):
 
 
 def _describe(group, info, kind):
-    items = sorted(group, key=lambda i: (-(info[i]["width"] or 0) * (info[i]["height"] or 0),
-                                         -(info[i]["size"] or 0), info[i]["taken_at"] or 0))
+    if kind == "burst":
+        # Different shots of one moment: keep the best-looking (sharpest, best composed) one.
+        items = quality.sort_by_quality(group)
+    else:
+        # Copies of one shot: keep the highest resolution, then the largest file.
+        items = sorted(group, key=lambda i: (-(info[i]["width"] or 0) * (info[i]["height"] or 0),
+                                             -(info[i]["size"] or 0), info[i]["taken_at"] or 0))
     sizes = {info[i]["size"] for i in group}
     hashes = {info[i]["phash"] for i in group}
     if kind == "duplicate":

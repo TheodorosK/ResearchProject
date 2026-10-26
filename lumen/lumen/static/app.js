@@ -308,6 +308,12 @@ async function renderHome(view) {
     view.append(sec);
   }
 
+  if (data.best.length >= 6) {
+    const sec = h(`<section class="section fade-in"><div class="section-head"><h2>✨ Your best shots</h2><a href="#/library?order=best">See more</a></div></section>`);
+    sec.append(new JGrid(data.best.slice(0, 12), { rowHeight: () => (innerWidth < 600 ? 120 : 200) }).el);
+    view.append(sec);
+  }
+
   const cols = await api("/api/collections");
   const csec = h(`<section class="section fade-in"><div class="section-head"><h2>📚 Your collections</h2><a href="#/collections">See all</a></div><div class="scroller"></div></section>`);
   const sc = $(".scroller", csec);
@@ -333,6 +339,18 @@ async function renderHome(view) {
     for (const g of data.explore.slice(0, 16)) {
       const cover = g.photos[0];
       grid.append(h(`<a class="explore-card" href="#/search?q=${encodeURIComponent(g.query)}&title=${encodeURIComponent(g.name)}">
+        ${cover ? `<img loading="lazy" src="${previewUrl(cover.id)}" alt="">` : ""}
+        <div class="label"><span class="e">${g.emoji}</span><strong>${esc(g.name)}</strong><span>${plural(g.count, "photo")}</span></div></a>`));
+    }
+    view.append(sec);
+  }
+
+  if (data.moods.length) {
+    const sec = h(`<section class="section fade-in"><div class="section-head"><h2>🎭 Moods & styles</h2><span class="muted">The feeling of your photos</span></div><div class="card-grid moods"></div></section>`);
+    const grid = $(".card-grid", sec);
+    for (const g of data.moods.slice(0, 12)) {
+      const cover = g.photos[0];
+      grid.append(h(`<a class="explore-card mood" href="#/search?q=${encodeURIComponent(g.query)}&title=${encodeURIComponent(g.name)}&sort=quality">
         ${cover ? `<img loading="lazy" src="${previewUrl(cover.id)}" alt="">` : ""}
         <div class="label"><span class="e">${g.emoji}</span><strong>${esc(g.name)}</strong><span>${plural(g.count, "photo")}</span></div></a>`));
     }
@@ -406,7 +424,7 @@ async function renderSearch(view, params) {
   const title = params.get("title");
   $("#top-search-input").value = title ? "" : q;
   const filters = new URLSearchParams();
-  for (const k of ["year_from", "year_to", "folder_id"]) if (params.get(k)) filters.set(k, params.get(k));
+  for (const k of ["year_from", "year_to", "folder_id", "sort"]) if (params.get(k)) filters.set(k, params.get(k));
   const head = h(`<div class="search-head fade-in">
       <div class="search-top"><h1 class="search-title">${title ? `${esc(title)}` : `<q>${esc(q)}</q>`}</h1><div class="row-actions"></div></div>
       <div class="filters"></div>
@@ -436,6 +454,11 @@ async function renderSearch(view, params) {
     fs.onchange = () => setParam("folder_id", fs.value);
     f.append(fs);
   }
+  const sortSel = h(`<select aria-label="Order"><option value="relevance">Best match first</option><option value="quality" ${params.get("sort") === "quality" ? "selected" : ""}>Best looking first</option></select>`);
+  sortSel.onchange = () => setParam("sort", sortSel.value === "quality" ? "quality" : "");
+  f.append(sortSel);
+  const ex = res.parsed.expression;
+  if (ex) f.append(h(`<span class="chip" title="Lumen reads the expressions on faces for this">${ex.emoji} ${ex.everyone ? "everyone " : ""}${esc({ happiness: "smiling", sadness: "sad", surprise: "surprised", anger: "angry", fear: "scared", disgust: "disgusted", neutral: "serious", contempt: "unimpressed" }[ex.label])} faces</span>`));
   if (res.parsed.people?.length) f.append(h(`<span class="muted">with ${res.parsed.people.map((p) => `<a class="chip" href="#/person/${p.id}">${I.person} ${esc(p.name)}</a>`).join(" ")}</span>`));
   const neg = res.parsed.negatives;
   if (neg.length) f.append(h(`<span class="muted">excluding ${neg.map((n) => `<strong>${esc(n)}</strong>`).join(", ")}</span>`));
@@ -484,7 +507,7 @@ async function renderLibrary(view, params) {
   const years = await api("/api/years");
   const head = h(`<div class="page-head fade-in"><div><h1>Library</h1><p class="lib-count">&nbsp;</p></div>
      <div class="row-actions"><select class="input" style="height:36px;width:auto;border-radius:999px" aria-label="Order">
-       <option value="newest">Newest first</option><option value="oldest" ${order === "oldest" ? "selected" : ""}>Oldest first</option></select></div></div>`);
+       <option value="newest">Newest first</option><option value="oldest" ${order === "oldest" ? "selected" : ""}>Oldest first</option><option value="best" ${order === "best" ? "selected" : ""}>Best looking first</option></select></div></div>`);
   $("select", head).onchange = (e) => go(`#/library?order=${e.target.value}${year ? `&year=${year}` : ""}`);
   view.append(head);
   if (years.length) {
@@ -509,7 +532,7 @@ async function renderLibrary(view, params) {
     if (!total) body.append(emptyState("🖼️", "No photos yet", "Add a folder in Sources and they'll appear here.", '<a class="btn primary" href="#/sources">Add folders</a>'));
     const fresh = new Map();
     for (const it of res.items) {
-      const key = it.taken_at ? fmtDate(it.taken_at, { year: "numeric", month: "long" }) : "Undated";
+      const key = order === "best" ? "Best looking first" : it.taken_at ? fmtDate(it.taken_at, { year: "numeric", month: "long" }) : "Undated";
       if (!fresh.has(key)) fresh.set(key, []);
       fresh.get(key).push(it);
     }
@@ -925,9 +948,10 @@ async function drawLightbox() {
       <dt>📁</dt><dd>${esc(d.folder)}</dd>
       ${d.lat != null ? `<dt>📍</dt><dd><a href="#/map?photo=${d.id}">${d.lat.toFixed(4)}, ${d.lon.toFixed(4)} · View on map</a></dd>` : ""}
       ${d.size ? `<dt>💾</dt><dd>${d.size >= 1048576 ? (d.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(d.size / 1024)) + " KB"}</dd>` : ""}
+      ${d.quality != null ? `<dt>⭐</dt><dd>${d.quality >= 90 ? "One of your best shots · " : d.quality >= 70 ? "Looks great · " : ""}<span class="muted">Quality ${d.quality}/100</span></dd>` : ""}
       ${it.tier ? `<dt>🎯</dt><dd>${{ best: "Spot-on match", good: "Strong match", maybe: "Possible match" }[it.tier]}</dd>` : ""}
     </dl>
-    ${d.people.length ? `<div><h4>People</h4><div class="lb-people">${d.people.map((p) => `<a class="lb-person" href="${p.id ? `#/person/${p.id}` : "#/people"}"><img src="${faceUrl(p.face_id)}" alt=""><span>${p.id ? esc(p.name || "Add a name") : "Not grouped yet"}</span></a>`).join("")}</div></div>` : ""}
+    ${d.people.length ? `<div><h4>People</h4><div class="lb-people">${d.people.map((p) => `<a class="lb-person" href="${p.id ? `#/person/${p.id}` : "#/people"}"><span class="lb-face"><img src="${faceUrl(p.face_id)}" alt="">${p.expression_emoji ? `<i title="${esc(p.expression)}">${p.expression_emoji}</i>` : ""}</span><span>${p.id ? esc(p.name || "Add a name") : "Not grouped yet"}</span></a>`).join("")}</div></div>` : ""}
     ${d.collections.length ? `<div><h4>In collections</h4><div class="chips">${d.collections.map((c) => `<a class="chip" href="#/collection/${c.id}">${esc(c.emoji || "📁")} ${esc(c.name)}</a>`).join("")}</div></div>` : ""}
     ${sim.length ? `<div><h4>Looks similar</h4><div class="lb-similar">${sim.map((s, i) => `<img src="${previewUrl(s.id)}" data-i="${i}" alt="${esc(s.name)}">`).join("")}</div></div>` : ""}
     <div class="muted" style="font-size:12px;margin-top:auto">← → to browse · Esc to close</div>`;
@@ -1104,6 +1128,11 @@ async function renderPerson(view, id) {
     toast(p.hidden ? "Back in People" : "Hidden. Find them under People → Hidden");
     go(p.hidden ? `#/person/${id}` : "#/people");
   });
+  if (p.name) {
+    const moods = [["😊", "smiling"], ["😂", "laughing"], ["😮", "surprised"], ["😐", "serious"], ["😢", "sad"]];
+    $(".person-meta", head).append(h(`<div class="chips" style="margin-top:10px">${moods.map(([e, w]) =>
+      `<a class="chip" href="#/search?q=${encodeURIComponent(p.name + " " + w)}">${e} ${esc(p.name)} ${w}</a>`).join("")}</div>`));
+  }
   view.append(head);
   if (!p.name) setTimeout(() => input.focus(), 50);
 

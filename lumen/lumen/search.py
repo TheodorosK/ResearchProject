@@ -6,7 +6,7 @@ from datetime import datetime
 
 import numpy as np
 
-from . import db, embedder, faces
+from . import db, embedder, faces, quality
 from .vectors import index
 
 # Cutoffs on a robust z-score (median/MAD of the whole library), so they hold for any model and
@@ -66,11 +66,53 @@ CONCEPTS = [
     ("Horses", "🐴", "a horse"),
 ]
 
+# Moods and styles: overlap with the subject themes above, so they're grouped separately.
+MOODS = [
+    ("Moody & dark", "🌑", "a moody, dark and atmospheric photo"),
+    ("Cinematic", "🎬", "a cinematic film still with dramatic lighting"),
+    ("Street photography", "🚶", "candid street photography in the city"),
+    ("Black & white", "⚫", "a black and white photograph"),
+    ("Golden light", "🌇", "warm golden hour sunlight"),
+    ("Dreamy & soft", "☁️", "a dreamy, soft, pastel photo"),
+    ("Joyful moments", "😄", "people laughing and having fun together"),
+    ("Calm & peaceful", "🕊️", "a calm and peaceful scene"),
+    ("Melancholic", "🌧️", "a melancholic, lonely and quiet scene"),
+    ("Vibrant colours", "🌈", "a vibrant, colorful photo"),
+    ("Minimalist", "◻️", "a minimalist photo with lots of empty space"),
+    ("Nostalgic", "📼", "a nostalgic vintage film photo"),
+    ("Romantic", "💞", "a romantic moment for a couple"),
+    ("Epic landscapes", "🏞️", "an epic, dramatic landscape"),
+    ("Cozy", "🕯️", "a cozy warm indoor moment"),
+    ("Portraits", "🖼️", "an artistic portrait"),
+]
+
+# Words that ask about faces' expressions, mapped to FER+ labels. Greek stems match word starts.
+EXPRESSION_WORDS = {
+    "smiling": "happiness", "smile": "happiness", "smiles": "happiness", "smiley": "happiness",
+    "happy": "happiness", "laughing": "happiness", "laugh": "happiness", "laughs": "happiness",
+    "cheerful": "happiness", "grinning": "happiness",
+    "sad": "sadness", "crying": "sadness", "cry": "sadness", "tears": "sadness", "unhappy": "sadness",
+    "upset": "sadness",
+    "surprised": "surprise", "shocked": "surprise", "amazed": "surprise", "astonished": "surprise",
+    "angry": "anger", "mad": "anger", "furious": "anger",
+    "scared": "fear", "afraid": "fear", "frightened": "fear",
+    "disgusted": "disgust", "serious": "neutral", "neutral": "neutral", "expressionless": "neutral",
+}
+EXPRESSION_STEMS = {
+    "χαμογελ": "happiness", "χαρούμεν": "happiness", "χαρουμεν": "happiness", "γελ": "happiness",
+    "λυπημέν": "sadness", "λυπημεν": "sadness", "κλαί": "sadness", "κλαι": "sadness",
+    "θυμωμέν": "anger", "θυμωμεν": "anger", "έκπληκτ": "surprise", "εκπληκτ": "surprise",
+    "φοβισμέν": "fear", "φοβισμεν": "fear", "σοβαρ": "neutral",
+}
+EVERYONE_WORDS = {"everyone", "everybody", "all", "όλοι", "ολοι"}
+EXPRESSION_WEIGHT = 3.0   # z-score units added for a confident expression match
+
 SUGGESTIONS = [
     "golden hour at the beach", "my dog sleeping on the couch", "a birthday cake with candles",
     "snowy mountains", "dinner with friends", "kids laughing", "old stone streets",
     "a cozy rainy day", "fireworks over the city", "the blue sea from a boat",
     "people dancing", "a plate of pasta", "sunrise from an airplane window",
+    "moody and dark", "cinematic street photography", "everyone smiling", "a melancholic rainy evening",
     "a red car", "flowers in spring", "that summer on the island",
 ]
 
@@ -104,6 +146,35 @@ def people_in_query(text: str):
     return text, found
 
 
+def expression_in_query(text: str):
+    """('everyone smiling at dinner') -> ('happiness', everyone=True); (None, False) if none."""
+    label, everyone = None, False
+    for w in re.findall(r"\w+", text.lower()):
+        if w in EVERYONE_WORDS:
+            everyone = True
+        if label is None:
+            label = EXPRESSION_WORDS.get(w) or next(
+                (v for stem, v in EXPRESSION_STEMS.items() if w.startswith(stem)), None)
+    return label, everyone
+
+
+def _expression_scores(ids, label, person_ids=(), everyone=False):
+    """Per-photo probability of `label` from its faces: the named people's faces if any were named,
+    else any face (or the least-matching face, for 'everyone')."""
+    k = faces.EXPRESSIONS.index(label)
+    sql = "SELECT photo_id, expr_probs FROM faces WHERE expr_probs IS NOT NULL"
+    args = []
+    if person_ids:
+        sql += f" AND person_id IN ({','.join('?' * len(person_ids))})"
+        args = list(person_ids)
+    per_photo = {}
+    for r in db.q(sql, args):
+        p = float(np.frombuffer(r["expr_probs"], dtype=np.float16)[k])
+        per_photo.setdefault(r["photo_id"], []).append(p)
+    agg = min if everyone else max
+    return np.array([agg(per_photo[i]) if i in per_photo else np.nan for i in ids.tolist()])
+
+
 def _filtered(ids, filters):
     """Boolean mask of ids allowed by folder/year/collection filters."""
     if not filters:
@@ -133,10 +204,12 @@ def robust_z(scores):
     return (scores - med) / np.maximum(mad, 1e-6)
 
 
-def _rank(scores, ids, limit, min_z, mask=None, exclude=(), min_count=0):
+def _rank(scores, ids, limit, min_z, mask=None, exclude=(), min_count=0, bonus=None):
     if not len(scores):
         return []
     z = robust_z(scores)
+    if bonus is not None:
+        z = z + bonus
     if mask is not None:
         z = np.where(mask, z, -np.inf)
     for pid in exclude:
@@ -153,7 +226,16 @@ def _rank(scores, ids, limit, min_z, mask=None, exclude=(), min_count=0):
     return out
 
 
-def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=MIN_RESULTS):
+def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=MIN_RESULTS, sort="relevance"):
+    hits = _text_search(raw, limit, filters, min_z, min_count)
+    if sort == "quality":
+        s = quality.scores()
+        order = {"best": 0, "good": 1, "maybe": 2}
+        hits.sort(key=lambda h: (order[h["tier"]], -s.get(h["id"], (0.0, 50))[0]))
+    return hits
+
+
+def _text_search(raw, limit, filters, min_z, min_count):
     ids, mat = index.snapshot()
     if not len(ids):
         return []
@@ -176,12 +258,19 @@ def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=M
             return [{"id": i, "score": 1.0, "z": 9.0, "tier": "best"} for i in ordered]
     qv = embedder.embed_query(positive) if positive else np.zeros(mat.shape[1], dtype=np.float32)
     scores = mat @ qv
+    # Among similar matches, prefer the better-looking photo.
+    bonus = quality.bonus(ids)
+    label, everyone = expression_in_query(positive)
+    if label:
+        p = _expression_scores(ids, label, [x["id"] for x in people], everyone)
+        # Faces that show the expression rise; photos without readable faces sink a little.
+        bonus = bonus + np.where(np.isnan(p), -0.5, EXPRESSION_WEIGHT * (np.nan_to_num(p) - 0.3))
     if negatives:
         # Push down photos that look like what the user excluded.
         neg = np.stack([embedder.embed_query(n) for n in negatives])
         neg_scores = (mat @ neg.T).max(1)
         scores = scores - 0.5 * np.maximum(neg_scores - neg_scores.mean(), 0)
-    return _rank(scores, ids, limit, min_z, mask, min_count=min_count)
+    return _rank(scores, ids, limit, min_z, mask, min_count=min_count, bonus=bonus)
 
 
 def similar(photo_id: int, limit=60, filters=None):
@@ -203,37 +292,55 @@ def similar_to_many(photo_ids, limit=60):
     return _rank(mat @ c, ids, limit, TIER_MAYBE, exclude=photo_ids, min_count=12)
 
 
-_explore_cache = {"version": None, "data": None}
+_explore_cache = {}
 _explore_lock = threading.Lock()
 
 
-def explore(per_concept=6):
-    """Group the library under everyday themes, zero-shot: each photo joins the theme it matches best."""
+def _themes(concepts, per_concept, min_members=3):
+    """Zero-shot grouping: each photo joins the theme it matches best, if it matches it well."""
+    ids, mat = index.snapshot()
+    if len(ids) < 8:
+        return []
+    s = mat @ embedder.embed_queries([prompt for _, _, prompt in concepts]).T  # (photos, concepts)
+    # Standardize each concept column so "common" concepts don't win everything.
+    z = robust_z(s)
+    best = z.argmax(1)
+    best_z = z[np.arange(len(ids)), best]
+    q = quality.bonus(ids, weight=0.5)
+    groups = []
+    for ci, (name, emoji, prompt) in enumerate(concepts):
+        members = np.nonzero((best == ci) & (best_z >= TIER_GOOD))[0]
+        if len(members) < min_members:
+            continue
+        # The cover photos: strong matches that also look good.
+        order = members[np.argsort(-(z[members, ci] + q[members]))]
+        groups.append({
+            "name": name, "emoji": emoji, "query": prompt, "count": int(len(members)),
+            "photo_ids": [int(ids[i]) for i in order[:per_concept]],
+        })
+    groups.sort(key=lambda g: -g["count"])
+    return groups
+
+
+def _cached(kind, fn):
     with _explore_lock:
-        if _explore_cache["version"] == (index.version, embedder.get().key):
-            return _explore_cache["data"]
-        ids, mat = index.snapshot()
-        if len(ids) < 8:
-            return []
-        cvecs = embedder.embed_queries([prompt for _, _, prompt in CONCEPTS])
-        s = mat @ cvecs.T  # (photos, concepts)
-        # Standardize each concept column so "common" concepts don't win everything.
-        z = robust_z(s)
-        best = z.argmax(1)
-        best_z = z[np.arange(len(ids)), best]
-        groups = []
-        for ci, (name, emoji, prompt) in enumerate(CONCEPTS):
-            members = np.nonzero((best == ci) & (best_z >= TIER_GOOD))[0]
-            if len(members) < 3:
-                continue
-            order = members[np.argsort(-z[members, ci])]
-            groups.append({
-                "name": name, "emoji": emoji, "query": prompt, "count": int(len(members)),
-                "photo_ids": [int(ids[i]) for i in order[:per_concept]],
-            })
-        groups.sort(key=lambda g: -g["count"])
-        _explore_cache.update(version=(index.version, embedder.get().key), data=groups)
-        return groups
+        key = (index.version, embedder.get().key)
+        hit = _explore_cache.get(kind)
+        if hit and hit[0] == key:
+            return hit[1]
+        data = fn()
+        _explore_cache[kind] = (key, data)
+        return data
+
+
+def explore(per_concept=6):
+    """Everyday subjects: beaches, food, pets, celebrations..."""
+    return _cached("subjects", lambda: _themes(CONCEPTS, per_concept))
+
+
+def moods(per_concept=6):
+    """Moods and styles: moody & dark, cinematic, black & white..."""
+    return _cached("moods", lambda: _themes(MOODS, per_concept))
 
 
 def on_this_day(limit=24):

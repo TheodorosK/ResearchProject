@@ -72,9 +72,11 @@ class FakeEmbedder:
         self.loading = False
 
     def _vec(self, rgb, seed: str):
-        h = np.frombuffer(hashlib.sha256(seed.encode()).digest()[: self.DIM - 3], dtype=np.uint8)
+        # Last dimension stays 0 for real content; text without colour words points only there,
+        # so it scores every image the same (a neutral query, handy for testing re-ranking).
+        h = np.frombuffer(hashlib.sha256(seed.encode()).digest()[: self.DIM - 4], dtype=np.uint8)
         noise = (h.astype(np.float32) / 255.0 - 0.5) * 0.05
-        return np.concatenate([np.asarray(rgb, dtype=np.float32) + 0.05, noise])
+        return np.concatenate([np.asarray(rgb, dtype=np.float32) + 0.05, noise, [0.0]])
 
     def embed_images(self, images) -> np.ndarray:
         out = []
@@ -87,9 +89,12 @@ class FakeEmbedder:
         out = []
         for t in texts:
             rgb = np.zeros(3, dtype=np.float32)
-            for word, c in self.COLORS.items():
-                if word in t.lower():
-                    rgb += c
+            hits = [c for word, c in self.COLORS.items() if word in t.lower()]
+            if not hits:
+                out.append(np.eye(self.DIM, dtype=np.float32)[-1])
+                continue
+            for c in hits:
+                rgb += c
             out.append(self._vec(rgb, t))
         return _normalize(np.stack(out))
 

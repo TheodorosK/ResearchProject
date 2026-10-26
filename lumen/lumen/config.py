@@ -40,9 +40,9 @@ BATCH_SIZE = 16
 
 # Bumped when indexing starts extracting something new (faces, places, fingerprints), so
 # photos indexed by an older version get a quick catch-up pass instead of a full re-index.
-META_VERSION = 2
+META_VERSION = 3
 
-# Face grouping (people). Small OpenCV models (~40 MB) fetched once on first use.
+# Face grouping and expressions. Small ONNX models (~75 MB) fetched once on first use.
 FACES = os.environ.get("LUMEN_FACES", "1") != "0"
 FACE_DIR = MODEL_DIR / "faces"
 FACE_MODELS = {
@@ -57,6 +57,12 @@ FACE_MODELS = {
         "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/"
                "face_recognition_sface/face_recognition_sface_2021dec.onnx",
         "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+    },
+    "expression": {  # FER+ facial expression classifier (ONNX Model Zoo)
+        "file": "emotion-ferplus-8.onnx",
+        "url": "https://media.githubusercontent.com/media/onnx/models/main/validated/vision/"
+               "body_analysis/emotion_ferplus/model/emotion-ferplus-8.onnx",
+        "sha256": "a2a2ba6a335a3b29c21acb6272f962bd3d47f84952aaffa03b60986e04efa61c",
     },
 }
 FACE_THUMB_DIR = THUMB_DIR / "faces"

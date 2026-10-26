@@ -101,6 +101,13 @@ MIGRATIONS = {
         "lon": "REAL",
         "meta_v": "INTEGER NOT NULL DEFAULT 0",
         "faces_v": "INTEGER NOT NULL DEFAULT 0",
+        "sharpness": "REAL",          # variance of the Laplacian on the preview
+        "brightness": "REAL",         # mean luminance 0-255
+        "hi_clip": "REAL",            # share of blown-out highlight pixels
+        "lo_clip": "REAL",            # share of crushed shadow pixels
+    },
+    "faces": {
+        "expr_probs": "BLOB",         # FER+ probabilities, float16 x 8, see faces.EXPRESSIONS
     },
 }
 

@@ -15,12 +15,19 @@ MIN_SCORE = 0.85          # detector confidence
 MIN_FACE_PX = 36          # smaller faces are too blurry to recognise reliably
 DETECT_SIZE = 1280        # long edge the detector sees
 THUMB_SIZE = 160
+THUMB_MARGIN = 1.5        # face thumbnails show the face box enlarged by this factor
+
+# FER+ output order.
+EXPRESSIONS = ["neutral", "happiness", "surprise", "sadness", "anger", "disgust", "fear", "contempt"]
+EXPRESSION_EMOJI = {"neutral": "😐", "happiness": "😊", "surprise": "😮", "sadness": "😢",
+                    "anger": "😠", "disgust": "🤢", "fear": "😨", "contempt": "😒"}
 
 
 class FaceEngine:
     def __init__(self):
         self._local = threading.local()
         self._ready_lock = threading.Lock()
+        self._expr = None
         self.state = "not loaded" if config.FACES else "off"
 
     @property
@@ -86,7 +93,7 @@ class FaceEngine:
             emb = rec.feature(rec.alignCrop(bgr, f)).reshape(-1).astype(np.float32)
             emb /= np.linalg.norm(emb) or 1
             # A square crop with some margin, for the round avatars in the UI.
-            side = max(fw, fh) * 1.5
+            side = max(fw, fh) * THUMB_MARGIN
             cx, cy = x + fw / 2, y + fh / 2
             box = (max(0, cx - side / 2), max(0, cy - side / 2), min(w, cx + side / 2), min(h, cy + side / 2))
             thumb = im.crop(tuple(int(v) for v in box))
@@ -98,6 +105,29 @@ class FaceEngine:
                 "thumb": thumb,
             })
         return out
+
+
+    def expressions(self, thumbs):
+        """FER+ probabilities (n, 8) for face thumbnails. The face is the thumbnail's centre."""
+        if not self.enabled or not thumbs:
+            return None
+        if self._expr is None:
+            import onnxruntime as ort
+
+            self._ensure_models()
+            self._expr = ort.InferenceSession(
+                str(config.FACE_DIR / config.FACE_MODELS["expression"]["file"]), providers=["CPUExecutionProvider"]
+            )
+        name = self._expr.get_inputs()[0].name
+        out = []
+        for t in thumbs:
+            w, h = t.size
+            mx, my = w * (1 - 1 / THUMB_MARGIN) / 2, h * (1 - 1 / THUMB_MARGIN) / 2
+            face = t.crop((mx, my, w - mx, h - my)).convert("L").resize((64, 64))
+            logits = self._expr.run(None, {name: np.asarray(face, dtype=np.float32)[None, None]})[0][0]
+            p = np.exp(logits - logits.max())
+            out.append(p / p.sum())
+        return np.stack(out)
 
 
 def _sha256(path):
@@ -197,6 +227,45 @@ def person_photo_ids(person_id: int):
     return [r["photo_id"] for r in db.q(
         "SELECT DISTINCT f.photo_id FROM faces f JOIN photos p ON p.id=f.photo_id "
         "WHERE f.person_id=? AND p.status='ready' ORDER BY p.taken_at DESC", (person_id,))]
+
+
+def score_expressions(limit=512):
+    """Read the expression of faces that don't have one yet, from their thumbnails. Returns how many."""
+    from PIL import Image
+
+    rows = db.q("SELECT id FROM faces WHERE expr_probs IS NULL LIMIT ?", (limit,))
+    if not rows or not engine.enabled:
+        return 0
+    ids, thumbs = [], []
+    for r in rows:
+        try:
+            with Image.open(face_thumb_path(r["id"])) as im:
+                thumbs.append(im.convert("RGB"))
+            ids.append(r["id"])
+        except OSError:
+            ids.append(r["id"])
+            thumbs.append(None)
+    ok = [(i, t) for i, t in zip(ids, thumbs) if t is not None]
+    probs = engine.expressions([t for _, t in ok]) if ok else None
+    if ok and probs is None:
+        return 0
+    with db.tx() as c:
+        c.executemany("UPDATE faces SET expr_probs=? WHERE id=?",
+                      [(p.astype(np.float16).tobytes(), i) for (i, _), p in zip(ok, probs if ok else [])])
+        # Missing thumbnail: neutral, so we don't retry forever.
+        neutral = np.eye(len(EXPRESSIONS), dtype=np.float16)[0].tobytes()
+        c.executemany("UPDATE faces SET expr_probs=? WHERE id=?",
+                      [(neutral, i) for i, t in zip(ids, thumbs) if t is None])
+    return len(rows)
+
+
+def expression_of(blob):
+    """(label, probability) of the dominant expression, or (None, 0)."""
+    if not blob:
+        return None, 0.0
+    p = np.frombuffer(blob, dtype=np.float16).astype(np.float32)
+    i = int(p.argmax())
+    return EXPRESSIONS[i], float(p[i])
 
 
 def cover_face(person_id: int):
