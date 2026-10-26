@@ -42,6 +42,7 @@ DEFAULT_MODEL = os.environ.get("LUMEN_MODEL", "siglip2")
 EMBEDDER = os.environ.get("LUMEN_EMBEDDER", "fastembed")
 
 BATCH_SIZE = 16
+PORT = int(os.environ.get("LUMEN_PORT", "8765"))
 
 # Bumped when indexing starts extracting something new (faces, places, fingerprints), so
 # photos indexed by an older version get a quick catch-up pass instead of a full re-index.

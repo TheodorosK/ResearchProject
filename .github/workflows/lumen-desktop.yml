@@ -1,0 +1,57 @@
+name: Build Lumen desktop app
+
+# Builds double-click apps for Windows, macOS and Linux. Run it by hand from the Actions tab, or push
+# a tag like `lumen-v0.1.0`. The apps are attached to the run as downloadable artifacts.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["lumen-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: lumen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pystray
+      - name: Test
+        run: |
+          pip install pytest httpx
+          python -m pytest -q tests
+      - name: Build
+        working-directory: lumen/packaging
+        run: pyinstaller --noconfirm lumen.spec
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        working-directory: lumen/packaging/dist
+        run: ditto -c -k --keepParent Lumen.app Lumen-macOS.zip
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        working-directory: lumen/packaging/dist
+        shell: pwsh
+        run: Compress-Archive -Path Lumen -DestinationPath Lumen-Windows.zip
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        working-directory: lumen/packaging/dist
+        run: tar czf Lumen-Linux.tar.gz Lumen
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lumen-${{ runner.os }}
+          path: |
+            lumen/packaging/dist/*.zip
+            lumen/packaging/dist/*.tar.gz

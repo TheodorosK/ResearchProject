@@ -61,6 +61,12 @@ CREATE TABLE IF NOT EXISTS video_frames (
 );
 CREATE INDEX IF NOT EXISTS video_frames_photo ON video_frames(photo_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS photo_text USING fts5(text, tokenize='unicode61 remove_diacritics 2');
+CREATE TABLE IF NOT EXISTS photo_tags (
+    photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+    tag TEXT NOT NULL COLLATE NOCASE,
+    PRIMARY KEY (photo_id, tag)
+);
+CREATE INDEX IF NOT EXISTS photo_tags_tag ON photo_tags(tag);
 CREATE TABLE IF NOT EXISTS dup_ignored (
     group_key TEXT PRIMARY KEY
 );
@@ -122,6 +128,9 @@ MIGRATIONS = {
         "ocr_v": "INTEGER NOT NULL DEFAULT 0",    # 0 = not considered, 1 = read, 2 = skipped (no text)
         "pets_v": "INTEGER NOT NULL DEFAULT 0",   # same, for looking for cats and dogs
         "palette": "TEXT",            # dominant colours, see colors.palette
+        "favorite": "INTEGER NOT NULL DEFAULT 0",
+        "rating": "INTEGER NOT NULL DEFAULT 0",   # 0-5 stars
+        "xmp_v": "INTEGER NOT NULL DEFAULT 0",    # 1 = existing XMP sidecar imported
     },
     "persons": {
         "kind": "TEXT NOT NULL DEFAULT 'person'",  # person | pet
@@ -135,16 +144,25 @@ MIGRATIONS = {
 }
 
 
+_init_done = False
+
+
 def init():
-    conn = connect()
-    conn.executescript(SCHEMA)
-    for table, cols in MIGRATIONS.items():
-        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
-        for col, decl in cols.items():
-            if col not in have:
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
-    conn.execute("CREATE INDEX IF NOT EXISTS photos_geo ON photos(lat) WHERE lat IS NOT NULL")
-    conn.commit()
+    """Create or upgrade the database. Safe to call from several threads: it runs once."""
+    global _init_done
+    with _write_lock:
+        if _init_done:
+            return
+        conn = connect()
+        conn.executescript(SCHEMA)
+        for table, cols in MIGRATIONS.items():
+            have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for col, decl in cols.items():
+                if col not in have:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+        conn.execute("CREATE INDEX IF NOT EXISTS photos_geo ON photos(lat) WHERE lat IS NOT NULL")
+        conn.commit()
+        _init_done = True
 
 
 @contextmanager

@@ -11,3 +11,5 @@ news-dashboard/briefing.json
 __pycache__/
 .pytest_cache/
 lumen/.venv/
+lumen/packaging/build/
+lumen/packaging/dist/

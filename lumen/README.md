@@ -1,19 +1,20 @@
 # Lumen: search your photos by describing them
 
-Lumen is a local app that reads your photo folders, builds an understanding of every picture with an
-on-device vision model, and lets you find photos by describing them. You can type a word ("dogs"), a
-phrase ("golden hour at the beach") or a memory ("the morning we took the ferry to the island and it was
-windy"). You can then gather photos into named collections of smart previews.
+Lumen is a local app that reads your photo and video folders, builds an understanding of every
+picture with on-device AI models, and lets you find anything by describing it. You can type a word
+("dogs"), a phrase ("golden hour at the beach"), a feeling ("moody and dark") or a memory ("Maria
+smiling in Crete last summer"). Results can be gathered into collections, turned into slideshows,
+and shared.
 
-It understands moods, styles and facial expressions, picks out your **best shots**, groups faces into **people**, puts photos on a **map**, finds **duplicates**, and copies
-collections into a folder.
-
-Your photos never leave your computer. The models run locally after a one-time download. The
-only things fetched from the internet are those models and, on the *Places* page, the map tiles.
+Your photos never leave your computer. The models run locally after a one-time download. The only
+things fetched from the internet are those models and, on the *Places* page, the map tiles.
 
 ## Quick start
 
-Requires Python 3.10+.
+**Desktop app:** download the build for Windows, macOS or Linux from the *Build Lumen desktop app*
+GitHub Action, unzip it, and double-click **Lumen**. It sits in the menu bar or system tray.
+
+**From source** (Python 3.10+):
 
 ```bash
 cd lumen
@@ -25,69 +26,89 @@ python -m lumen                    # opens http://127.0.0.1:8765 in your browser
 
 1. Click **Choose photo folders** and add as many folders as you like (subfolders are included,
    external drives work too).
-2. Lumen scans them and starts learning. The first run downloads the models (~1.5 GB, once).
-   You can search while it works, and results grow as indexing continues.
+2. Lumen scans them and starts learning. The first run downloads the models (~1.7 GB, once). You can
+   search while it works, and results grow as indexing continues. New photos are picked up
+   automatically while Lumen runs.
 3. Search, select photos, and add them to collections.
 
-Options: `python -m lumen --port 9000 --no-browser`.
+Options: `python -m lumen --port 9000 --no-browser --lan --tray`.
 
-## What you can do
+## Searching
 
-- **Describe anything.** Natural-language search ranks photos into *Spot on*, *Strong* and
-  *Possible* matches. The default model (SigLIP 2) is multilingual, so Greek queries work too
-  ("ηλιοβασίλεμα στη θάλασσα").
-- **Moods, styles and feelings.** "moody and dark", "cinematic street photography", "melancholic
-  rainy evening", "dreamy pastel", "black and white portrait": the image model understands mood and
-  style as well as subjects. The home page groups your library under **Moods & styles** too.
-- **Expressions.** Every face gets an expression (happy, sad, surprised, angry, neutral…) from a
-  small on-device model. "smiling", "laughing", "crying", "surprised" and "serious" in a search
-  then use the actual faces, so "Maria smiling" finds Maria smiling, and "everyone smiling at
-  dinner" prefers photos where *every* face smiles. Greek works too ("χαμογελαστά παιδιά").
-  Person pages have one-click shortcuts (😊 smiling, 😂 laughing…).
-- **Best shots.** Each photo gets a quality score from the image model's sense of a good photo
-  (composition, appeal) combined with measured focus and exposure. Searches nudge better-looking
-  photos up, and *Best looking first* sorts by it. The home page shows **Your best shots**, the
-  library can sort by quality, collection covers use the best photos, and *Similar shots* in Tidy up
-  keeps the sharpest one.
-- **Leave things out.** `beach -people`, or `-"red car"` for a phrase.
-- **Find similar.** Hover any photo and press ✦, or select several photos and choose *More like these*.
-- **Collections.** Create named collections with an icon and colour.
-  - *Hand-picked*: add exactly the photos you select. Your selection is kept as you move between
-    searches, so you can gather photos from several searches and add them all at once.
-  - *Smart*: describe the collection ("sunsets over the sea") and it fills itself, including with
-    photos you add later. Use *Keep as is* to turn it into a regular collection.
-  - Pick a cover, remove photos (with undo), **copy the originals into a folder** (optionally a new
-    subfolder named after the collection; existing files are never overwritten), or download a zip.
-- **People.** Faces are detected and grouped by person. Name someone once, then search with their
-  name: "Maria at the beach" looks only at Maria's photos and ranks them by "at the beach". "Photos
-  of Maria and Nikos" finds the photos they're both in. Merge groups that are the same person
-  (*Same as…*), take wrong photos out (*Not them*, which Lumen remembers), or hide strangers.
-- **Places.** Photos with GPS data appear on a map with photo-thumbnail clusters. The grid under the
-  map shows whatever area you're looking at. Every photo with a location has *View on map* in the viewer.
-- **Tidy up.** *Duplicates* finds copies of the same photo, including resized and re-saved
-  versions, and pre-selects the best one (highest resolution, then largest file) to keep. *Similar
-  shots* finds bursts of near-identical photos taken within two minutes, so you can keep the best of
-  each moment. Removed photos go to the system Trash / Recycle Bin, so they can always be restored.
-- **Explore.** The home page groups your library into themes it spotted (beaches, food, pets,
-  celebrations…) and shows *On this day* memories from earlier years.
-- **Library.** Browse everything by month, filter by year.
-- **Viewer.** Full-size photo with date, camera, folder, the collections it belongs to and look-alikes,
-  plus *Show in folder* and *Download*.
+| Type | Finds |
+|---|---|
+| `golden hour at the beach` | anything you can describe, in ~100 languages (`ηλιοβασίλεμα στη θάλασσα`) |
+| `moody and dark`, `cinematic street photography` | moods and styles |
+| `Maria smiling`, `everyone laughing at dinner` | named people, and their actual expressions |
+| `Luna in the snow` | named pets |
+| `beach in Crete`, `dinner in Thessaloniki`, `Κρήτη` | places, from GPS, offline |
+| `summer 2019`, `last Christmas`, `June`, `the 90s`, `πέρσι` | dates; `morning`/`at night`/`weekend` nudge the ranking |
+| `"taverna"`, `receipt total` | text written *in* the photo (signs, menus, tickets, screenshots) |
+| `#holidays`, `my favourites` | your own tags and favourites |
+| `beach -people`, `-"red car"` | leave things out |
 
-Keyboard: `/` search · `←` `→` browse in the viewer · `Esc` close or clear the selection ·
+You can combine all of these: "Maria and Nikos at the beach in Crete summer 2019 -boats". You can
+also search **by picture** (📷 next to the search box, or drop any image onto Lumen) and **by
+colour** (🎨). If a search isn't quite right, press **👍 / 👎** on a few results and Lumen steers
+towards what you mean.
+
+Results come in *Spot on*, *Strong* and *Possible* tiers. *Best looking first* sorts each tier by
+photo quality. Videos are searched frame by frame: a match opens at the moment that fits.
+
+## Everything else
+
+- **Memories.** Lumen cuts your library into events and joins days away from home into trips:
+  "Trip to Chania · 12–15 Jul 2023", "Christmas in Paris", "Birthday with Nikos". Each one can
+  be played as a slideshow, shared, or saved as a collection.
+- **Slideshows.** Any collection, memory or search plays full-screen with slow zooms and crossfades.
+- **Collections.** Named, with an icon and colour.
+  - *Hand-picked*: your selection is kept as you move between searches.
+  - *Smart*: they fill themselves from a description.
+  - Pick a cover, remove photos with undo, **copy the originals to a folder**, or download a zip.
+- **Share.** Turn a collection or memory into a **web gallery** (a zip with a page you can send or
+  upload anywhere) or a **slideshow video** (1080p MP4 that plays on any phone or TV).
+- **People & pets.** Faces, cats and dogs are recognised and grouped. Name them once, then use the
+  names in searches. You can merge groups (*Same as…*), correct mistakes (*Not them*), or hide strangers.
+- **What Lumen sees.** The viewer shows a short description and tags ("A dog on the beach at sunset ·
+  golden light"). Any text found in the photo can be copied.
+- **Best shots.** A quality score combines the image model's sense of a good photo with measured focus
+  and exposure. Once you have about ten favourites or 4–5 star photos, it also learns **your taste**.
+- **Favourites, ratings and tags.** ♥, ★1–5 and your own #tags, on one photo or a whole selection.
+  Optionally they are written to **XMP sidecars** (`IMG_0001.xmp`) so Lightroom, Bridge, Capture One
+  and digiKam see them. Sidecars those apps already wrote are read in.
+- **Places.** A map with photo-thumbnail clusters, place names in the viewer, and shortcuts to your
+  most-visited places.
+- **Tidy up.** Finds duplicates (including resized copies) and bursts of similar shots, with the best
+  one pre-selected. Removals go to the system Trash.
+- **Phone access.** Turn it on in *Sources* to browse and search from phones and tablets on your Wi-Fi.
+  Scan the QR code and enter the PIN. Phones can't browse your computer's folders, delete photos or
+  change settings.
+- **Start with my computer**, **GPU acceleration**, and live folder watching are switches in *Sources*.
+
+Keyboard: `/` search · `←` `→` browse · `Space` pause a slideshow · `Esc` close or clear the selection ·
 `Shift`+click to select a range · `Ctrl`/`⌘`+click to start selecting.
 
 ## Large libraries (10k–100k+)
 
-- Indexing is incremental. Re-scans (*Sources → Check for new photos*, and on every start) only
-  process new or changed files, and drop deleted ones.
-- You can pause and resume indexing. Progress, speed and the time left are shown in the top bar.
-- Rough CPU speeds: SigLIP 2 manages about 5–15 photos/s on a modern laptop, and CLIP ViT-B/32 is
-  about twice as fast. Switch models in *Sources*. Switching re-uses the existing previews, so it's
-  much faster than the first run.
-- Faces, places and duplicate fingerprints are collected in the same pass. Libraries indexed by an
-  earlier version get a quick catch-up pass ("Faces & places" in the top bar) rather than a full re-index.
-- Formats: JPEG, PNG, WebP, HEIC/HEIF (iPhone), AVIF, TIFF, BMP, GIF.
+- Indexing is incremental and resumable. Only new or changed files are processed, and deleted ones
+  are dropped. Folder watching catches changes while Lumen runs.
+- You can pause and resume. Progress, speed and time left are shown in the top bar.
+- On a modern laptop CPU, SigLIP 2 manages about 5–15 photos/s, and CLIP ViT-B/32 is about twice as fast.
+- **GPU acceleration** is used automatically when ONNX Runtime has one:
+  - **Apple Silicon:** Core ML. It's included in the standard `onnxruntime` on macOS.
+  - **NVIDIA:** run `pip uninstall onnxruntime && pip install onnxruntime-gpu`. Needs CUDA 12 and cuDNN 9.
+  - **Windows, any GPU:** run `pip uninstall onnxruntime && pip install onnxruntime-directml`.
+
+  If an accelerator fails, Lumen falls back to the CPU on its own.
+- The slower extras only run where they're useful:
+  - text recognition, on photos that look like they contain text (`LUMEN_OCR=all|off`);
+  - the pet detector, on photos that look like they show a cat or a dog (`LUMEN_PETS=all|off`).
+- Libraries indexed by an older version get a quick catch-up pass rather than a full re-index.
+- **Formats:**
+  - photos: JPEG, PNG, WebP, HEIC/HEIF (iPhone), AVIF, TIFF, BMP, GIF;
+  - videos: MP4, MOV, M4V, 3GP, WebM, MKV, AVI, MTS.
+
+  Browsers play H.264/HEVC/VP9. Other formats open in your video player.
 
 ## Where things are stored
 
@@ -95,50 +116,62 @@ Everything Lumen writes goes to `~/.lumen` (override with `LUMEN_HOME`):
 
 | Path | What |
 |---|---|
-| `lumen.db` | SQLite: folders, photo metadata, embeddings, collections |
-| `previews/` | 512 px WebP smart previews, and `previews/faces/` face thumbnails |
-| `models/` | the downloaded models (image/text model, plus `faces/` for the face models) |
+| `lumen.db` | SQLite: folders, photo metadata, embeddings, faces, collections, text found in photos |
+| `previews/` | 512 px WebP smart previews, and `previews/faces/` face and pet thumbnails |
+| `models/` | the downloaded models: the image/text model, plus `faces/` (YuNet, SFace, FER+, YOLOX) |
 
-Set `LUMEN_FACES=0` to switch face grouping off.
-
-Lumen never modifies or moves your photos. The only way it removes one is when you choose *Move to
-Trash* in *Tidy up*, and that goes to the system Trash. Removing a folder, collection or person only
-removes Lumen's own records.
+Lumen never modifies or moves your photos. It removes one only when you choose *Move to Trash* in
+*Tidy up*, and that goes to the system Trash. With XMP sidecars switched on, it writes `.xmp` files
+next to photos, never into them. Set `LUMEN_FACES=0` to switch face and pet recognition off.
 
 ## How it works
 
 ```
-folders ──scan──▶ new/changed files ──▶ decode + EXIF + 512px preview ──▶ image embedding ──▶ SQLite
-                                                                                      │
-query ──▶ text embedding (averaged over caption-style phrasings) ──▶ cosine vs. all ──┘
-                                                                     ▼
-                                       robust z-score vs. the whole library ──▶ tiers
+folders ──scan/watch──▶ new/changed files ──▶ decode + EXIF/GPS + 512px preview ──▶ image embedding ──▶ SQLite
+                                 │                       ├─ faces → fingerprint, expression, people
+                                 │                       ├─ focus, exposure, palette, difference hash
+                videos ──────────┘ frames every 5 s      └─ later: places, text (OCR), pets, XMP import
+
+query ──▶ who / where / when / "text" / #tags taken out as filters
+      ──▶ the rest → text embedding ──▶ cosine vs. photos and video frames
+      ──▶ robust z-score vs. the library + quality, expression, text, colour and 👍/👎 nudges ──▶ tiers
 ```
 
-- `lumen/indexer.py`: background worker for scanning, previews, EXIF and batched embedding.
-- `lumen/embedder.py`: [fastembed](https://github.com/qdrant/fastembed) (ONNX Runtime, no PyTorch)
-  wrappers for the image and text halves of the model.
-- `lumen/vectors.py`: the in-memory embedding matrix. 100k photos fit in about 300 MB of RAM, and a search takes milliseconds.
-- `lumen/search.py`: query parsing (including people's names), ranking, similar photos, Explore themes, On this day.
-- `lumen/faces.py`: face detection ([YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet)),
-  face fingerprints ([SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)),
-  and grouping. New faces join the nearest existing person, or form new people by centroid
-  clustering, so named people never get reshuffled.
-- `lumen/quality.py`: zero-shot aesthetic score (similarity to descriptions of great vs. poor
-  photos, as in CLIP-IQA) plus focus (Laplacian variance of the sharpest regions) and exposure clipping.
-- Expressions: [FER+](https://github.com/onnx/models/tree/main/validated/vision/body_analysis/emotion_ferplus)
-  run with ONNX Runtime on each face thumbnail.
-- `lumen/duplicates.py`: 64-bit difference hashes with locality-sensitive bucketing, confirmed by the
-  image model, plus time-window grouping for similar shots.
-- `lumen/jobs.py`: background jobs (copying a collection to a folder).
-- `lumen/server.py`: FastAPI JSON API. It binds to `127.0.0.1` only.
-- `lumen/static/`: the UI, plain HTML/CSS/JS with no build step. [Leaflet](https://leafletjs.com) and
-  Leaflet.markercluster are bundled under `static/vendor/` (BSD-2 / MIT). Map tiles are © OpenStreetMap
-  contributors, © CARTO.
+| Module | Does |
+|---|---|
+| `indexer.py` | background worker: scan, previews, EXIF/GPS, batched embedding, catch-up passes |
+| `embedder.py` | [fastembed](https://github.com/qdrant/fastembed) (ONNX Runtime, no PyTorch) wrappers, GPU selection |
+| `vectors.py` | the in-memory embedding matrix (100k photos ≈ 300 MB, a search takes milliseconds) |
+| `search.py` | query understanding and ranking, relevance feedback, Explore themes, moods |
+| `dates.py`, `places.py` | dates in queries; offline reverse geocoding ([GeoNames](https://www.geonames.org/) via `reverse_geocoder`) |
+| `faces.py`, `pets.py` | [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) faces, [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface) fingerprints, [FER+](https://github.com/onnx/models/tree/main/validated/vision/body_analysis/emotion_ferplus) expressions, [YOLOX](https://github.com/opencv/opencv_zoo/tree/main/models/object_detection_yolox) cats and dogs, incremental grouping |
+| `quality.py`, `colors.py`, `describe.py` | best-shot score and personal taste, colour palettes, zero-shot tags and captions |
+| `ocr.py` | [RapidOCR](https://github.com/RapidAI/RapidOCR) text recognition with SQLite FTS5 search |
+| `events.py` | memories: events by time gaps, trips away from home, titles |
+| `duplicates.py` | difference hashes + locality-sensitive hashing, confirmed by the image model; bursts |
+| `marks.py` | favourites, ratings, tags, XMP sidecars |
+| `share.py`, `jobs.py` | web gallery and H.264 slideshow export; background jobs |
+| `lan.py` | phone access: second listener, PIN (PBKDF2), signed session cookies, rate limiting |
+| `watcher.py`, `autostart.py`, `tray.py` | live folder watching, start with the computer, tray icon |
+| `server.py`, `static/` | FastAPI JSON API (localhost only, unless phone access is on) and the no-build UI |
 
-Match strength is a robust z-score (median/MAD) of each photo's similarity against the whole
-library. This keeps the tiers meaningful for any model and any library, even when a big share of
-your photos match.
+Bundled: [Leaflet](https://leafletjs.com) and Leaflet.markercluster (BSD-2 / MIT). Map tiles are ©
+OpenStreetMap contributors, © CARTO.
+
+**Known limits.**
+- The bundled text recogniser reads Latin script (English, numbers) and Chinese, not Greek, and it
+  sometimes drops spaces. Searches allow for that.
+- Place names come from the nearest town, which can be a suburb. Searching for the city's name
+  still works.
+- Pets are told apart by appearance, so two similar-looking dogs may share a group until you split them.
+
+## Desktop app
+
+`packaging/lumen.spec` builds a double-click app with [PyInstaller](https://pyinstaller.org)
+(`pyinstaller packaging/lumen.spec` from this folder). The GitHub workflow
+`.github/workflows/lumen-desktop.yml` builds Windows, macOS and Linux versions. Run it by hand or push
+a `lumen-v*` tag. The macOS app isn't notarised, so the first time, right-click it and choose
+**Open**.
 
 ## Development
 
@@ -147,7 +180,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests
 ```
 
-The tests use a deterministic stand-in embedder (`LUMEN_EMBEDDER=fake`), so they run offline and
-without downloading a model. The face test needs the three face models (YuNet, SFace, FER+). Put them in a folder
-and run `LUMEN_TEST_FACE_MODELS=/path/to/folder python -m pytest tests`; without it, that test is
-skipped. It also needs `scikit-image` for its sample photo.
+The tests use a deterministic stand-in embedder (`LUMEN_EMBEDDER=fake`), so they run offline without
+downloading a model. The face, expression and pet tests need the four small models (YuNet, SFace,
+FER+, YOLOX) in a folder: `LUMEN_TEST_FACE_MODELS=/path/to/folder python -m pytest tests`. Without
+them, those tests are skipped.

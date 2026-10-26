@@ -36,6 +36,7 @@ async function api(path, opts = {}) {
   try { data = await res.json(); } catch { /* empty body */ }
   if (!res.ok) {
     const d = data && data.detail;
+    if (res.status === 401) { location.href = "/login.html"; }
     const err = new Error(typeof d === "string" ? d : Array.isArray(d) ? d.map((x) => x.msg).join(", ") : `Request failed (${res.status})`);
     err.status = res.status;
     throw err;
@@ -62,6 +63,9 @@ const I = {
   down: '<svg class="icon" viewBox="0 0 24 24"><path d="M17 13V4h3v9zM17 13l-4 8a2 2 0 0 1-3-2l1-5H5a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 6.2 4H17"/></svg>',
   camera: '<svg class="icon" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   palette: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.2-1.7-.4-1.1.3-2.3 1.5-2.3H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>',
+  heart: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-9-9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c-2 4.6-9 9-9 9z"/></svg>',
+  tag: '<svg class="icon" viewBox="0 0 24 24"><path d="M3 12V4h8l9 9-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/></svg>',
+  share: '<svg class="icon" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg>',
   slides: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4-2.5z"/></svg>',
   refresh: '<svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
   collection: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v11"/></svg>',
@@ -125,7 +129,49 @@ function renderTray() {
   }
   for (const a of state.trayActions) add(a.label, a.icon, () => a.run(ids()), a.cls || "");
   add("Add to collection", I.collection, () => openAddToCollection(ids()), state.target ? "" : "primary");
+  add("Favourite", I.heart, async () => { const items = [...state.selection.values()]; if (await toggleFavourite(items, !items.every((i) => i.fav))) toast(items.every((i) => i.fav) ? "Added to favourites ♥" : "Removed from favourites"); });
+  add("Tag", I.tag, () => openTagger([...state.selection.values()]));
   add("More like these", I.similar, () => go(`#/like?ids=${ids().slice(0, 60).join(",")}`));
+}
+
+// ------------------------------------------------------------------ favourites, ratings, tags
+async function setMarks(items, change) {
+  try {
+    await api("/api/photos/marks", { method: "POST", body: { photo_ids: items.map((i) => i.id), ...change } });
+    for (const it of items) {
+      if (change.favorite !== undefined) it.fav = change.favorite;
+      if (change.rating !== undefined) it.rating = change.rating;
+      $$(`.tile[data-id="${it.id}"]`).forEach((t) => {
+        if (change.favorite === undefined) return;
+        $("[data-act=fav]", t)?.classList.toggle("on", change.favorite);
+        const badge = $(".fav-badge", t);
+        if (change.favorite && !badge) t.append(h('<span class="fav-badge" aria-label="Favourite">♥</span>'));
+        if (!change.favorite) badge?.remove();
+      });
+    }
+    return true;
+  } catch (e) { fail(e); return false; }
+}
+const toggleFavourite = (items, on) => setMarks(items, { favorite: on });
+
+async function openTagger(items) {
+  const known = await api("/api/tags");
+  const m = openModal(`
+    <div class="modal-head"><div><h2>Tag ${plural(items.length, "photo")}</h2><p>Your own labels. Find them later by searching <kbd>#tag</kbd>.</p></div>
+      <button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+    <form class="modal-body" id="tagf"><input class="input" id="tagin" placeholder="e.g. holidays, wall-worthy, grandma" autocomplete="off">
+      <div class="chips" style="margin-top:12px">${known.slice(0, 30).map((t) => `<button type="button" class="chip" data-t="${esc(t.tag)}">#${esc(t.tag)} <span class="n">${t.n}</span></button>`).join("")}</div></form>
+    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" form="tagf">Add tags</button></div>`);
+  m.el.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-t]")?.dataset.t;
+    if (t) { const inp = $("#tagin", m.el); inp.value = [...new Set([...inp.value.split(",").map((x) => x.trim()).filter(Boolean), t])].join(", "); }
+  });
+  $("#tagf", m.el).onsubmit = async (e) => {
+    e.preventDefault();
+    const tags = $("#tagin", m.el).value.split(",").map((x) => x.trim()).filter(Boolean);
+    if (!tags.length) return;
+    if (await setMarks(items, { add_tags: tags })) { m.close(); toast(`Tagged ${plural(items.length, "photo")} with ${tags.map((t) => "#" + esc(t)).join(" ")}`); }
+  };
 }
 
 // ------------------------------------------------------------------ justified photo grid
@@ -155,7 +201,8 @@ class JGrid {
       const t = h(`<div class="tile${isSelected(it.id) ? " selected" : ""}" data-id="${it.id}">
         <img loading="lazy" decoding="async" alt="${esc(it.name)}" src="${previewUrl(it.id)}">
         <button class="check" data-act="select" aria-label="Select">${I.check}</button>
-        <div class="quick">${this.feedback ? `<button data-act="like" title="More like this" aria-label="More like this" class="${this.feedback.like.has(it.id) ? "on" : ""}">${I.up}</button><button data-act="dislike" title="Less like this" aria-label="Less like this" class="${this.feedback.dislike.has(it.id) ? "on" : ""}">${I.down}</button>` : ""}<button data-act="similar" title="Find similar photos" aria-label="Find similar">${I.similar}</button></div>
+        <div class="quick">${this.feedback ? `<button data-act="like" title="More like this" aria-label="More like this" class="${this.feedback.like.has(it.id) ? "on" : ""}">${I.up}</button><button data-act="dislike" title="Less like this" aria-label="Less like this" class="${this.feedback.dislike.has(it.id) ? "on" : ""}">${I.down}</button>` : ""}<button data-act="fav" title="Favourite" aria-label="Favourite" class="${it.fav ? "on" : ""}">${I.heart}</button><button data-act="similar" title="Find similar photos" aria-label="Find similar">${I.similar}</button></div>
+        ${it.fav ? '<span class="fav-badge" aria-label="Favourite">♥</span>' : ""}
         ${it.kind === "video" ? `<span class="vid-badge">${I.play}${it.t != null ? `${fmtClock(it.t)} / ` : ""}${fmtClock(it.duration)}</span>` : ""}
         ${this.showTier && it.tier ? `<i class="tier ${it.tier}"></i>` : ""}
         ${this.coverId === it.id ? '<span class="cover-flag">Cover</span>' : ""}
@@ -195,6 +242,7 @@ class JGrid {
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (act === "similar") { go(`#/similar/${item.id}`); return; }
     if (act === "like" || act === "dislike") { this.feedback.toggle(item.id, act); return; }
+    if (act === "fav") { toggleFavourite([item], !item.fav); return; }
     if (act === "select" || state.selection.size > 0 || e.metaKey || e.ctrlKey) {
       if (e.shiftKey && this.lastIdx != null) {
         const [a, b] = [Math.min(this.lastIdx, idx), Math.max(this.lastIdx, idx)];
@@ -564,12 +612,19 @@ async function renderLike(view, params) {
 async function renderLibrary(view, params) {
   const year = params.get("year");
   const order = params.get("order") || "newest";
-  const years = await api("/api/years");
+  const fav = params.get("fav") === "1", stars = Number(params.get("stars") || 0), tag = params.get("tag");
+  const extra = `${fav ? "&favorite=true" : ""}${stars ? `&min_rating=${stars}` : ""}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}`;
+  const [years, tags] = await Promise.all([api("/api/years"), api("/api/tags")]);
   const head = h(`<div class="page-head fade-in"><div><h1>Library</h1><p class="lib-count">&nbsp;</p></div>
      <div class="row-actions"><select class="input" style="height:36px;width:auto;border-radius:999px" aria-label="Order">
        <option value="newest">Newest first</option><option value="oldest" ${order === "oldest" ? "selected" : ""}>Oldest first</option><option value="best" ${order === "best" ? "selected" : ""}>Best looking first</option></select></div></div>`);
   $("select", head).onchange = (e) => go(`#/library?order=${e.target.value}${year ? `&year=${year}` : ""}`);
   view.append(head);
+  const link = (change) => { const p = new URLSearchParams(params); for (const [k, v] of Object.entries(change)) v ? p.set(k, v) : p.delete(k); return `#/library?${p}`; };
+  view.append(h(`<div class="chips" style="margin-bottom:12px">
+    <a class="chip ${fav ? "active" : ""}" href="${link({ fav: fav ? "" : "1" })}">♥ Favourites</a>
+    <a class="chip ${stars >= 4 ? "active" : ""}" href="${link({ stars: stars >= 4 ? "" : "4" })}">★★★★ and up</a>
+    ${tags.slice(0, 12).map((t) => `<a class="chip ${tag === t.tag ? "active" : ""}" href="${link({ tag: tag === t.tag ? "" : t.tag })}">#${esc(t.tag)} <span class="n">${t.n}</span></a>`).join("")}</div>`));
   if (years.length) {
     const chips = h('<div class="chips" style="margin-bottom:20px"></div>');
     chips.append(h(`<a class="chip ${!year ? "active" : ""}" href="#/library?order=${order}">All</a>`));
@@ -585,7 +640,7 @@ async function renderLibrary(view, params) {
   const load = async () => {
     if (loading || offset >= total) return;
     loading = true;
-    const res = await api(`/api/photos?offset=${offset}&limit=300&order=${order}${year ? `&year=${year}` : ""}`);
+    const res = await api(`/api/photos?offset=${offset}&limit=300&order=${order}${year ? `&year=${year}` : ""}${extra}`);
     total = res.total;
     offset += res.items.length;
     $(".lib-count", head).textContent = total ? plural(total, "photo") : "";
@@ -680,6 +735,7 @@ async function renderCollection(view, id) {
   }
   if (c.count) btn("Play", I.slides, () => playSlideshow(c.items, c.name, c.description || ""));
   btn("Edit", I.edit, () => openCollectionEditor({ existing: c }));
+  if (c.count) btn("Share", I.share, () => openShare(`/api/collections/${c.id}/share`, c.name));
   if (c.count) {
     btn("Copy to folder", I.copy, () => openFolderBrowser({
       mode: "pick", title: `Copy “${c.name}” to a folder`, subfolder: c.name,
@@ -1004,11 +1060,14 @@ async function drawLightbox() {
     <h3>${esc(d.name)}</h3>
     <div class="lb-actions">
       <button class="btn primary small" data-a="add">${I.collection} Add to collection</button>
+      <button class="btn small ${it.fav ? "fav-on" : ""}" data-a="fav">${I.heart} ${it.fav ? "Favourite" : "Favourite"}</button>
       <button class="btn small" data-a="select">${sel ? "✓ Selected" : "Select"}</button>
       <button class="btn small" data-a="similar">${I.similar} Find similar</button>
       <button class="btn small" data-a="reveal">${I.folder} Show in folder</button>
       <a class="btn small" href="/api/photos/${it.id}/download">${I.download} Download</a>
     </div>
+    <div class="stars" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((n) => `<button data-star="${n}" class="${(d.rating || 0) >= n ? "on" : ""}" aria-label="${n} star${n > 1 ? "s" : ""}">★</button>`).join("")}</div>
+    <div class="lb-tags">${d.tags.map((t) => `<span class="chip"><a href="#/search?q=%23${encodeURIComponent(t)}">#${esc(t)}</a><button data-untag="${esc(t)}" aria-label="Remove tag">✕</button></span>`).join("")}<button class="chip" data-a="tag">${I.tag} Add tag</button></div>
     <dl>
       ${d.taken_at ? `<dt>📅</dt><dd>${new Date(d.taken_at * 1000).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}</dd>` : ""}
       ${d.camera ? `<dt>📷</dt><dd>${esc(d.camera)}</dd>` : ""}
@@ -1030,6 +1089,15 @@ async function drawLightbox() {
     const simImg = e.target.closest(".lb-similar img");
     if (simImg) { openLightbox(sim, Number(simImg.dataset.i)); return; }
     if (a === "add") openAddToCollection([it.id]);
+    const star = e.target.closest("[data-star]")?.dataset.star;
+    if (star) {
+      const n = Number(star) === d.rating ? 0 : Number(star);  // clicking the current rating clears it
+      if (await setMarks([it], { rating: n })) { d.rating = n; $$(".stars button", side).forEach((b) => b.classList.toggle("on", Number(b.dataset.star) <= n)); }
+    }
+    const untag = e.target.closest("[data-untag]")?.dataset.untag;
+    if (untag && await setMarks([it], { remove_tags: [untag] })) e.target.closest(".chip").remove();
+    if (a === "tag") openTagger([it]);
+    if (a === "fav") { if (await toggleFavourite([it], !it.fav)) { const b = e.target.closest("button"); b.classList.toggle("fav-on", it.fav); } }
     if (a === "copytext") navigator.clipboard?.writeText(d.text).then(() => toast("Text copied"));
     if (a === "similar") go(`#/similar/${it.id}`);
     if (a === "reveal") api(`/api/photos/${it.id}/reveal`, { method: "POST" }).then(() => toast("Opened in your file manager")).catch(fail);
@@ -1078,9 +1146,50 @@ async function renderSources(view) {
   }));
   grid.append(left, right);
   view.append(grid);
+  view.append(await settingsPanels(settings));
   $("#add-folder").onclick = () => openFolderBrowser();
   $("#rescan").onclick = async () => { await api("/api/scan", { method: "POST" }); toast("Looking for new and changed photos…"); refreshStatus(); };
   drawIndexPanel();
+}
+
+async function settingsPanels(settings) {
+  const wrap = h('<div class="settings-grid"></div>');
+  // Phone access
+  const lanPanel = h('<div class="panel fade-in"></div>');
+  const drawLan = (st, pin) => {
+    lanPanel.innerHTML = `<h2>📱 Phone access</h2>
+      <p class="muted" style="margin:0 0 12px">Browse and search your library from phones and tablets on the same Wi-Fi. They need a PIN, and can't delete photos or change settings.</p>
+      <label class="switch"><input type="checkbox" ${st.enabled ? "checked" : ""}> <span>${st.enabled ? "On" : "Off"}</span></label>
+      ${st.enabled ? `<div class="lan-box">${st.qr ? `<div class="qr">${st.qr}</div>` : ""}<div>
+        <p style="margin:0">On your phone, open<br><strong class="lan-url">${esc(st.url)}</strong><br><span class="muted">or scan the code with the camera.</span></p>
+        ${pin ? `<p class="pin-once">PIN: <strong>${esc(pin)}</strong><br><span class="muted">Shown once. Note it down.</span></p>` : ""}
+        <button class="btn small" data-a="newpin">New PIN</button></div></div>` : ""}`;
+    $("input", lanPanel).onchange = async (e) => {
+      try { const r = await api("/api/lan", { method: "POST", body: { enabled: e.target.checked } }); drawLan(r, r.pin); } catch (err) { fail(err); }
+    };
+    $("[data-a=newpin]", lanPanel)?.addEventListener("click", async () => {
+      if (!(await confirmDialog("Make a new PIN?", "Every phone that's signed in will need the new PIN.", "New PIN"))) return;
+      const r = await api("/api/lan", { method: "POST", body: { new_pin: true } }).catch(fail);
+      if (r) drawLan(r, r.pin);
+    });
+  };
+  drawLan(await api("/api/lan").catch(() => ({ enabled: false })));
+  // Speed & integrations
+  const sys = h(`<div class="panel fade-in"><h2>⚙️ This computer</h2>
+    <div class="setting"><div><strong>Hardware</strong><p class="muted">Using: ${esc(settings.device)}${settings.accelerators.length ? `<br>Available: ${settings.accelerators.map(esc).join(", ")}` : "<br>No GPU acceleration available. See the README for how to enable it."}</p></div>
+      <label class="switch"><input type="checkbox" data-s="device" ${settings.device_setting !== "cpu" ? "checked" : ""}> <span>Use GPU when available</span></label></div>
+    <div class="setting"><div><strong>Start Lumen with my computer</strong><p class="muted">It keeps your library up to date in the background.</p></div>
+      <label class="switch"><input type="checkbox" data-s="autostart" ${settings.autostart ? "checked" : ""}> <span></span></label></div>
+    <div class="setting"><div><strong>Write ratings & tags to XMP sidecars</strong><p class="muted">Lightroom, Bridge, Capture One and digiKam will see your stars, favourites and tags. Lumen writes small <code>.xmp</code> files next to your photos and never touches the photos themselves.</p></div>
+      <label class="switch"><input type="checkbox" data-s="write_xmp" ${settings.write_xmp ? "checked" : ""}> <span></span></label></div>
+    <p class="muted" style="font-size:13px;margin:10px 0 0">👀 Folder watching: ${esc(state.status?.watching || "—")}</p></div>`);
+  $$("input[data-s]", sys).forEach((inp) => (inp.onchange = async () => {
+    const key = inp.dataset.s;
+    const body = key === "device" ? { device: inp.checked ? "auto" : "cpu" } : { [key]: inp.checked };
+    try { await api("/api/settings", { method: "PUT", body }); toast("Saved"); } catch (e) { fail(e); inp.checked = !inp.checked; }
+  }));
+  wrap.append(lanPanel, sys);
+  return wrap;
 }
 
 function drawIndexPanel() {
@@ -1159,6 +1268,39 @@ async function renderPicture(view) {
     <img src="${p.url}" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:16px;box-shadow:var(--shadow)">
     <div><h1>Looks like your picture</h1><p>${esc(p.name)} · searched among ${fmt(p.res.indexed)} photos</p></div></div></div>`));
   renderTiered(view, p.res.items, emptyState("🌫️", "Nothing similar", "Try another picture."));
+}
+
+// ------------------------------------------------------------------ sharing
+function openShare(endpoint, title) {
+  const m = openModal(`
+    <div class="modal-head"><div><h2>Share “${esc(title)}”</h2><p>Made on this computer. Nothing is uploaded anywhere.</p></div>
+      <button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+    <div class="modal-body"><div class="pick-list">
+      <button class="pick" data-k="gallery"><span class="ph">🖼️</span><span class="t"><strong>Web gallery</strong><span>A zip with a beautiful page and your photos. Send it, or put it on any website.</span></span></button>
+      <button class="pick" data-k="video"><span class="ph">🎬</span><span class="t"><strong>Slideshow video</strong><span>An MP4 with gentle zooms and crossfades. Plays on any phone or TV.</span></span></button>
+    </div><div class="share-progress" hidden><div class="bar" style="height:10px"><i style="width:2%"></i></div><p class="muted"></p></div></div>`);
+  m.el.addEventListener("click", async (e) => {
+    const k = e.target.closest("[data-k]")?.dataset.k;
+    if (!k) return;
+    $(".pick-list", m.el).hidden = true;
+    const prog = $(".share-progress", m.el);
+    prog.hidden = false;
+    try {
+      const { job_id } = await api(endpoint, { method: "POST", body: { kind: k } });
+      for (;;) {
+        await new Promise((ok) => setTimeout(ok, 600));
+        const j = await api(`/api/jobs/${job_id}`);
+        $(".bar i", prog).style.width = `${Math.max(2, (100 * j.done) / Math.max(1, j.total))}%`;
+        $("p", prog).textContent = j.state === "running" ? `${k === "video" ? "Rendering" : "Preparing"} ${j.done} of ${j.total}…` : "";
+        if (j.state === "failed") throw new Error(j.error);
+        if (j.state === "done") {
+          prog.append(h(`<a class="btn primary" href="/api/jobs/${job_id}/download" download>${I.download} Download ${k === "video" ? "video" : "gallery"}</a>`));
+          $("p", prog).textContent = `Ready: ${plural(j.result.count, "photo")}.`;
+          return;
+        }
+      }
+    } catch (err) { fail(err); m.close(); }
+  });
 }
 
 // ------------------------------------------------------------------ copy to folder
@@ -1525,7 +1667,9 @@ async function renderMemory(view, key) {
       toast(`Saved as <strong>${esc(c.name)}</strong>`, { action: "Open", onAction: () => go(`#/collection/${c.id}`) });
     } catch (e) { fail(e); }
   };
-  actions.append(play, save);
+  const shareBtn = h(`<button class="btn small">${I.share} Share</button>`);
+  shareBtn.onclick = () => openShare(`/api/memories/${key}/share`, m.title);
+  actions.append(play, shareBtn, save);
   view.append(heroEl);
   const head = h('<div class="section-head"><span class="muted">Photos in order, as the day unfolded.</span><button class="link">Select all</button></div>');
   const grid = new JGrid(m.items);

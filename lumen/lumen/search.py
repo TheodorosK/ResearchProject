@@ -153,13 +153,18 @@ def understand(raw: str):
     """Split a query into what to look for and who/where/when it should be."""
     positive, negatives = parse_query(raw)
     phrases = [p for p in re.findall(r'"([^"]+)"', positive) if p.strip()]
+    tags = re.findall(r"(?<!\w)#([\w-]+)", positive)
+    positive = re.sub(r"(?<!\w)#[\w-]+", " ", positive)
+    favourites = bool(re.search(r"(?<!\w)(favou?rites?|faves?|αγαπημένες|αγαπημενες)(?!\w)", positive, re.I))
+    positive = re.sub(r"(?<!\w)(?:my\s+)?(favou?rites?|faves?|αγαπημένες|αγαπημενες)(?!\w)", " ", positive, flags=re.I)
     positive = positive.replace('"', " ")
     positive, people = people_in_query(positive)
     positive, where = places.places_in_query(positive)
     positive, when = dates.parse(positive)
     positive = _strip_filler(positive)
     label, everyone = expression_in_query(positive)
-    return {"positive": positive, "negatives": negatives, "phrases": phrases, "people": people, "places": where,
+    return {"positive": positive, "negatives": negatives, "phrases": phrases, "tags": tags, "favourites": favourites,
+            "people": people, "places": where,
             "when": when, "expression": label, "everyone": everyone}
 
 
@@ -274,7 +279,8 @@ def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=(), col
         return []
     u = understand(raw)
     positive, negatives, people = u["positive"], u["negatives"], u["people"]
-    if not (positive or negatives or people or u["places"] or u["when"] or like or u["phrases"] or colors):
+    if not (positive or negatives or people or u["places"] or u["when"] or like or u["phrases"] or colors
+            or u["tags"] or u["favourites"]):
         return []
     mask = _filtered(ids, filters)
 
@@ -290,10 +296,15 @@ def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=(), col
     if u["phrases"]:
         # "Quoted words" must be written in the photo.
         narrow(ocr.phrase_ids(u["phrases"]))
+    for t in u["tags"]:
+        narrow({r["photo_id"] for r in db.q("SELECT photo_id FROM photo_tags WHERE tag=?", (t,))})
+    if u["favourites"]:
+        narrow({r["id"] for r in db.q("SELECT id FROM photos WHERE favorite=1")})
     date_mask, date_bonus = dates.mask_and_bonus(u["when"], ids, _taken(ids))
     if date_mask is not None:
         mask = date_mask if mask is None else mask & date_mask
-    if mask is not None and (people or u["places"] or date_mask is not None or u["phrases"]):
+    if mask is not None and (people or u["places"] or date_mask is not None or u["phrases"] or u["tags"]
+                             or u["favourites"]):
         # Every photo that satisfies who/where/when should be shown, ranked by the rest.
         min_count = min(limit, int(mask.sum()))
     if not positive and not negatives and not like and not colors and mask is not None:

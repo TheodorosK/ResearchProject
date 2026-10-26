@@ -11,13 +11,14 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi import Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import config, db, describe, duplicates, embedder, events, faces, jobs, ocr, places, quality, search
-from .indexer import delete_photos, preview_path, switch_model, worker
+from . import autostart, config, db, describe, duplicates, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, search
+from .indexer import delete_photos, preview_path, switch_model, watcher, worker
 from .vectors import index
 
 STATIC = Path(__file__).parent / "static"
@@ -29,10 +30,33 @@ async def lifespan(app):
     db.init()
     index.load(embedder.get().key)
     worker.start()
+    if os.environ.get("LUMEN_WATCH", "1") != "0":
+        watcher.start()
+    if db.get_setting("lan") == "1":
+        lan.start(app, config.PORT + 1)
     yield
 
 
 app = FastAPI(title="Lumen", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    """Requests from other devices (phone access) need the PIN and can't do computer-only things."""
+    if not lan.allowed_host(request.headers.get("host")):
+        return JSONResponse({"detail": "Unknown host"}, 400)
+    host = request.client.host if request.client else None
+    if lan.is_remote(host):
+        path = request.url.path
+        if db.get_setting("lan") != "1":
+            return JSONResponse({"detail": "Phone access is switched off"}, 403)
+        if lan.local_only(request.method, path):
+            return JSONResponse({"detail": "Only available on the computer running Lumen"}, 403)
+        if not path.startswith(lan.PUBLIC) and not lan.valid_session(request.cookies.get("lumen_session")):
+            if path.startswith("/api/"):
+                return JSONResponse({"detail": "Sign in with your PIN"}, 401)
+            return RedirectResponse("/login.html")
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------- helpers
@@ -46,7 +70,7 @@ def hydrate(items):
     for i in range(0, len(ids), 900):
         chunk = ids[i : i + 900]
         for r in db.q(
-            f"SELECT id, path, width, height, taken_at, camera, folder_id, lat, lon, size, kind, duration, "
+            f"SELECT id, path, width, height, taken_at, camera, folder_id, lat, lon, size, kind, duration, favorite, rating, "
             f"place_city, place_region, place_country FROM photos "
             f"WHERE id IN ({','.join('?' * len(chunk))})",
             chunk,
@@ -72,6 +96,8 @@ def hydrate(items):
             "place": places.label(r),
             "kind": r["kind"],
             "duration": r["duration"],
+            "fav": bool(r["favorite"]),
+            "rating": r["rating"],
         })
     return out
 
@@ -127,6 +153,7 @@ def filters_from(folder_id=None, year_from=None, year_to=None, collection_id=Non
 def status():
     s = worker.status()
     s["folders"] = db.one("SELECT COUNT(*) n FROM folders")["n"]
+    s["watching"] = watcher.state if watcher.state != "on" else f"on ({watcher.watching()} folders)"
     s["collections"] = db.one("SELECT COUNT(*) n FROM collections")["n"]
     return s
 
@@ -157,15 +184,46 @@ def get_settings():
         "model": embedder.get().key,
         "models": [{"key": k, **{f: v[f] for f in ("label", "description")}} for k, v in config.MODELS.items()],
         "data_dir": str(config.HOME),
+        "write_xmp": db.get_setting("write_xmp") == "1",
+        "device": embedder.get().device,
+        "device_setting": db.get_setting("device") or "auto",
+        "accelerators": [label for provider, label in embedder.ACCELERATORS if provider in _providers()],
+        "autostart": autostart.is_enabled(),
     }
 
 
+def _providers():
+    try:
+        import onnxruntime as ort
+
+        return ort.get_available_providers()
+    except Exception:
+        return []
+
+
 class SettingsIn(BaseModel):
-    model: str
+    model: str | None = None
+    write_xmp: bool | None = None
+    device: str | None = None      # auto | cpu
+    autostart: bool | None = None
 
 
 @app.put("/api/settings")
 def put_settings(body: SettingsIn):
+    if body.write_xmp is not None:
+        db.set_setting("write_xmp", "1" if body.write_xmp else "0")
+    if body.device in ("auto", "cpu") and body.device != (db.get_setting("device") or "auto"):
+        db.set_setting("device", body.device)
+        emb = embedder.get()
+        if hasattr(emb, "_image"):  # reload on the chosen hardware next time it's needed
+            emb._image = emb._text = None
+    if body.autostart is not None:
+        try:
+            autostart.set_enabled(body.autostart)
+        except OSError as e:
+            raise HTTPException(500, f"Couldn't change start-up setting: {e}")
+    if body.model is None:
+        return get_settings()
     if body.model not in config.MODELS:
         raise HTTPException(400, "Unknown model")
     if body.model != embedder.get().key:
@@ -230,6 +288,7 @@ def add_folder(body: FolderIn):
                 c.execute("UPDATE photos SET folder_id=? WHERE folder_id=?", (fid, f["id"]))
                 c.execute("DELETE FROM folders WHERE id=?", (f["id"],))
     worker.request_scan()
+    watcher.sync()
     return {"id": fid, "path": path}
 
 
@@ -239,6 +298,7 @@ def remove_folder(folder_id: int):
     delete_photos(ids)
     with db.tx() as c:
         c.execute("DELETE FROM folders WHERE id=?", (folder_id,))
+    watcher.sync()
     return {"removed_photos": len(ids)}
 
 
@@ -302,9 +362,18 @@ def browse(path: str | None = None):
 @app.get("/api/photos")
 def list_photos(
     offset: int = 0, limit: int = Query(200, le=1000), folder_id: int | None = None,
-    year: int | None = None, order: str = "newest",
+    year: int | None = None, order: str = "newest", favorite: bool = False, min_rating: int = 0,
+    tag: str | None = None,
 ):
     where, args = ["status='ready'"], []
+    if favorite:
+        where.append("favorite=1")
+    if min_rating:
+        where.append("rating>=?")
+        args.append(min_rating)
+    if tag:
+        where.append("id IN (SELECT photo_id FROM photo_tags WHERE tag=?)")
+        args.append(tag)
     if folder_id:
         where.append("folder_id=?")
         args.append(folder_id)
@@ -358,6 +427,7 @@ def photo_detail(photo_id: int):
         "quality": quality.scores().get(photo_id, (None, None))[1],
         "text": ocr.text_of(photo_id),
         "seen": describe.describe(photo_id),
+        "tags": marks.tags_of(photo_id),
         "sharpness": r["sharpness"],
     }
 
@@ -665,6 +735,80 @@ def export_collection(cid: int, background: BackgroundTasks):
     return FileResponse(tmp.name, media_type="application/zip", filename=f"{safe}.zip")
 
 
+# ---------------------------------------------------------------- phone access
+class LoginIn(BaseModel):
+    pin: str
+
+
+@app.post("/api/login")
+def login(body: LoginIn, request: Request):
+    host = request.client.host if request.client else "?"
+    try:
+        ok = lan.check_pin(body.pin.strip(), host)
+    except PermissionError as e:
+        raise HTTPException(429, str(e))
+    if not ok:
+        raise HTTPException(401, "That PIN isn't right")
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie("lumen_session", lan.make_session(), max_age=lan.SESSION_DAYS * 86400,
+                    httponly=True, samesite="lax")
+    return resp
+
+
+@app.get("/api/lan")
+def lan_status():
+    s = lan.status(config.PORT)
+    import segno
+
+    s["qr"] = segno.make(s["url"]).svg_inline(scale=5, dark="#111", light="#fff") if s["enabled"] else None
+    return s
+
+
+class LanIn(BaseModel):
+    enabled: bool | None = None
+    pin: str | None = None
+    new_pin: bool = False
+
+
+@app.post("/api/lan")
+def lan_update(body: LanIn):
+    shown = None
+    try:
+        if body.pin:
+            shown = lan.set_pin(body.pin)
+        elif body.new_pin or (body.enabled and not lan.pin_is_set()):
+            shown = lan.set_pin()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if body.enabled is not None:
+        db.set_setting("lan", "1" if body.enabled else "0")
+        if body.enabled:
+            lan.start(app, config.PORT + 1)
+        else:
+            lan.stop()
+    return {**lan_status(), "pin": shown}
+
+
+# ---------------------------------------------------------------- favourites, ratings, tags
+class MarksIn(BaseModel):
+    photo_ids: list[int]
+    favorite: bool | None = None
+    rating: int | None = Field(default=None, ge=0, le=5)
+    add_tags: list[str] = Field(default_factory=list)
+    remove_tags: list[str] = Field(default_factory=list)
+
+
+@app.post("/api/photos/marks")
+def set_marks(body: MarksIn):
+    marks.update(body.photo_ids[:5000], body.favorite, body.rating, body.add_tags, body.remove_tags)
+    return {"updated": len(body.photo_ids), "tags": marks.all_tags()}
+
+
+@app.get("/api/tags")
+def list_tags():
+    return marks.all_tags()
+
+
 # ---------------------------------------------------------------- people
 class PersonPatch(BaseModel):
     name: str | None = Field(default=None, max_length=80)
@@ -883,6 +1027,46 @@ def copy_collection(cid: int, body: CopyIn):
         f"SELECT id, path FROM photos WHERE id IN ({','.join('?' * len(ids))})", ids)} if ids else {}
     paths = [rows[i] for i in ids if i in rows]
     return {"job_id": jobs.copy_files(paths, dest), "dest": dest, "total": len(paths)}
+
+
+class ShareIn(BaseModel):
+    kind: str  # gallery | video
+
+
+def _start_share(kind, photo_ids, title, description=None):
+    if kind == "gallery":
+        job = share.gallery(photo_ids, title, description)
+    elif kind == "video":
+        job = share.slideshow_video(photo_ids, title)
+    else:
+        raise HTTPException(400, "kind must be gallery or video")
+    return {"job_id": job}
+
+
+@app.post("/api/collections/{cid}/share")
+def share_collection(cid: int, body: ShareIn):
+    c = collection_or_404(cid)
+    return _start_share(body.kind, collection_photo_ids(c), c["name"], c["description"])
+
+
+@app.post("/api/memories/{key}/share")
+def share_memory(key: str, body: ShareIn):
+    m = events.get(key)
+    if not m:
+        raise HTTPException(404, "That memory no longer exists")
+    return _start_share(body.kind, m["photo_ids"], m["title"], m["when"])
+
+
+@app.get("/api/jobs/{job_id}/download")
+def job_download(job_id: int, background: BackgroundTasks):
+    j = jobs.get(job_id)
+    if not j or j["state"] != "done" or not (j["result"] or {}).get("path"):
+        raise HTTPException(404, "Nothing to download (yet)")
+    path = j["result"]["path"]
+    if not os.path.exists(path):
+        raise HTTPException(410, "Already downloaded")
+    background.add_task(os.unlink, path)
+    return FileResponse(path, filename=j["result"]["filename"])
 
 
 @app.get("/api/jobs/{job_id}")

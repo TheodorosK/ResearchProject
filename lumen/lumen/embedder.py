@@ -1,6 +1,7 @@
 """Turns images and text into vectors in one shared space, entirely on this machine."""
 import functools
 import hashlib
+import os
 import threading
 
 import numpy as np
@@ -17,6 +18,31 @@ def _normalize(v: np.ndarray) -> np.ndarray:
     return v / np.maximum(n, 1e-8)
 
 
+ACCELERATORS = [
+    ("CUDAExecutionProvider", "NVIDIA GPU (CUDA)"),
+    ("DmlExecutionProvider", "GPU (DirectML)"),
+    ("CoreMLExecutionProvider", "Apple Neural Engine / GPU (Core ML)"),
+]
+
+
+def pick_device():
+    """(onnxruntime providers, human label) for the fastest hardware available, honouring the
+    'device' setting (auto | cpu)."""
+    from . import db
+
+    try:
+        import onnxruntime as ort
+
+        available = ort.get_available_providers()
+    except Exception:
+        available = []
+    if (db.get_setting("device") or os.environ.get("LUMEN_DEVICE", "auto")) != "cpu":
+        for provider, label in ACCELERATORS:
+            if provider in available:
+                return [provider, "CPUExecutionProvider"], label
+    return ["CPUExecutionProvider"], "CPU"
+
+
 class FastEmbedder:
     def __init__(self, model_key: str):
         spec = config.MODELS[model_key]
@@ -27,8 +53,10 @@ class FastEmbedder:
         self._lock = threading.Lock()
         self.state = "not loaded"
         self.loading = False
+        self.device = "CPU"
+        self.batch_size = config.BATCH_SIZE
 
-    def _load(self):
+    def _load(self, force_cpu=False):
         with self._lock:
             if self._image is not None:
                 return
@@ -36,10 +64,21 @@ class FastEmbedder:
 
             self.loading = True
             self.state = "downloading / loading model (first run only)"
+            providers, label = (["CPUExecutionProvider"], "CPU") if force_cpu else pick_device()
             try:
                 cache = str(config.MODEL_DIR)
-                self._image = ImageEmbedding(self.spec["image"], cache_dir=cache)
-                self._text = TextEmbedding(self.spec["text"], cache_dir=cache)
+                try:
+                    self._image = ImageEmbedding(self.spec["image"], cache_dir=cache, providers=providers)
+                    self._text = TextEmbedding(self.spec["text"], cache_dir=cache, providers=providers)
+                except Exception:
+                    if providers == ["CPUExecutionProvider"]:
+                        raise
+                    # The accelerator wouldn't take the model; the CPU always will.
+                    providers, label = ["CPUExecutionProvider"], "CPU (accelerator unavailable)"
+                    self._image = ImageEmbedding(self.spec["image"], cache_dir=cache, providers=providers)
+                    self._text = TextEmbedding(self.spec["text"], cache_dir=cache, providers=providers)
+                self.device = label
+                self.batch_size = config.BATCH_SIZE * (4 if providers[0] != "CPUExecutionProvider" else 1)
                 self.state = "ready"
             except Exception as e:
                 self.state = f"failed to load: {e}"
@@ -47,14 +86,28 @@ class FastEmbedder:
             finally:
                 self.loading = False
 
+    def _retry_on_cpu(self, fn):
+        try:
+            return fn()
+        except Exception:
+            if self.device.startswith("CPU"):
+                raise
+            # Some accelerators fail on particular inputs at run time: fall back for good.
+            with self._lock:
+                self._image = self._text = None
+            self._load(force_cpu=True)
+            return fn()
+
     def embed_images(self, images) -> np.ndarray:
         self._load()
-        vecs = list(self._image.embed(images, batch_size=config.BATCH_SIZE))
-        return _normalize(np.stack(vecs))
+        images = list(images)
+        return self._retry_on_cpu(
+            lambda: _normalize(np.stack(list(self._image.embed(images, batch_size=self.batch_size)))))
 
     def embed_texts(self, texts) -> np.ndarray:
         self._load()
-        return _normalize(np.stack(list(self._text.embed(list(texts)))))
+        texts = list(texts)
+        return self._retry_on_cpu(lambda: _normalize(np.stack(list(self._text.embed(texts)))))
 
 
 class FakeEmbedder:
@@ -70,6 +123,7 @@ class FakeEmbedder:
         self.key = model_key
         self.state = "ready"
         self.loading = False
+        self.device = "CPU (test stand-in)"
 
     def _vec(self, rgb, seed: str):
         # Last dimension stays 0 for real content; text without colour words points only there,

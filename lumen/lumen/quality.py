@@ -23,6 +23,8 @@ BAD = [
     "a dark, noisy, low quality photo",
 ]
 AESTHETIC_WEIGHT, SHARPNESS_WEIGHT = 0.65, 0.35
+TASTE_WEIGHT = 0.4          # how much your favourites shape the score, once there are enough
+TASTE_MIN_EXAMPLES = 10
 
 _cache = {"key": None, "data": None}
 _lock = threading.Lock()
@@ -63,7 +65,8 @@ def _robust_z(x):
 def scores():
     """{photo_id: (quality_z, percentile 0-100)} for every indexed photo; cached until the library changes."""
     with _lock:
-        key = (index.version, embedder.get().key, db.one("SELECT SUM(meta_v) s FROM photos")["s"])
+        key = (index.version, embedder.get().key, db.one("SELECT SUM(meta_v) s FROM photos")["s"],
+               tuple(db.one("SELECT SUM(favorite), SUM(rating) FROM photos")))
         if _cache["key"] == key:
             return _cache["data"]
         ids, mat = index.snapshot()
@@ -83,11 +86,27 @@ def scores():
             if i in tech else 0.0 for i in ids.tolist()
         ])
         q = AESTHETIC_WEIGHT * aes + SHARPNESS_WEIGHT * sharp_z - 4 * penalty
+        taste = _taste(ids, mat)
+        if taste is not None:
+            q = (1 - TASTE_WEIGHT) * q + TASTE_WEIGHT * taste
         order = q.argsort().argsort()
         pct = np.round(100 * order / max(len(q) - 1, 1)).astype(int)
         data = {int(i): (float(qq), int(pp)) for i, qq, pp in zip(ids, q, pct)}
         _cache.update(key=key, data=data)
         return data
+
+
+def _taste(ids, mat):
+    """Your taste, learned from favourites and 4-5 star photos: the direction in the image model's
+    space from your library as a whole towards the photos you love. Needs a handful of examples."""
+    loved = {r["id"] for r in db.q("SELECT id FROM photos WHERE favorite=1 OR rating>=4")}
+    if len(loved) < TASTE_MIN_EXAMPLES:
+        return None
+    sel = np.isin(ids, list(loved))
+    direction = mat[sel].mean(0) - mat.mean(0)
+    if not np.linalg.norm(direction):
+        return None
+    return np.clip(_robust_z(mat @ direction), -3, 3)
 
 
 def bonus(ids, weight=0.3):

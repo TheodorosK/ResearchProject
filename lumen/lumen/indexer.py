@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
-from . import config, db, embedder, faces, ocr, pets, places, quality
+from . import config, db, embedder, faces, marks, ocr, pets, places, quality
 from .vectors import index
 
 try:  # iPhone photos
@@ -234,6 +234,8 @@ class Indexer:
         self._recent = deque(maxlen=40)  # (timestamp, photos done) for rate/ETA
         self.last_error = None
         self._new_faces = 0
+        self._scan_lock = threading.Lock()
+        self._scan_only = None   # folder ids to scan, or None for all
         self._pool = ThreadPoolExecutor(max_workers=max(2, min(6, (os.cpu_count() or 4))))
 
     # ---- control -------------------------------------------------------
@@ -243,7 +245,13 @@ class Indexer:
             self._thread.start()
             self.request_scan()
 
-    def request_scan(self):
+    def request_scan(self, folder_ids=None):
+        """Re-scan some folders (e.g. ones the watcher saw change), or all of them."""
+        with self._scan_lock:
+            if folder_ids is None:
+                self._scan_only = None
+            elif self._scan_only is not None or not self._scan_requested.is_set():
+                self._scan_only = (self._scan_only or set()) | set(folder_ids)
         self._scan_requested.set()
         self._wake.set()
 
@@ -298,13 +306,17 @@ class Indexer:
             self._wake.clear()
             try:
                 if self._scan_requested.is_set():
-                    self._scan_requested.clear()
-                    self._scan_all()
+                    with self._scan_lock:
+                        self._scan_requested.clear()
+                        only, self._scan_only = self._scan_only, None
+                    self._scan_all(only)
                 if not self.paused:
                     self._index_pending()
                 if not self.paused and not self._scan_requested.is_set():
                     self._catch_up_all()
                 while places.geocode_pending():
+                    pass
+                while marks.import_sidecars():
                     pass
                 while not self.paused and not self._scan_requested.is_set() \
                         and not db.one("SELECT 1 FROM photos WHERE status='pending' LIMIT 1"):
@@ -352,10 +364,12 @@ class Indexer:
                         self._new_faces += _write_meta(c, pid, meta)
             self._group_faces(force=False)
 
-    def _scan_all(self):
+    def _scan_all(self, only=None):
         self.state = "scanning"
         self.scanned_files = 0
         for folder in db.q("SELECT id, path FROM folders ORDER BY id"):
+            if only is not None and folder["id"] not in only:
+                continue
             self._scan_folder(folder["id"], folder["path"])
 
     def _scan_folder(self, folder_id: int, root: str):
@@ -512,3 +526,7 @@ def switch_model(model_key: str):
 
 
 worker = Indexer()
+
+from .watcher import FolderWatcher  # noqa: E402
+
+watcher = FolderWatcher(on_change=lambda ids: worker.request_scan(ids))
