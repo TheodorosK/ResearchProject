@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import config, db, embedder, search
+from . import config, db, duplicates, embedder, faces, jobs, search
 from .indexer import delete_photos, preview_path, switch_model, worker
 from .vectors import index
 
@@ -46,7 +46,7 @@ def hydrate(items):
     for i in range(0, len(ids), 900):
         chunk = ids[i : i + 900]
         for r in db.q(
-            f"SELECT id, path, width, height, taken_at, camera, folder_id FROM photos "
+            f"SELECT id, path, width, height, taken_at, camera, folder_id, lat, lon, size FROM photos "
             f"WHERE id IN ({','.join('?' * len(chunk))})",
             chunk,
         ):
@@ -64,6 +64,10 @@ def hydrate(items):
             "taken_at": r["taken_at"],
             "camera": r["camera"],
             "folder_id": r["folder_id"],
+            "lat": r["lat"],
+            "lon": r["lon"],
+            "size": r["size"],
+            "dir": os.path.basename(os.path.dirname(r["path"])),
         })
     return out
 
@@ -339,6 +343,10 @@ def photo_detail(photo_id: int):
         "status": r["status"],
         "error": r["error"],
         "collections": [dict(c) for c in cols],
+        "people": [dict(p) for p in db.q(
+            "SELECT f.id face_id, f.x, f.y, f.w, f.h, p.id, p.name FROM faces f "
+            "LEFT JOIN persons p ON p.id=f.person_id WHERE f.photo_id=? AND (p.hidden IS NULL OR p.hidden=0) "
+            "ORDER BY f.x", (photo_id,))],
     }
 
 
@@ -415,7 +423,9 @@ def do_search(
 ):
     require_model()
     hits = search.text_search(q, limit, filters_from(folder_id, year_from, year_to, collection_id))
-    return {"query": q, "parsed": dict(zip(("positive", "negatives"), search.parse_query(q))),
+    positive, negatives = search.parse_query(q)
+    _, people = search.people_in_query(positive)
+    return {"query": q, "parsed": {"positive": positive, "negatives": negatives, "people": people},
             "items": hydrate(hits), "indexed": len(index)}
 
 
@@ -428,6 +438,9 @@ def home():
         "explore": [{**g, "photos": hydrate(g.pop("photo_ids"))} for g in (dict(g) for g in groups)],
         "recent": hydrate([r["id"] for r in db.q(
             "SELECT id FROM photos WHERE status='ready' ORDER BY id DESC LIMIT 12")]),
+        "people": list_people()[:12],
+        "tidy": duplicates.summary(),
+        "places": db.one("SELECT COUNT(*) n FROM photos WHERE status='ready' AND lat IS NOT NULL")["n"],
     }
 
 
@@ -574,6 +587,189 @@ def export_collection(cid: int, background: BackgroundTasks):
     background.add_task(os.unlink, tmp.name)
     safe = "".join(ch for ch in c["name"] if ch.isalnum() or ch in " -_").strip() or "collection"
     return FileResponse(tmp.name, media_type="application/zip", filename=f"{safe}.zip")
+
+
+# ---------------------------------------------------------------- people
+class PersonPatch(BaseModel):
+    name: str | None = Field(default=None, max_length=80)
+    hidden: bool | None = None
+    cover_face_id: int | None = None
+
+
+class MergeIn(BaseModel):
+    into: int
+    person_ids: list[int]
+
+
+def person_or_404(pid: int):
+    row = db.one("SELECT * FROM persons WHERE id=?", (pid,))
+    if not row:
+        raise HTTPException(404, "Person not found")
+    return row
+
+
+def person_dict(p, count=None):
+    if count is None:
+        count = db.one("SELECT COUNT(DISTINCT photo_id) n FROM faces WHERE person_id=?", (p["id"],))["n"]
+    return {"id": p["id"], "name": p["name"], "hidden": bool(p["hidden"]), "count": count,
+            "face_id": faces.cover_face(p["id"])}
+
+
+@app.get("/api/people")
+def list_people(hidden: bool = False):
+    rows = db.q(
+        "SELECT p.*, COUNT(DISTINCT f.photo_id) n FROM persons p JOIN faces f ON f.person_id=p.id "
+        "WHERE p.hidden=? GROUP BY p.id ORDER BY (p.name IS NULL OR p.name=''), n DESC",
+        (int(hidden),),
+    )
+    return [person_dict(r, r["n"]) for r in rows]
+
+
+@app.get("/api/people/{pid}")
+def get_person(pid: int):
+    d = person_dict(person_or_404(pid))
+    d["items"] = hydrate(faces.person_photo_ids(pid))
+    return d
+
+
+@app.patch("/api/people/{pid}")
+def update_person(pid: int, body: PersonPatch):
+    person_or_404(pid)
+    fields = body.model_dump(exclude_unset=True)
+    if "name" in fields:
+        fields["name"] = (fields["name"] or "").strip() or None
+        if fields["name"] and db.one("SELECT id FROM persons WHERE lower(name)=lower(?) AND id<>?",
+                                     (fields["name"], pid)):
+            raise HTTPException(409, f"Someone is already called “{fields['name']}”. Merge them instead?")
+    if "hidden" in fields:
+        fields["hidden"] = int(fields["hidden"])
+    if fields:
+        with db.tx() as c:
+            c.execute(f"UPDATE persons SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?",
+                      [*fields.values(), pid])
+    return person_dict(person_or_404(pid))
+
+
+@app.post("/api/people/merge")
+def merge_people(body: MergeIn):
+    """Fold several people into one: 'these are all Maria'."""
+    target = person_or_404(body.into)
+    others = [p for p in body.person_ids if p != body.into]
+    with db.tx() as c:
+        name = target["name"]
+        for p in others:
+            row = c.execute("SELECT name FROM persons WHERE id=?", (p,)).fetchone()
+            name = name or (row["name"] if row else None)
+            c.execute("UPDATE faces SET person_id=? WHERE person_id=?", (body.into, p))
+            c.execute("DELETE FROM persons WHERE id=?", (p,))
+        c.execute("UPDATE persons SET name=? WHERE id=?", (name, body.into))
+    return person_dict(person_or_404(body.into))
+
+
+@app.post("/api/people/{pid}/remove-photos")
+def remove_person_photos(pid: int, body: IdsIn):
+    """'That's not them': detach this person from the given photos, and remember it."""
+    person_or_404(pid)
+    with db.tx() as c:
+        c.executemany("UPDATE faces SET person_id=NULL, locked=1 WHERE person_id=? AND photo_id=?",
+                      [(pid, ph) for ph in body.photo_ids])
+        left = c.execute("SELECT COUNT(*) n FROM faces WHERE person_id=?", (pid,)).fetchone()["n"]
+        if not left:
+            c.execute("DELETE FROM persons WHERE id=?", (pid,))
+    return {"remaining": left}
+
+
+@app.get("/api/faces/{face_id}/thumb")
+def face_thumb(face_id: int):
+    p = faces.face_thumb_path(face_id)
+    if not p.exists():
+        raise HTTPException(404, "No thumbnail")
+    return FileResponse(p, media_type="image/webp", headers={"Cache-Control": "public, max-age=604800"})
+
+
+# ---------------------------------------------------------------- places
+@app.get("/api/map")
+def map_points():
+    rows = db.q("SELECT id, lat, lon FROM photos WHERE status='ready' AND lat IS NOT NULL ORDER BY taken_at DESC")
+    return {"points": [[r["id"], round(r["lat"], 6), round(r["lon"], 6)] for r in rows]}
+
+
+@app.post("/api/photos/batch")
+def photos_batch(body: IdsIn):
+    """Grid data for a list of ids (e.g. the photos inside the map's current view)."""
+    return hydrate(body.photo_ids[:1000])
+
+
+# ---------------------------------------------------------------- tidy up
+@app.get("/api/duplicates")
+def get_duplicates(kind: str = "duplicates"):
+    if kind not in ("duplicates", "bursts"):
+        raise HTTPException(400, "kind must be duplicates or bursts")
+    groups = duplicates.find(kind)
+    return {"groups": [{**g, "photos": hydrate(g["photo_ids"])} for g in groups[:300]],
+            "total_groups": len(groups), "summary": duplicates.summary()}
+
+
+class KeyIn(BaseModel):
+    key: str
+
+
+@app.post("/api/duplicates/ignore")
+def ignore_duplicates(body: KeyIn):
+    duplicates.ignore(body.key)
+    return {"ok": True}
+
+
+@app.post("/api/photos/trash")
+def trash_photos(body: IdsIn):
+    """Move originals to the system Trash / Recycle Bin (recoverable) and forget them."""
+    try:
+        from send2trash import send2trash
+    except ImportError:
+        raise HTTPException(501, "Moving to the Trash needs the send2trash package: pip install send2trash")
+    trashed, failed = [], []
+    for pid in body.photo_ids:
+        row = db.one("SELECT path FROM photos WHERE id=?", (pid,))
+        if not row:
+            continue
+        try:
+            if os.path.exists(row["path"]):
+                send2trash(row["path"])
+            trashed.append(pid)
+        except OSError as e:
+            failed.append({"id": pid, "error": str(e)})
+    delete_photos(trashed)
+    return {"trashed": len(trashed), "failed": failed}
+
+
+# ---------------------------------------------------------------- copy to folder & jobs
+class CopyIn(BaseModel):
+    dest: str
+    subfolder: str | None = None
+
+
+@app.post("/api/collections/{cid}/copy")
+def copy_collection(cid: int, body: CopyIn):
+    c = collection_or_404(cid)
+    dest = _norm(body.dest)
+    if not os.path.isdir(dest):
+        raise HTTPException(400, "That destination folder doesn't exist.")
+    if body.subfolder and body.subfolder.strip():
+        safe = "".join(ch for ch in body.subfolder.strip() if ch not in '<>:"/\\|?*').strip(" .")
+        dest = os.path.join(dest, safe or "Lumen collection")
+    ids = collection_photo_ids(c)
+    rows = {r["id"]: r["path"] for r in db.q(
+        f"SELECT id, path FROM photos WHERE id IN ({','.join('?' * len(ids))})", ids)} if ids else {}
+    paths = [rows[i] for i in ids if i in rows]
+    return {"job_id": jobs.copy_files(paths, dest), "dest": dest, "total": len(paths)}
+
+
+@app.get("/api/jobs/{job_id}")
+def get_job(job_id: int):
+    j = jobs.get(job_id)
+    if not j:
+        raise HTTPException(404, "Unknown job")
+    return j
 
 
 # ---------------------------------------------------------------- UI

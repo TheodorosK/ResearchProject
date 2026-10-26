@@ -4,3 +4,5 @@ fastembed>=0.7
 numpy>=1.26
 pillow>=10.0
 pillow-heif>=0.16
+opencv-python-headless>=4.9
+send2trash>=1.8

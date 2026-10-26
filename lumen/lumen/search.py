@@ -6,7 +6,7 @@ from datetime import datetime
 
 import numpy as np
 
-from . import db, embedder
+from . import db, embedder, faces
 from .vectors import index
 
 # Cutoffs on a robust z-score (median/MAD of the whole library), so they hold for any model and
@@ -85,6 +85,25 @@ def parse_query(raw: str):
     return " ".join(positive.split()), [n for n in negatives if n]
 
 
+# Words that carry no visual meaning once a person's name is taken out ("photos of Maria").
+FILLER = {"photo", "photos", "picture", "pictures", "pics", "pic", "of", "with", "and", "me", "the", "a", "all"}
+
+
+def people_in_query(text: str):
+    """Pull named people out of a query: ('Maria at the beach' -> 'at the beach', [Maria])."""
+    found = []
+    rows = db.q("SELECT id, name FROM persons WHERE name IS NOT NULL AND name <> '' AND hidden=0")
+    for r in sorted(rows, key=lambda r: -len(r["name"])):
+        pat = re.compile(r"(?<!\w)" + re.escape(r["name"]) + r"(?:'s|’s)?(?!\w)", re.IGNORECASE)
+        if pat.search(text):
+            found.append({"id": r["id"], "name": r["name"]})
+            text = pat.sub(" ", text)
+    text = " ".join(text.split())
+    if all(w.lower().strip(",.") in FILLER for w in text.split()):
+        text = ""
+    return text, found
+
+
 def _filtered(ids, filters):
     """Boolean mask of ids allowed by folder/year/collection filters."""
     if not filters:
@@ -139,8 +158,22 @@ def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=M
     if not len(ids):
         return []
     positive, negatives = parse_query(raw)
-    if not positive and not negatives:
+    positive, people = people_in_query(positive)
+    if not positive and not negatives and not people:
         return []
+    mask = _filtered(ids, filters)
+    if people:
+        allowed = set(faces.person_photo_ids(people[0]["id"]))
+        for p in people[1:]:
+            allowed &= set(faces.person_photo_ids(p["id"]))
+        in_people = np.isin(ids, np.fromiter(allowed, dtype=np.int64, count=len(allowed)))
+        mask = in_people if mask is None else mask & in_people
+        min_count = min(limit, int(mask.sum()))
+        if not positive and not negatives:
+            # Just a name: everything with them, newest first.
+            keep = set(ids[mask].tolist())
+            ordered = [i for i in faces.person_photo_ids(people[0]["id"]) if i in keep][:limit]
+            return [{"id": i, "score": 1.0, "z": 9.0, "tier": "best"} for i in ordered]
     qv = embedder.embed_query(positive) if positive else np.zeros(mat.shape[1], dtype=np.float32)
     scores = mat @ qv
     if negatives:
@@ -148,7 +181,7 @@ def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=M
         neg = np.stack([embedder.embed_query(n) for n in negatives])
         neg_scores = (mat @ neg.T).max(1)
         scores = scores - 0.5 * np.maximum(neg_scores - neg_scores.mean(), 0)
-    return _rank(scores, ids, limit, min_z, _filtered(ids, filters), min_count=min_count)
+    return _rank(scores, ids, limit, min_z, mask, min_count=min_count)
 
 
 def similar(photo_id: int, limit=60, filters=None):

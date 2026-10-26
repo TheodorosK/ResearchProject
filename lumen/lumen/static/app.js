@@ -10,6 +10,8 @@ const fmt = (n) => Number(n || 0).toLocaleString();
 const plural = (n, one, many = one + "s") => `${fmt(n)} ${n === 1 ? one : many}`;
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const previewUrl = (id) => `/api/photos/${id}/preview`;
+const faceUrl = (id) => `/api/faces/${id}/thumb`;
+const fmtBytes = (b) => !b ? "" : b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
 const fmtDate = (ts, opts = { year: "numeric", month: "short", day: "numeric" }) => ts ? new Date(ts * 1000).toLocaleDateString(undefined, opts) : "";
 const fmtDuration = (s) => {
   if (s == null) return "";
@@ -58,6 +60,11 @@ const I = {
   refresh: '<svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
   collection: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v11"/></svg>',
   moon: '<svg class="icon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  person: '<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+  pin: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+  copy: '<svg class="icon" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  merge: '<svg class="icon" viewBox="0 0 24 24"><path d="M6 3v6a6 6 0 0 0 6 6h6M15 12l3 3-3 3M6 21v-4"/></svg>',
+  eyeoff: '<svg class="icon" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.7M6.6 6.6A17 17 0 0 0 2.5 12S6 18 12 18a9.6 9.6 0 0 0 4.4-1"/></svg>',
   sun: '<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
 };
 
@@ -215,7 +222,7 @@ async function route() {
   state.view = name;
   state.trayActions = [];
   document.body.classList.toggle("on-home", name === "home");
-  $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === name || (name === "collection" && a.dataset.nav === "collections")));
+  $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === name || (name === "collection" && a.dataset.nav === "collections") || (name === "person" && a.dataset.nav === "people")));
   if (name !== "search") $("#top-search-input").value = "";
   view.innerHTML = "";
   closeLightbox();
@@ -227,6 +234,10 @@ async function route() {
     else if (name === "like") await renderLike(view, params);
     else if (name === "library") await renderLibrary(view, params);
     else if (name === "collections") await renderCollections(view);
+    else if (name === "people") await renderPeople(view, params);
+    else if (name === "person") await renderPerson(view, Number(parts[1]));
+    else if (name === "map") await renderMap(view, params);
+    else if (name === "tidy") await renderTidy(view, params);
     else if (name === "collection") await renderCollection(view, Number(parts[1]));
     else if (name === "sources") await renderSources(view);
     else view.append(emptyState("🧭", "Nothing here", "That page doesn't exist.", '<a class="btn" href="#/">Go home</a>'));
@@ -303,6 +314,18 @@ async function renderHome(view) {
   cols.slice(0, 10).forEach((c) => sc.append(collectionCard(c)));
   sc.append(newCollectionCard());
   view.append(csec);
+
+  if (data.people.length) {
+    const psec = h(`<section class="section fade-in"><div class="section-head"><h2>🙂 People</h2><a href="#/people">See everyone</a></div><div class="people-strip"></div></section>`);
+    data.people.forEach((p) => $(".people-strip", psec).append(personChip(p)));
+    view.append(psec);
+  }
+
+  const hints = [];
+  if (data.places) hints.push(`<a class="hint-card" href="#/map"><span class="hint-e">🗺️</span><span><strong>${plural(data.places, "photo")} on the map</strong><span class="muted">See where your memories happened</span></span></a>`);
+  if (data.tidy.duplicate_extra) hints.push(`<a class="hint-card" href="#/tidy"><span class="hint-e">🧹</span><span><strong>${plural(data.tidy.duplicate_extra, "duplicate copy", "duplicate copies")}</strong><span class="muted">Free up space by clearing the extras</span></span></a>`);
+  if (data.tidy.burst_groups) hints.push(`<a class="hint-card" href="#/tidy?kind=bursts"><span class="hint-e">🎞️</span><span><strong>${plural(data.tidy.burst_groups, "burst")} of similar shots</strong><span class="muted">Keep the best of each moment</span></span></a>`);
+  if (hints.length) view.append(h(`<section class="section fade-in hint-row">${hints.join("")}</section>`));
 
   if (data.explore.length) {
     const sec = h(`<section class="section fade-in"><div class="section-head"><h2>🧭 Your world at a glance</h2><span class="muted">Themes Lumen spotted in your library</span></div><div class="card-grid"></div></section>`);
@@ -413,6 +436,7 @@ async function renderSearch(view, params) {
     fs.onchange = () => setParam("folder_id", fs.value);
     f.append(fs);
   }
+  if (res.parsed.people?.length) f.append(h(`<span class="muted">with ${res.parsed.people.map((p) => `<a class="chip" href="#/person/${p.id}">${I.person} ${esc(p.name)}</a>`).join(" ")}</span>`));
   const neg = res.parsed.negatives;
   if (neg.length) f.append(h(`<span class="muted">excluding ${neg.map((n) => `<strong>${esc(n)}</strong>`).join(", ")}</span>`));
   const saveBtn = h(`<button class="btn small">${I.star} Save as smart collection</button>`);
@@ -573,7 +597,11 @@ async function renderCollection(view, id) {
   }
   btn("Edit", I.edit, () => openCollectionEditor({ existing: c }));
   if (c.count) {
-    const a = h(`<a class="btn small" href="/api/collections/${c.id}/export" download>${I.download} Export</a>`);
+    btn("Copy to folder", I.copy, () => openFolderBrowser({
+      mode: "pick", title: `Copy “${c.name}” to a folder`, subfolder: c.name,
+      onPick: (dest, subfolder) => copyCollection(c, dest, subfolder),
+    }));
+    const a = h(`<a class="btn small" href="/api/collections/${c.id}/export" download>${I.download} Zip</a>`);
     actions.append(a);
   }
   if (c.kind === "smart") {
@@ -769,20 +797,22 @@ async function openAddToCollection(ids) {
   };
 }
 
-async function openFolderBrowser() {
+async function openFolderBrowser({ mode = "add", title, subfolder = "", onPick } = {}) {
   const added = [];
+  const pick = mode === "pick";
   const m = openModal(`
-    <div class="modal-head"><div><h2>Choose photo folders</h2><p>Browse to a folder and add it. Subfolders are included. Add as many as you like.</p></div>
+    <div class="modal-head"><div><h2>${esc(title || "Choose photo folders")}</h2><p>${pick ? "Browse to where the copies should go. Your originals stay where they are." : "Browse to a folder and add it. Subfolders are included. Add as many as you like."}</p></div>
       <button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
     <div class="modal-body">
       <div class="fb"><div class="fb-roots"></div>
         <div class="fb-main"><div class="crumbs"></div><div class="fb-dirs"></div>
-          <div class="fb-here"><span class="here-text"></span><button class="btn primary small" id="fb-add">${I.plus} Add this folder</button></div>
+          <div class="fb-here"><span class="here-text"></span><button class="btn primary small" id="fb-add">${pick ? I.copy + " Copy here" : I.plus + " Add this folder"}</button></div>
+          ${pick ? `<label class="fb-sub"><input type="checkbox" id="fb-sub-on" ${subfolder ? "checked" : ""}> Put them in a new folder called <input class="input" id="fb-sub" value="${esc(subfolder)}"></label>` : ""}
           <form id="fb-path" style="display:flex;gap:8px;margin-top:10px"><input class="input" placeholder="…or paste a folder path" style="height:38px"><button class="btn small">Go</button></form>
           <div class="added-list"></div>
         </div></div>
     </div>
-    <div class="modal-foot"><span class="muted" style="margin-right:auto;font-size:13px">🔒 Lumen only reads your photos. Nothing leaves this computer.</span><button class="btn" data-close>Done</button></div>`, { wide: true });
+    <div class="modal-foot"><span class="muted" style="margin-right:auto;font-size:13px">${pick ? "Existing files are never overwritten." : "🔒 Lumen only reads your photos. Nothing leaves this computer."}</span><button class="btn" data-close>${pick ? "Cancel" : "Done"}</button></div>`, { wide: true });
   const el = m.el;
   let cur = null;
   const open = async (path) => {
@@ -819,6 +849,12 @@ async function openFolderBrowser() {
     } catch (e) { fail(e); }
   };
   $("#fb-add", el).onclick = async () => {
+    if (pick) {
+      const sub = $("#fb-sub-on", el).checked ? $("#fb-sub", el).value.trim() : "";
+      m.close();
+      onPick(cur.path, sub);
+      return;
+    }
     try {
       const r = await api("/api/folders", { method: "POST", body: { path: cur.path } });
       added.push(r.path);
@@ -831,7 +867,7 @@ async function openFolderBrowser() {
   const origClose = m.close;
   m.close = () => { origClose(); if (added.length && ["home", "sources"].includes(state.view)) route(); };
   $$("[data-close]", el).forEach((b) => (b.onclick = () => m.close()));
-  const pics = (await api("/api/fs")).roots.find((r) => r.name === "Pictures");
+  const pics = (await api("/api/fs")).roots.find((r) => r.name === (pick ? "Desktop" : "Pictures"));
   open(pics?.path);
 }
 
@@ -887,9 +923,11 @@ async function drawLightbox() {
       ${d.taken_at ? `<dt>📅</dt><dd>${new Date(d.taken_at * 1000).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}</dd>` : ""}
       ${d.camera ? `<dt>📷</dt><dd>${esc(d.camera)}</dd>` : ""}
       <dt>📁</dt><dd>${esc(d.folder)}</dd>
+      ${d.lat != null ? `<dt>📍</dt><dd><a href="#/map?photo=${d.id}">${d.lat.toFixed(4)}, ${d.lon.toFixed(4)} · View on map</a></dd>` : ""}
       ${d.size ? `<dt>💾</dt><dd>${d.size >= 1048576 ? (d.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(d.size / 1024)) + " KB"}</dd>` : ""}
       ${it.tier ? `<dt>🎯</dt><dd>${{ best: "Spot-on match", good: "Strong match", maybe: "Possible match" }[it.tier]}</dd>` : ""}
     </dl>
+    ${d.people.length ? `<div><h4>People</h4><div class="lb-people">${d.people.map((p) => `<a class="lb-person" href="${p.id ? `#/person/${p.id}` : "#/people"}"><img src="${faceUrl(p.face_id)}" alt=""><span>${p.id ? esc(p.name || "Add a name") : "Not grouped yet"}</span></a>`).join("")}</div></div>` : ""}
     ${d.collections.length ? `<div><h4>In collections</h4><div class="chips">${d.collections.map((c) => `<a class="chip" href="#/collection/${c.id}">${esc(c.emoji || "📁")} ${esc(c.name)}</a>`).join("")}</div></div>` : ""}
     ${sim.length ? `<div><h4>Looks similar</h4><div class="lb-similar">${sim.map((s, i) => `<img src="${previewUrl(s.id)}" data-i="${i}" alt="${esc(s.name)}">`).join("")}</div></div>` : ""}
     <div class="muted" style="font-size:12px;margin-top:auto">← → to browse · Esc to close</div>`;
@@ -955,13 +993,15 @@ function drawIndexPanel() {
   const s = state.status;
   if (!p || !s) return;
   const pct = s.total ? Math.round((100 * s.ready) / s.total) : 0;
-  const label = { idle: s.pending ? "Waiting" : "All caught up ✓", scanning: "Looking for photos…", indexing: "Learning your photos…", paused: "Paused" }[s.state] || s.state;
+  const label = { idle: s.pending || s.enrich_pending ? "Waiting" : "All caught up ✓", scanning: "Looking for photos…", indexing: "Learning your photos…", enriching: "Finding faces & places…", paused: "Paused" }[s.state] || s.state;
   p.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2>${label}</h2>
-      ${s.pending || s.state === "paused" ? `<button class="btn small" id="pp">${s.state === "paused" ? I.play + " Resume" : I.pause + " Pause"}</button>` : ""}</div>
+      ${s.pending || s.enrich_pending || s.state === "paused" ? `<button class="btn small" id="pp">${s.state === "paused" ? I.play + " Resume" : I.pause + " Pause"}</button>` : ""}</div>
     <div class="bar" style="height:10px"><i style="width:${pct}%"></i></div>
     <div class="stats">
       <div class="stat"><b>${fmt(s.ready)}</b><span>photos understood</span></div>
       <div class="stat"><b>${fmt(s.pending)}</b><span>still to go</span></div>
+      ${s.enrich_pending ? `<div class="stat"><b>${fmt(s.enrich_pending)}</b><span>to check for faces & places</span></div>` : ""}
+      <div class="stat"><b>${fmt(s.people)}</b><span>${s.faces_state === "ready" || s.faces_state === "not loaded" ? "people recognised" : esc(s.faces_state.startsWith("downloading") ? "people · downloading face models" : s.faces_state === "off" ? "people · face grouping off" : "people · faces " + s.faces_state)}</span></div>
       <div class="stat"><b>${s.rate ? s.rate.toFixed(1) + "/s" : "—"}</b><span>${s.eta_seconds ? fmtDuration(s.eta_seconds) + " left" : "speed"}</span></div>
       ${s.errors ? `<div class="stat"><b>${fmt(s.errors)}</b><span>unreadable · <button class="link" id="retry">retry</button></span></div>` : ""}
     </div>
@@ -971,6 +1011,295 @@ function drawIndexPanel() {
     refreshStatus();
   });
   $("#retry", p)?.addEventListener("click", async () => { await api("/api/index/retry-errors", { method: "POST" }); refreshStatus(); });
+}
+
+// ------------------------------------------------------------------ copy to folder
+async function copyCollection(c, dest, subfolder) {
+  try {
+    const r = await api(`/api/collections/${c.id}/copy`, { method: "POST", body: { dest, subfolder: subfolder || null } });
+    toast(`Copying ${plural(r.total, "photo")} to <strong>${esc(r.dest)}</strong>…`);
+    for (;;) {
+      await new Promise((ok) => setTimeout(ok, 700));
+      const j = await api(`/api/jobs/${r.job_id}`);
+      if (j.state === "done") {
+        const miss = j.result.missing ? ` (${j.result.missing} originals were missing)` : "";
+        toast(`✅ Copied ${plural(j.result.copied, "photo")} to <strong>${esc(j.result.dest)}</strong>${miss}`, { ms: 7000 });
+        return;
+      }
+      if (j.state === "failed") throw new Error(j.error);
+    }
+  } catch (e) { fail(e); }
+}
+
+// ------------------------------------------------------------------ people
+function personChip(p) {
+  return h(`<a class="person fade-in" href="#/person/${p.id}">
+    <span class="avatar">${p.face_id ? `<img loading="lazy" src="${faceUrl(p.face_id)}" alt="">` : I.person}</span>
+    <strong class="${p.name ? "" : "muted"}">${esc(p.name || "Add a name")}</strong>
+    <span class="muted">${plural(p.count, "photo")}</span></a>`);
+}
+
+async function renderPeople(view, params) {
+  const hidden = params.get("hidden") === "1";
+  const [people, st] = await Promise.all([api(`/api/people${hidden ? "?hidden=true" : ""}`), refreshStatus()]);
+  view.append(h(`<div class="page-head fade-in"><div><h1>${hidden ? "Hidden people" : "People"}</h1>
+    <p>${hidden ? "People you've hidden. Open one to bring them back." : "Lumen groups faces it recognises across your photos. Give them names, then search for them: “Maria at the beach”."}</p></div>
+    <div class="row-actions"><a class="btn small" href="#/people${hidden ? "" : "?hidden=1"}">${hidden ? "Back to people" : I.eyeoff + " Hidden"}</a></div></div>`));
+  if (!people.length) {
+    const busy = st.enrich_pending || st.pending;
+    const off = st.faces_state === "off" || st.faces_state.startsWith("unavailable");
+    view.append(hidden ? emptyState("🙈", "Nobody is hidden", "")
+      : off ? emptyState("🙂", "Face grouping is unavailable", esc(st.faces_state === "off" ? "It was switched off (LUMEN_FACES=0)." : st.faces_state))
+      : emptyState(busy ? "⏳" : "🙂", busy ? "Looking for faces…" : "No people yet", busy
+        ? `Lumen is still going through your photos (${fmt(st.enrich_pending + st.pending)} to go). People appear here as soon as someone shows up in two or more photos.`
+        : "Nobody appears in more than one photo yet. As you add more folders, people will show up here."));
+    return;
+  }
+  const named = people.filter((p) => p.name), unnamed = people.filter((p) => !p.name);
+  for (const [title, list] of [["Named", named], [named.length ? "Who are they?" : "", unnamed]]) {
+    if (!list.length) continue;
+    const sec = h(`<section class="section fade-in" style="margin-top:0">${title && named.length ? `<div class="section-head"><h2>${title}</h2></div>` : ""}<div class="people-grid"></div></section>`);
+    list.forEach((p) => $(".people-grid", sec).append(personChip(p)));
+    view.append(sec);
+  }
+}
+
+async function renderPerson(view, id) {
+  const p = await api(`/api/people/${id}`);
+  const head = h(`<section class="person-hero fade-in">
+      <span class="avatar big">${p.face_id ? `<img src="${faceUrl(p.face_id)}" alt="">` : I.person}</span>
+      <div class="person-meta">
+        <input class="name-input" maxlength="80" placeholder="Who is this?" value="${esc(p.name || "")}" aria-label="Name">
+        <p class="muted">${plural(p.count, "photo")}${p.hidden ? " · hidden" : ""} · <span class="save-hint">${p.name ? "Click the name to rename" : "Type a name and press Enter"}</span></p>
+      </div>
+      <div class="row-actions"></div></section>`);
+  const input = $(".name-input", head);
+  const save = async () => {
+    const name = input.value.trim();
+    if (name === (p.name || "")) return;
+    try {
+      await api(`/api/people/${id}`, { method: "PATCH", body: { name } });
+      p.name = name;
+      $(".save-hint", head).textContent = name ? "Click the name to rename" : "Type a name and press Enter";
+      toast(name ? `Saved. Try searching “${esc(name)} smiling” ✨` : "Name removed");
+    } catch (e) {
+      if (e.status === 409) {
+        const other = (await api("/api/people")).find((x) => (x.name || "").toLowerCase() === name.toLowerCase());
+        if (other && (await confirmDialog(`Merge with ${name}?`, `Someone is already called “${name}”. Are these the same person?`, "Yes, merge"))) {
+          await api("/api/people/merge", { method: "POST", body: { into: other.id, person_ids: [id] } });
+          go(`#/person/${other.id}`);
+          return;
+        }
+        input.value = p.name || "";
+      } else fail(e);
+    }
+  };
+  input.onkeydown = (e) => { if (e.key === "Enter") input.blur(); if (e.key === "Escape") { input.value = p.name || ""; input.blur(); } };
+  input.onblur = save;
+  const actions = $(".row-actions", head);
+  const btn = (label, icon, fn) => { const b = h(`<button class="btn small">${icon} ${label}</button>`); b.onclick = fn; actions.append(b); };
+  btn("Same as…", I.merge, () => openMergePeople(p));
+  btn(p.hidden ? "Unhide" : "Hide", I.eyeoff, async () => {
+    await api(`/api/people/${id}`, { method: "PATCH", body: { hidden: !p.hidden } }).catch(fail);
+    toast(p.hidden ? "Back in People" : "Hidden. Find them under People → Hidden");
+    go(p.hidden ? `#/person/${id}` : "#/people");
+  });
+  view.append(head);
+  if (!p.name) setTimeout(() => input.focus(), 50);
+
+  const sub = h(`<div class="section-head"><span class="muted">Spotted someone else? Select those photos and choose <strong>Not them</strong>.</span><button class="link">Select all</button></div>`);
+  const grid = new JGrid(p.items);
+  $(".link", sub).onclick = () => grid.selectAll();
+  view.append(sub, grid.el);
+  state.trayActions = [{ label: "Not them", icon: I.close, run: async (ids) => {
+    const mine = ids.filter((i) => p.items.some((x) => x.id === i));
+    const r = await api(`/api/people/${id}/remove-photos`, { method: "POST", body: { photo_ids: mine } }).catch(fail);
+    clearSelection();
+    toast(`Removed ${plural(mine.length, "photo")} from ${esc(p.name || "this person")}`);
+    if (r && !r.remaining) go("#/people"); else route();
+  } }];
+}
+
+async function openMergePeople(p) {
+  const others = (await api("/api/people")).filter((x) => x.id !== p.id);
+  const chosen = new Set();
+  const m = openModal(`
+    <div class="modal-head"><div><h2>Who else is ${esc(p.name || "this")}?</h2><p>Pick the groups that are the same person. Lumen sometimes splits one person into several groups (e.g. as a child and as an adult).</p></div>
+      <button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+    <div class="modal-body"><div class="people-grid small"></div></div>
+    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="do-merge" disabled>Merge</button></div>`, { wide: true });
+  const grid = $(".people-grid", m.el);
+  if (!others.length) grid.append(h('<p class="muted">There is nobody else to merge with yet.</p>'));
+  others.forEach((o) => {
+    const c = personChip(o);
+    c.removeAttribute("href");
+    c.onclick = () => {
+      chosen.has(o.id) ? chosen.delete(o.id) : chosen.add(o.id);
+      c.classList.toggle("on", chosen.has(o.id));
+      $("#do-merge", m.el).disabled = !chosen.size;
+      $("#do-merge", m.el).textContent = chosen.size ? `Merge ${chosen.size + 1} groups` : "Merge";
+    };
+    grid.append(c);
+  });
+  $("#do-merge", m.el).onclick = async () => {
+    await api("/api/people/merge", { method: "POST", body: { into: p.id, person_ids: [...chosen] } }).catch(fail);
+    m.close();
+    toast("Merged ✨");
+    route();
+  };
+}
+
+// ------------------------------------------------------------------ places (map)
+let leafletReady = null;
+function loadLeaflet() {
+  leafletReady ||= new Promise((resolve, reject) => {
+    for (const href of ["vendor/leaflet/leaflet.css", "vendor/leaflet/MarkerCluster.css"]) {
+      document.head.append(h(`<link rel="stylesheet" href="${href}">`));
+    }
+    const s1 = document.createElement("script");
+    s1.src = "vendor/leaflet/leaflet.js";
+    s1.onload = () => {
+      const s2 = document.createElement("script");
+      s2.src = "vendor/leaflet/leaflet.markercluster.js";
+      s2.onload = resolve;
+      s2.onerror = reject;
+      document.head.append(s2);
+    };
+    s1.onerror = reject;
+    document.head.append(s1);
+  });
+  return leafletReady;
+}
+
+function isDark() {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+async function renderMap(view, params) {
+  const [{ points }] = await Promise.all([api("/api/map"), loadLeaflet()]);
+  view.append(h(`<div class="page-head fade-in"><div><h1>Places</h1><p>${points.length ? `${plural(points.length, "photo")} with a location. Zoom in to explore; the photos below follow the map.` : ""}</p></div></div>`));
+  if (!points.length) {
+    const st = state.status || {};
+    view.append(emptyState("🗺️", st.enrich_pending ? "Still reading locations…" : "No locations yet",
+      st.enrich_pending ? `Lumen is reading where your photos were taken (${fmt(st.enrich_pending)} to go).`
+        : "None of your photos has GPS information. Phones usually add it when location is enabled for the camera."));
+    return;
+  }
+  const mapEl = h('<div class="map fade-in" id="map"></div>');
+  const below = h(`<section class="section"><div class="group-head"><h3>In this area</h3><span class="sub"></span><span style="flex:1"></span><button class="link">Select all</button></div><div class="area"></div></section>`);
+  view.append(mapEl, below);
+  const map = L.map(mapEl, { zoomControl: true, worldCopyJump: true });
+  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${isDark() ? "dark_all" : "rastertiles/voyager"}/{z}/{x}/{y}{r}.png`, {
+    maxZoom: 19, subdomains: "abcd",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  }).addTo(map);
+  const thumbIcon = (id, count) => L.divIcon({
+    className: "map-pin",
+    html: `<div class="map-thumb"><img src="${previewUrl(id)}" alt="">${count > 1 ? `<b>${count > 999 ? Math.round(count / 1000) + "k" : count}</b>` : ""}</div>`,
+    iconSize: [52, 52], iconAnchor: [26, 26],
+  });
+  const cluster = L.markerClusterGroup({
+    showCoverageOnHover: false, maxClusterRadius: 60,
+    iconCreateFunction: (c) => thumbIcon(c.getAllChildMarkers()[0].options.photoId, c.getChildCount()),
+  });
+  for (const [id, lat, lon] of points) {
+    const mk = L.marker([lat, lon], { icon: thumbIcon(id, 1), photoId: id });
+    mk.on("click", async () => openLightbox(await api("/api/photos/batch", { method: "POST", body: { photo_ids: [id] } }), 0));
+    cluster.addLayer(mk);
+  }
+  map.addLayer(cluster);
+  const focus = Number(params.get("photo"));
+  const fp = focus && points.find((p) => p[0] === focus);
+  if (fp) map.setView([fp[1], fp[2]], 15);
+  else map.fitBounds(L.latLngBounds(points.map((p) => [p[1], p[2]])), { padding: [40, 40], maxZoom: 13 });
+
+  let grid = null;
+  const refresh = debounce(async () => {
+    if (!mapEl.isConnected) return;
+    const b = map.getBounds();
+    const inside = points.filter((p) => b.contains([p[1], p[2]])).map((p) => p[0]);
+    $(".sub", below).textContent = inside.length > 300 ? `${fmt(inside.length)} photos · showing the 300 most recent` : plural(inside.length, "photo");
+    const items = inside.length ? await api("/api/photos/batch", { method: "POST", body: { photo_ids: inside.slice(0, 300) } }) : [];
+    const area = $(".area", below);
+    area.innerHTML = "";
+    grid = new JGrid(items);
+    area.append(items.length ? grid.el : h('<p class="muted">Move the map to see photos here.</p>'));
+  }, 350);
+  $(".link", below).onclick = () => grid?.selectAll();
+  map.on("moveend", refresh);
+  refresh();
+}
+
+// ------------------------------------------------------------------ tidy up (duplicates & similar shots)
+async function renderTidy(view, params) {
+  const kind = params.get("kind") === "bursts" ? "bursts" : "duplicates";
+  const res = await api(`/api/duplicates?kind=${kind}`);
+  const sm = res.summary;
+  view.append(h(`<div class="page-head fade-in"><div><h1>Tidy up</h1>
+    <p>Copies and near-identical shots, with the best one picked for you. Anything you remove goes to your computer's Trash / Recycle Bin, so you can always get it back.</p></div></div>`));
+  view.append(h(`<div class="chips" style="margin-bottom:22px">
+    <a class="chip ${kind === "duplicates" ? "active" : ""}" href="#/tidy">🧬 Duplicates <span class="n">${fmt(sm.duplicate_groups)}</span></a>
+    <a class="chip ${kind === "bursts" ? "active" : ""}" href="#/tidy?kind=bursts">🎞️ Similar shots <span class="n">${fmt(sm.burst_groups)}</span></a></div>`));
+  if (!res.groups.length) {
+    view.append(emptyState("✨", kind === "duplicates" ? "No duplicates" : "No similar shots",
+      kind === "duplicates" ? "Every photo in your library is one of a kind." : "No bursts of near-identical photos found."));
+    return;
+  }
+  // Which photos are marked for removal. Duplicates default to "keep the best"; similar shots to nothing.
+  const marked = new Set();
+  if (kind === "duplicates") res.groups.forEach((g) => g.photo_ids.slice(1).forEach((i) => marked.add(i)));
+  const bar = h(`<div class="tidy-bar panel"><span class="tidy-count"></span><button class="btn primary small" id="trash-all">${I.trash} Move to Trash</button></div>`);
+  const syncBar = () => {
+    $(".tidy-count", bar).innerHTML = marked.size ? `<strong>${plural(marked.size, "photo")}</strong> marked to remove` : "Click photos to mark the ones you don't need";
+    $("#trash-all", bar).disabled = !marked.size;
+  };
+  view.append(bar);
+  const list = h('<div class="tidy-list"></div>');
+  view.append(list);
+  for (const g of res.groups) {
+    const card = h(`<div class="tidy-group panel fade-in">
+      <div class="tidy-head"><strong>${g.kind === "identical" ? "Identical copies" : g.kind === "near" ? "Same photo, different versions" : "Similar shots"}</strong>
+        <span class="muted">${plural(g.photos.length, "photo")}${g.photos[0]?.taken_at ? " · " + fmtDate(g.photos[0].taken_at) : ""}</span>
+        <span style="flex:1"></span><button class="link" data-a="ignore">${kind === "duplicates" ? "Not duplicates" : "Keep all"}</button></div>
+      <div class="tidy-row"></div></div>`);
+    const row = $(".tidy-row", card);
+    g.photos.forEach((p, idx) => {
+      const t = h(`<button class="tidy-photo ${marked.has(p.id) ? "remove" : ""}" title="${esc(p.name)}">
+        <img loading="lazy" src="${previewUrl(p.id)}" alt="">
+        ${idx === 0 ? '<span class="best">★ Best</span>' : ""}
+        <span class="verdict"></span>
+        <span class="info"><b>${esc(p.name)}</b><span>${fmtBytes(p.size)} · ${esc(p.dir)}</span></span></button>`);
+      const sync = () => { t.classList.toggle("remove", marked.has(p.id)); $(".verdict", t).textContent = marked.has(p.id) ? "Remove" : "Keep"; };
+      sync();
+      t.onclick = () => {
+        if (marked.has(p.id)) marked.delete(p.id);
+        else if (g.photo_ids.filter((i) => !marked.has(i)).length > 1) marked.add(p.id);
+        else { toast("Keep at least one photo from each group"); return; }
+        sync(); syncBar();
+      };
+      t.ondblclick = () => openLightbox(g.photos, idx);
+      row.append(t);
+    });
+    $("[data-a=ignore]", card).onclick = async () => {
+      await api("/api/duplicates/ignore", { method: "POST", body: { key: g.key } }).catch(fail);
+      g.photo_ids.forEach((i) => marked.delete(i));
+      card.remove();
+      syncBar();
+    };
+    list.append(card);
+  }
+  if (res.total_groups > res.groups.length) list.append(h(`<p class="muted">Showing the first ${res.groups.length} of ${fmt(res.total_groups)} groups. Clear these to see more.</p>`));
+  $("#trash-all", bar).onclick = async () => {
+    const ids = [...marked];
+    if (!(await confirmDialog(`Move ${plural(ids.length, "photo")} to the Trash?`, "The files go to your computer's Trash / Recycle Bin, where you can restore them. Lumen will forget them.", "Move to Trash", true))) return;
+    try {
+      const r = await api("/api/photos/trash", { method: "POST", body: { photo_ids: ids } });
+      toast(`🧹 Moved ${plural(r.trashed, "photo")} to the Trash${r.failed.length ? ` · ${r.failed.length} couldn't be moved` : ""}`);
+      route();
+    } catch (e) { fail(e); }
+  };
+  syncBar();
 }
 
 // ------------------------------------------------------------------ status polling
@@ -986,20 +1315,23 @@ async function refreshStatus() {
   }
   const s = state.status;
   const pill = $("#index-pill");
-  const busy = s.state === "scanning" || s.state === "indexing" || s.state === "paused" || s.pending > 0;
+  const busy = ["scanning", "indexing", "enriching", "paused"].includes(s.state) || s.pending > 0 || s.enrich_pending > 0;
   pill.hidden = !busy;
   if (busy) {
-    const pct = s.total ? s.ready / s.total : 0;
+    const enriching = !s.pending && s.enrich_pending > 0;
+    const pct = enriching ? 1 - s.enrich_pending / Math.max(s.total, 1) : s.total ? s.ready / s.total : 0;
     pill.classList.toggle("spinning", s.state === "scanning" || (s.model_state !== "ready" && s.state === "indexing"));
     $(".ring-fill", pill).style.strokeDashoffset = 94.25 * (1 - pct);
     $(".index-pill-text", pill).textContent = s.state === "scanning" ? `Scanning… ${fmt(s.scanned_files)}`
       : s.state === "paused" ? `Paused · ${fmt(s.ready)} / ${fmt(s.total)}`
+      : enriching ? `Faces & places · ${fmt(s.enrich_pending)} left`
       : `${fmt(s.ready)} / ${fmt(s.total)}${s.eta_seconds ? " · " + fmtDuration(s.eta_seconds) : ""}`;
   }
   drawIndexPanel();
   // First photos became searchable, or a big batch finished: refresh home if the user isn't typing.
   if (prev && state.view === "home" && !document.activeElement?.matches("input") &&
-      ((prev.ready === 0 && s.ready > 0) || (prev.pending > 0 && s.pending === 0) || prev.folders !== s.folders)) route();
+      ((prev.ready === 0 && s.ready > 0) || (prev.pending > 0 && s.pending === 0) || prev.folders !== s.folders ||
+       (prev.enrich_pending > 0 && s.enrich_pending === 0))) route();
   pollTimer = setTimeout(refreshStatus, busy ? 2000 : 10000);
   return s;
 }
