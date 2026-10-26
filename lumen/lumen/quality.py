@@ -32,7 +32,10 @@ def measure(im: Image.Image) -> dict:
     """Technical measurements on a preview-sized image."""
     a = np.asarray(im.convert("L"), dtype=np.float32)
     lap = a[:-2, 1:-1] + a[2:, 1:-1] + a[1:-1, :-2] + a[1:-1, 2:] - 4 * a[1:-1, 1:-1]
+    from .colors import palette
+
     return {
+        "palette": palette(im),
         "sharpness": _focus(lap),
         "brightness": float(a.mean()),
         "hi_clip": float((a >= 250).mean()),

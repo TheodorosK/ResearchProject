@@ -60,6 +60,8 @@ const I = {
   play: '<svg class="icon" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>',
   up: '<svg class="icon" viewBox="0 0 24 24"><path d="M7 11v9H4v-9zM7 11l4-8a2 2 0 0 1 3 2l-1 5h6a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.8 20H7"/></svg>',
   down: '<svg class="icon" viewBox="0 0 24 24"><path d="M17 13V4h3v9zM17 13l-4 8a2 2 0 0 1-3-2l1-5H5a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 6.2 4H17"/></svg>',
+  camera: '<svg class="icon" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  palette: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.2-1.7-.4-1.1.3-2.3 1.5-2.3H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>',
   slides: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4-2.5z"/></svg>',
   refresh: '<svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
   collection: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v11"/></svg>',
@@ -246,6 +248,7 @@ async function route() {
     else if (name === "map") await renderMap(view, params);
     else if (name === "tidy") await renderTidy(view, params);
     else if (name === "memories") await renderMemories(view, params);
+    else if (name === "picture") await renderPicture(view);
     else if (name === "memory") await renderMemory(view, parts.slice(1).join("/"));
     else if (name === "collection") await renderCollection(view, Number(parts[1]));
     else if (name === "sources") await renderSources(view);
@@ -284,7 +287,7 @@ async function renderHome(view) {
         <button class="btn primary" type="submit">${I.search}<span>Search</span></button>
       </form>
       <div class="chips"></div>
-      <div class="hint">Tip: add <kbd>-word</kbd> to leave something out, like <em>beach -people</em>. Press <kbd>/</kbd> to search from anywhere.</div>
+      <div class="hint">Tips: <kbd>-word</kbd> leaves something out (<em>beach -people</em>), <kbd>"quotes"</kbd> find written text (<em>"taverna"</em>), and you can drop any picture here to find look-alikes.</div>
     </section>`);
   const input = $("input", hero);
   $("form", hero).onsubmit = (e) => { e.preventDefault(); if (input.value.trim()) go(`#/search?q=${encodeURIComponent(input.value.trim())}`); };
@@ -293,6 +296,11 @@ async function renderHome(view) {
     const c = h(`<a class="chip" href="#/search?q=${encodeURIComponent(s)}">${esc(s)}</a>`);
     chips.append(c);
   }
+  const byColour = h(`<button class="chip" type="button">🎨 By colour</button>`);
+  byColour.onclick = () => openColourPicker([], (list) => list.length && go(`#/search?colors=${list.join(",")}`));
+  const byPicture = h(`<button class="chip" type="button">📷 By picture</button>`);
+  byPicture.onclick = () => $("#pic-search").click();
+  chips.append(byColour, byPicture);
   const surprise = h('<button class="chip" type="button">🎲 Surprise me</button>');
   surprise.onclick = () => {
     const pool = data.explore.length ? data.explore.map((g) => g.query) : data.suggestions;
@@ -333,6 +341,12 @@ async function renderHome(view) {
   if (data.people.length) {
     const psec = h(`<section class="section fade-in"><div class="section-head"><h2>🙂 People</h2><a href="#/people">See everyone</a></div><div class="people-strip"></div></section>`);
     data.people.forEach((p) => $(".people-strip", psec).append(personChip(p)));
+    view.append(psec);
+  }
+
+  if (data.pets.length) {
+    const psec = h(`<section class="section fade-in"><div class="section-head"><h2>🐾 Pets</h2><a href="#/people?kind=pet">See all</a></div><div class="people-strip"></div></section>`);
+    data.pets.forEach((p) => $(".people-strip", psec).append(personChip(p)));
     view.append(psec);
   }
 
@@ -439,9 +453,9 @@ async function renderSearch(view, params) {
   const title = params.get("title");
   $("#top-search-input").value = title ? "" : q;
   const filters = new URLSearchParams();
-  for (const k of ["year_from", "year_to", "folder_id", "sort", "like", "dislike"]) if (params.get(k)) filters.set(k, params.get(k));
+  for (const k of ["year_from", "year_to", "folder_id", "sort", "like", "dislike", "colors"]) if (params.get(k)) filters.set(k, params.get(k));
   const head = h(`<div class="search-head fade-in">
-      <div class="search-top"><h1 class="search-title">${title ? `${esc(title)}` : `<q>${esc(q)}</q>`}</h1><div class="row-actions"></div></div>
+      <div class="search-top"><h1 class="search-title">${title ? `${esc(title)}` : q ? `<q>${esc(q)}</q>` : "By colour"}</h1><div class="row-actions"></div></div>
       <div class="filters"></div>
     </div>`);
   view.append(head);
@@ -474,6 +488,11 @@ async function renderSearch(view, params) {
   f.append(sortSel);
   const ex = res.parsed.expression;
   if (ex) f.append(h(`<span class="chip" title="Lumen reads the expressions on faces for this">${ex.emoji} ${ex.everyone ? "everyone " : ""}${esc({ happiness: "smiling", sadness: "sad", surprise: "surprised", anger: "angry", fear: "scared", disgust: "disgusted", neutral: "serious", contempt: "unimpressed" }[ex.label])} faces</span>`));
+  const chosen = res.parsed.colors || [];
+  const colBtn = h(`<button class="chip">${I.palette} ${chosen.length ? chosen.map((c) => `<i class="swatch" style="background:#${c}"></i>`).join("") : "Colour"}</button>`);
+  colBtn.onclick = () => openColourPicker(chosen, (list) => setParam("colors", list.join(",")));
+  f.append(colBtn);
+  if (res.parsed.phrases?.length) f.append(h(`<span class="chip" title="Only photos with this text written in them">🔤 ${res.parsed.phrases.map((p) => `“${esc(p)}”`).join(" ")}</span>`));
   if (res.parsed.places?.length) f.append(h(`<span class="chip" title="Only photos taken here">${I.pin} ${res.parsed.places.map(esc).join(", ")}</span>`));
   if (res.parsed.when) f.append(h(`<span class="chip" title="Only photos from then">📅 ${esc(res.parsed.when)}</span>`));
   if (res.parsed.people?.length) f.append(h(`<span class="muted">with ${res.parsed.people.map((p) => `<a class="chip" href="#/person/${p.id}">${I.person} ${esc(p.name)}</a>`).join(" ")}</span>`));
@@ -1000,7 +1019,9 @@ async function drawLightbox() {
       ${d.quality != null ? `<dt>⭐</dt><dd>${d.quality >= 90 ? "One of your best shots · " : d.quality >= 70 ? "Looks great · " : ""}<span class="muted">Quality ${d.quality}/100</span></dd>` : ""}
       ${it.tier ? `<dt>🎯</dt><dd>${{ best: "Spot-on match", good: "Strong match", maybe: "Possible match" }[it.tier]}</dd>` : ""}
     </dl>
-    ${d.people.length ? `<div><h4>People</h4><div class="lb-people">${d.people.map((p) => `<a class="lb-person" href="${p.id ? `#/person/${p.id}` : "#/people"}"><span class="lb-face"><img src="${faceUrl(p.face_id)}" alt="">${p.expression_emoji ? `<i title="${esc(p.expression)}">${p.expression_emoji}</i>` : ""}</span><span>${p.id ? esc(p.name || "Add a name") : "Not grouped yet"}</span></a>`).join("")}</div></div>` : ""}
+    ${d.seen && (d.seen.caption || d.seen.tags.length) ? `<div><h4>What Lumen sees</h4>${d.seen.caption ? `<p class="lb-caption">${esc(d.seen.caption)}</p>` : ""}<div class="chips">${d.seen.tags.map((t) => `<a class="chip" href="#/search?q=${encodeURIComponent(t)}">${esc(t)}</a>`).join("")}</div></div>` : ""}
+    ${d.text ? `<div><h4>Text in this photo <button class="link" data-a="copytext">Copy</button></h4><pre class="lb-text">${esc(d.text)}</pre></div>` : ""}
+    ${d.people.length ? `<div><h4>People${d.people.some((p) => p.kind === "pet") ? " & pets" : ""}</h4><div class="lb-people">${d.people.map((p) => `<a class="lb-person" href="${p.id ? `#/person/${p.id}` : "#/people"}"><span class="lb-face"><img src="${faceUrl(p.face_id)}" alt="">${p.expression_emoji ? `<i title="${esc(p.expression)}">${p.expression_emoji}</i>` : ""}</span><span>${p.kind === "pet" ? (p.species === "dog" ? "🐶 " : "🐱 ") : ""}${p.id ? esc(p.name || "Add a name") : "Not grouped yet"}</span></a>`).join("")}</div></div>` : ""}
     ${d.collections.length ? `<div><h4>In collections</h4><div class="chips">${d.collections.map((c) => `<a class="chip" href="#/collection/${c.id}">${esc(c.emoji || "📁")} ${esc(c.name)}</a>`).join("")}</div></div>` : ""}
     ${sim.length ? `<div><h4>Looks similar</h4><div class="lb-similar">${sim.map((s, i) => `<img src="${previewUrl(s.id)}" data-i="${i}" alt="${esc(s.name)}">`).join("")}</div></div>` : ""}
     <div class="muted" style="font-size:12px;margin-top:auto">← → to browse · Esc to close</div>`;
@@ -1009,6 +1030,7 @@ async function drawLightbox() {
     const simImg = e.target.closest(".lb-similar img");
     if (simImg) { openLightbox(sim, Number(simImg.dataset.i)); return; }
     if (a === "add") openAddToCollection([it.id]);
+    if (a === "copytext") navigator.clipboard?.writeText(d.text).then(() => toast("Text copied"));
     if (a === "similar") go(`#/similar/${it.id}`);
     if (a === "reveal") api(`/api/photos/${it.id}/reveal`, { method: "POST" }).then(() => toast("Opened in your file manager")).catch(fail);
     if (a === "select") { setSelected(it, !isSelected(it.id)); renderTray(); e.target.closest("button").textContent = isSelected(it.id) ? "✓ Selected" : "Select"; }
@@ -1066,7 +1088,7 @@ function drawIndexPanel() {
   const s = state.status;
   if (!p || !s) return;
   const pct = s.total ? Math.round((100 * s.ready) / s.total) : 0;
-  const label = { idle: s.pending || s.enrich_pending ? "Waiting" : "All caught up ✓", scanning: "Looking for photos…", indexing: "Learning your photos…", enriching: "Finding faces & places…", paused: "Paused" }[s.state] || s.state;
+  const label = { idle: s.pending || s.enrich_pending ? "Waiting" : "All caught up ✓", scanning: "Looking for photos…", indexing: "Learning your photos…", enriching: "Finding faces & places…", reading: "Reading text & looking for pets…", paused: "Paused" }[s.state] || s.state;
   p.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2>${label}</h2>
       ${s.pending || s.enrich_pending || s.state === "paused" ? `<button class="btn small" id="pp">${s.state === "paused" ? I.play + " Resume" : I.pause + " Pause"}</button>` : ""}</div>
     <div class="bar" style="height:10px"><i style="width:${pct}%"></i></div>
@@ -1084,6 +1106,59 @@ function drawIndexPanel() {
     refreshStatus();
   });
   $("#retry", p)?.addEventListener("click", async () => { await api("/api/index/retry-errors", { method: "POST" }); refreshStatus(); });
+}
+
+// ------------------------------------------------------------------ colour & picture search
+const SWATCHES = ["e53935", "fb8c00", "fdd835", "43a047", "00897b", "26c6da", "1e88e5", "3949ab", "8e24aa",
+  "ec407a", "f5f5f5", "9e9e9e", "212121", "6d4c41", "d7ccc8", "ffccbc"];
+
+function openColourPicker(current, onDone) {
+  const chosen = [...current];
+  const m = openModal(`
+    <div class="modal-head"><div><h2>Search by colour</h2><p>Pick up to five colours. Photos made mostly of them come first.</p></div>
+      <button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+    <div class="modal-body"><div class="swatch-grid">${SWATCHES.map((c) => `<button style="background:#${c}" data-c="${c}" aria-label="#${c}"></button>`).join("")}
+      <label class="custom-swatch" title="Any colour">+<input type="color" value="#ff7a59"></label></div>
+      <div class="chosen"></div></div>
+    <div class="modal-foot"><button class="btn ghost" id="col-clear">Clear</button><button class="btn primary" id="col-go">Search</button></div>`);
+  const draw = () => {
+    $(".chosen", m.el).innerHTML = chosen.length ? chosen.map((c) => `<button class="chip" data-x="${c}"><i class="swatch" style="background:#${c}"></i> #${c} ✕</button>`).join("") : '<span class="muted">No colours chosen yet</span>';
+    $$(".swatch-grid button", m.el).forEach((b) => b.classList.toggle("on", chosen.includes(b.dataset.c)));
+  };
+  m.el.addEventListener("click", (e) => {
+    const c = e.target.closest("[data-c]")?.dataset.c, x = e.target.closest("[data-x]")?.dataset.x;
+    if (c) { chosen.includes(c) ? chosen.splice(chosen.indexOf(c), 1) : chosen.length < 5 && chosen.push(c); draw(); }
+    if (x) { chosen.splice(chosen.indexOf(x), 1); draw(); }
+  });
+  $("input[type=color]", m.el).onchange = (e) => { const c = e.target.value.slice(1); if (!chosen.includes(c) && chosen.length < 5) chosen.push(c); draw(); };
+  $("#col-clear", m.el).onclick = () => { chosen.length = 0; draw(); };
+  $("#col-go", m.el).onclick = () => { m.close(); onDone(chosen); };
+  draw();
+}
+
+async function searchByPicture(file) {
+  if (!file || !file.type.startsWith("image/")) { toast("That isn't an image", { error: true }); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  toast("Looking for photos like that…", { ms: 1800 });
+  try {
+    const res = await fetch("/api/search/image", { method: "POST", body: fd }).then(async (r) => {
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Search failed");
+      return d;
+    });
+    state.picture = { res, url: URL.createObjectURL(file), name: file.name };
+    go("#/picture");
+  } catch (e) { fail(e); }
+}
+
+async function renderPicture(view) {
+  const p = state.picture;
+  if (!p) { view.append(emptyState("📷", "Search with a picture", "Drop any image onto Lumen, or use the camera button next to the search box.")); return; }
+  view.append(h(`<div class="page-head fade-in"><div style="display:flex;gap:16px;align-items:center">
+    <img src="${p.url}" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:16px;box-shadow:var(--shadow)">
+    <div><h1>Looks like your picture</h1><p>${esc(p.name)} · searched among ${fmt(p.res.indexed)} photos</p></div></div></div>`));
+  renderTiered(view, p.res.items, emptyState("🌫️", "Nothing similar", "Try another picture."));
 }
 
 // ------------------------------------------------------------------ copy to folder
@@ -1114,14 +1189,24 @@ function personChip(p) {
 
 async function renderPeople(view, params) {
   const hidden = params.get("hidden") === "1";
-  const [people, st] = await Promise.all([api(`/api/people${hidden ? "?hidden=true" : ""}`), refreshStatus()]);
-  view.append(h(`<div class="page-head fade-in"><div><h1>${hidden ? "Hidden people" : "People"}</h1>
-    <p>${hidden ? "People you've hidden. Open one to bring them back." : "Lumen groups faces it recognises across your photos. Give them names, then search for them: “Maria at the beach”."}</p></div>
-    <div class="row-actions"><a class="btn small" href="#/people${hidden ? "" : "?hidden=1"}">${hidden ? "Back to people" : I.eyeoff + " Hidden"}</a></div></div>`));
+  const kind = params.get("kind") === "pet" ? "pet" : "person";
+  const pets = kind === "pet";
+  const [people, st, petList] = await Promise.all([
+    api(`/api/people?kind=${kind}${hidden ? "&hidden=true" : ""}`), refreshStatus(), api("/api/people?kind=pet"),
+  ]);
+  view.append(h(`<div class="page-head fade-in"><div><h1>${hidden ? (pets ? "Hidden pets" : "Hidden people") : pets ? "Pets" : "People"}</h1>
+    <p>${hidden ? "Hidden from People. Open one to bring them back." : pets
+      ? "Your cats and dogs, recognised across your photos. Name them, then search: “Luna in the snow”."
+      : "Lumen groups faces it recognises across your photos. Give them names, then search for them: “Maria at the beach”."}</p></div>
+    <div class="row-actions"><a class="btn small" href="#/people?kind=${kind}${hidden ? "" : "&hidden=1"}">${hidden ? "Back" : I.eyeoff + " Hidden"}</a></div></div>`));
+  if (!hidden && (petList.length || pets)) {
+    view.append(h(`<div class="chips" style="margin-bottom:20px"><a class="chip ${!pets ? "active" : ""}" href="#/people">🙂 People</a><a class="chip ${pets ? "active" : ""}" href="#/people?kind=pet">🐾 Pets <span class="n">${petList.length}</span></a></div>`));
+  }
   if (!people.length) {
     const busy = st.enrich_pending || st.pending;
     const off = st.faces_state === "off" || st.faces_state.startsWith("unavailable");
     view.append(hidden ? emptyState("🙈", "Nobody is hidden", "")
+      : pets ? emptyState("🐾", "No pets yet", "Cats and dogs that appear in two or more photos show up here.")
       : off ? emptyState("🙂", "Face grouping is unavailable", esc(st.faces_state === "off" ? "It was switched off (LUMEN_FACES=0)." : st.faces_state))
       : emptyState(busy ? "⏳" : "🙂", busy ? "Looking for faces…" : "No people yet", busy
         ? `Lumen is still going through your photos (${fmt(st.enrich_pending + st.pending)} to go). People appear here as soon as someone shows up in two or more photos.`
@@ -1143,7 +1228,7 @@ async function renderPerson(view, id) {
       <span class="avatar big">${p.face_id ? `<img src="${faceUrl(p.face_id)}" alt="">` : I.person}</span>
       <div class="person-meta">
         <input class="name-input" maxlength="80" placeholder="Who is this?" value="${esc(p.name || "")}" aria-label="Name">
-        <p class="muted">${plural(p.count, "photo")}${p.hidden ? " · hidden" : ""} · <span class="save-hint">${p.name ? "Click the name to rename" : "Type a name and press Enter"}</span></p>
+        <p class="muted">${p.kind === "pet" ? (p.species === "dog" ? "🐶 Dog · " : "🐱 Cat · ") : ""}${plural(p.count, "photo")}${p.hidden ? " · hidden" : ""} · <span class="save-hint">${p.name ? "Click the name to rename" : "Type a name and press Enter"}</span></p>
       </div>
       <div class="row-actions"></div></section>`);
   const input = $(".name-input", head);
@@ -1157,7 +1242,7 @@ async function renderPerson(view, id) {
       toast(name ? `Saved. Try searching “${esc(name)} smiling” ✨` : "Name removed");
     } catch (e) {
       if (e.status === 409) {
-        const other = (await api("/api/people")).find((x) => (x.name || "").toLowerCase() === name.toLowerCase());
+        const other = (await api(`/api/people?kind=${p.kind || "person"}`)).find((x) => (x.name || "").toLowerCase() === name.toLowerCase());
         if (other && (await confirmDialog(`Merge with ${name}?`, `Someone is already called “${name}”. Are these the same person?`, "Yes, merge"))) {
           await api("/api/people/merge", { method: "POST", body: { into: other.id, person_ids: [id] } });
           go(`#/person/${other.id}`);
@@ -1175,9 +1260,9 @@ async function renderPerson(view, id) {
   btn(p.hidden ? "Unhide" : "Hide", I.eyeoff, async () => {
     await api(`/api/people/${id}`, { method: "PATCH", body: { hidden: !p.hidden } }).catch(fail);
     toast(p.hidden ? "Back in People" : "Hidden. Find them under People → Hidden");
-    go(p.hidden ? `#/person/${id}` : "#/people");
+    go(p.hidden ? `#/person/${id}` : p.kind === "pet" ? "#/people?kind=pet" : "#/people");
   });
-  if (p.name) {
+  if (p.name && p.kind !== "pet") {
     const moods = [["😊", "smiling"], ["😂", "laughing"], ["😮", "surprised"], ["😐", "serious"], ["😢", "sad"]];
     $(".person-meta", head).append(h(`<div class="chips" style="margin-top:10px">${moods.map(([e, w]) =>
       `<a class="chip" href="#/search?q=${encodeURIComponent(p.name + " " + w)}">${e} ${esc(p.name)} ${w}</a>`).join("")}</div>`));
@@ -1199,7 +1284,7 @@ async function renderPerson(view, id) {
 }
 
 async function openMergePeople(p) {
-  const others = (await api("/api/people")).filter((x) => x.id !== p.id);
+  const others = (await api(`/api/people?kind=${p.kind || "person"}`)).filter((x) => x.id !== p.id);
   const chosen = new Set();
   const m = openModal(`
     <div class="modal-head"><div><h2>Who else is ${esc(p.name || "this")}?</h2><p>Pick the groups that are the same person. Lumen sometimes splits one person into several groups (e.g. as a child and as an adult).</p></div>
@@ -1594,6 +1679,25 @@ document.addEventListener("keydown", (e) => {
     (state.view === "home" ? $(".hero-search input") : $("#top-search-input"))?.focus();
   }
   if (e.key === "Escape" && !typing && state.selection.size) clearSelection();
+});
+
+// Search by picture: the camera button, or drop an image anywhere.
+const picInput = h('<input type="file" accept="image/*" hidden>');
+document.body.append(picInput);
+picInput.onchange = () => { searchByPicture(picInput.files[0]); picInput.value = ""; };
+$("#pic-search").onclick = () => picInput.click();
+let dragDepth = 0;
+const dropHint = h('<div class="drop-hint" hidden><div>📷<strong>Drop a picture</strong><span>to find photos that look like it</span></div></div>');
+document.body.append(dropHint);
+window.addEventListener("dragenter", (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragDepth++; dropHint.hidden = false; } });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; dropHint.hidden = true; } });
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  dropHint.hidden = true;
+  const f = e.dataTransfer?.files?.[0];
+  if (f) searchByPicture(f);
 });
 
 window.addEventListener("hashchange", route);

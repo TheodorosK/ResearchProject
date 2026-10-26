@@ -168,21 +168,22 @@ def _unit(v):
     return v / (np.linalg.norm(v, axis=-1, keepdims=True) + 1e-8)
 
 
-def cluster_new_faces():
+def cluster_new_faces(kind="person", assign=ASSIGN_THRESHOLD, link=LINK_THRESHOLD):
     """Assign unassigned faces to people. Existing people stay put; only new faces move.
 
     1. A face close enough to an existing person's centre joins that person.
     2. The rest are grouped with each other; every group of two or more becomes a new,
        unnamed person. Lone faces wait for company.
     """
-    loose = db.q("SELECT id, embedding FROM faces WHERE person_id IS NULL AND locked=0 ORDER BY score DESC")
+    loose = db.q("SELECT id, embedding FROM faces WHERE person_id IS NULL AND locked=0 AND kind=? "
+                 "ORDER BY score DESC", (kind,))
     if not loose:
         return 0
     ids = np.array([r["id"] for r in loose])
     vecs = _unit(np.stack([_emb(r["embedding"]) for r in loose]))
     assignments = {}
 
-    people = db.q("SELECT person_id, embedding FROM faces WHERE person_id IS NOT NULL")
+    people = db.q("SELECT person_id, embedding FROM faces WHERE person_id IS NOT NULL AND kind=?", (kind,))
     if people:
         pids = np.array([r["person_id"] for r in people])
         pvecs = np.stack([_emb(r["embedding"]) for r in people])
@@ -190,7 +191,7 @@ def cluster_new_faces():
         centres = _unit(np.stack([pvecs[pids == p].mean(0) for p in uniq]))
         sims = vecs @ centres.T
         best = sims.argmax(1)
-        for i in np.nonzero(sims[np.arange(len(ids)), best] >= ASSIGN_THRESHOLD)[0]:
+        for i in np.nonzero(sims[np.arange(len(ids)), best] >= assign)[0]:
             assignments[int(ids[i])] = int(uniq[best[i]])
 
     # Greedy centroid ("leader") clustering: unlike single-link it doesn't chain different
@@ -205,7 +206,7 @@ def cluster_new_faces():
         if k:
             sims = centres[:k] @ v
             j = int(sims.argmax())
-            if sims[j] >= LINK_THRESHOLD:
+            if sims[j] >= link:
                 members[j].append(int(ids[i]))
                 sums[j] += v
                 centres[j] = sums[j] / (np.linalg.norm(sums[j]) + 1e-8)
@@ -218,7 +219,7 @@ def cluster_new_faces():
     with db.tx() as c:
         c.executemany("UPDATE faces SET person_id=? WHERE id=?", [(p, f) for f, p in assignments.items()])
         for g in new_groups:
-            pid = c.execute("INSERT INTO persons(created_at) VALUES(?)", (db.now(),)).lastrowid
+            pid = c.execute("INSERT INTO persons(created_at, kind) VALUES(?, ?)", (db.now(), kind)).lastrowid
             c.executemany("UPDATE faces SET person_id=? WHERE id=?", [(pid, f) for f in g])
     return len(assignments) + sum(len(g) for g in new_groups)
 
@@ -233,7 +234,7 @@ def score_expressions(limit=512):
     """Read the expression of faces that don't have one yet, from their thumbnails. Returns how many."""
     from PIL import Image
 
-    rows = db.q("SELECT id FROM faces WHERE expr_probs IS NULL LIMIT ?", (limit,))
+    rows = db.q("SELECT id FROM faces WHERE expr_probs IS NULL AND kind='person' LIMIT ?", (limit,))
     if not rows or not engine.enabled:
         return 0
     ids, thumbs = [], []

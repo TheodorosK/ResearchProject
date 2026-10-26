@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
-from . import config, db, embedder, faces, places, quality
+from . import config, db, embedder, faces, ocr, pets, places, quality
 from .vectors import index
 
 try:  # iPhone photos
@@ -205,15 +205,15 @@ def _catch_up(row):
 def _write_meta(c, pid, meta):
     """Store places/fingerprint/faces for one photo inside an open transaction."""
     c.execute(
-        "UPDATE photos SET phash=?, sharpness=?, brightness=?, hi_clip=?, lo_clip=?, meta_v=? WHERE id=?",
-        (meta["phash"], meta["sharpness"], meta["brightness"], meta["hi_clip"], meta["lo_clip"],
+        "UPDATE photos SET phash=?, sharpness=?, brightness=?, hi_clip=?, lo_clip=?, palette=?, meta_v=? WHERE id=?",
+        (meta["phash"], meta["sharpness"], meta["brightness"], meta["hi_clip"], meta["lo_clip"], meta["palette"],
          config.META_VERSION, pid),
     )
     if "lat" in meta:
         c.execute("UPDATE photos SET lat=?, lon=? WHERE id=?", (meta["lat"], meta["lon"], pid))
     if meta.get("faces") is not None and faces.engine.enabled:
-        old = [r["id"] for r in c.execute("SELECT id FROM faces WHERE photo_id=?", (pid,))]
-        c.execute("DELETE FROM faces WHERE photo_id=?", (pid,))
+        old = [r["id"] for r in c.execute("SELECT id FROM faces WHERE photo_id=? AND kind='person'", (pid,))]
+        c.execute("DELETE FROM faces WHERE photo_id=? AND kind='person'", (pid,))
         faces.delete_face_thumbs(old)
         faces.save_faces(c, pid, meta["faces"])
         c.execute("UPDATE photos SET faces_v=1 WHERE id=?", (pid,))
@@ -306,6 +306,12 @@ class Indexer:
                     self._catch_up_all()
                 while places.geocode_pending():
                     pass
+                while not self.paused and not self._scan_requested.is_set() \
+                        and not db.one("SELECT 1 FROM photos WHERE status='pending' LIMIT 1"):
+                    self.state = "reading"
+                    stop = lambda: self.paused or self._scan_requested.is_set()  # noqa: E731
+                    if not (ocr.run_pending(should_stop=stop) + pets.run_pending(should_stop=stop)):
+                        break
                 self._group_faces()
             except Exception as e:  # keep the worker alive no matter what
                 self.last_error = f"{type(e).__name__}: {e}"
@@ -390,7 +396,7 @@ class Indexer:
             with db.tx() as c:
                 c.executemany(
                     "UPDATE photos SET size=?, mtime=?, status='pending', width=NULL, error=NULL, "
-                    "meta_v=0, faces_v=0 WHERE id=?",
+                    "meta_v=0, faces_v=0, ocr_v=0, pets_v=0 WHERE id=?",
                     changed,
                 )
                 face_ids = [r["id"] for r in c.execute(
@@ -486,6 +492,7 @@ def delete_photos(ids):
             marks = ",".join("?" * len(chunk))
             face_ids += [r["id"] for r in c.execute(f"SELECT id FROM faces WHERE photo_id IN ({marks})", chunk)]
             c.execute(f"DELETE FROM photos WHERE id IN ({marks})", chunk)
+            c.execute(f"DELETE FROM photo_text WHERE rowid IN ({marks})", chunk)
         # People left without any face disappear.
         c.execute("DELETE FROM persons WHERE id NOT IN (SELECT DISTINCT person_id FROM faces "
                   "WHERE person_id IS NOT NULL)")

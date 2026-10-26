@@ -10,13 +10,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import config, db, duplicates, embedder, events, faces, jobs, places, quality, search
+from . import config, db, describe, duplicates, embedder, events, faces, jobs, ocr, places, quality, search
 from .indexer import delete_photos, preview_path, switch_model, worker
 from .vectors import index
 
@@ -352,10 +352,12 @@ def photo_detail(photo_id: int):
         "error": r["error"],
         "collections": [dict(c) for c in cols],
         "people": [_face_entry(p) for p in db.q(
-            "SELECT f.id face_id, f.x, f.y, f.w, f.h, f.expr_probs, p.id, p.name FROM faces f "
+            "SELECT f.id face_id, f.x, f.y, f.w, f.h, f.expr_probs, f.kind, f.species, p.id, p.name FROM faces f "
             "LEFT JOIN persons p ON p.id=f.person_id WHERE f.photo_id=? AND (p.hidden IS NULL OR p.hidden=0) "
             "ORDER BY f.x", (photo_id,))],
         "quality": quality.scores().get(photo_id, (None, None))[1],
+        "text": ocr.text_of(photo_id),
+        "seen": describe.describe(photo_id),
         "sharpness": r["sharpness"],
     }
 
@@ -451,6 +453,28 @@ def similar_many(body: IdsIn):
 
 
 # ---------------------------------------------------------------- search & discovery
+def _hex_param(v: str | None):
+    import re
+
+    return [h.lower() for h in (v or "").split(",") if re.fullmatch(r"#?[0-9a-fA-F]{6}", h.strip())][:5]
+
+
+@app.post("/api/search/image")
+async def search_by_image(file: UploadFile, limit: int = Query(200, le=1000)):
+    """Find photos that look like an image you drop in (from anywhere, even the web)."""
+    require_model()
+    try:
+        im = Image.open(io.BytesIO(await file.read()))
+        im = ImageOps.exif_transpose(im).convert("RGB")
+    except Exception:
+        raise HTTPException(400, "That file isn't an image Lumen can read")
+    im.thumbnail((config.PREVIEW_SIZE, config.PREVIEW_SIZE))
+    v = embedder.get().embed_images([im])[0]
+    ids, mat = index.snapshot()
+    hits = search._rank(mat @ v, ids, limit, search.TIER_MAYBE, min_count=24) if len(ids) else []
+    return {"items": hydrate(hits), "indexed": len(ids)}
+
+
 def _ids_param(v: str | None):
     return [int(x) for x in (v or "").split(",") if x.strip().isdigit()][:200]
 
@@ -459,16 +483,17 @@ def _ids_param(v: str | None):
 def do_search(
     q: str = "", limit: int = Query(300, le=1000), folder_id: int | None = None,
     year_from: int | None = None, year_to: int | None = None, collection_id: int | None = None,
-    sort: str = "relevance", like: str | None = None, dislike: str | None = None,
+    sort: str = "relevance", like: str | None = None, dislike: str | None = None, colors: str | None = None,
 ):
     require_model()
     like_ids, dislike_ids = _ids_param(like), _ids_param(dislike)
     hits = search.text_search(q, limit, sort=sort, filters=filters_from(folder_id, year_from, year_to, collection_id),
-                              like=like_ids, dislike=dislike_ids)
+                              like=like_ids, dislike=dislike_ids, colors=_hex_param(colors))
     u = search.understand(q)
     label = u["expression"]
     expression = {"label": label, "emoji": faces.EXPRESSION_EMOJI[label], "everyone": u["everyone"]} if label else None
     return {"query": q, "parsed": {"positive": u["positive"], "negatives": u["negatives"], "people": u["people"],
+                                   "phrases": u["phrases"], "colors": _hex_param(colors),
                                    "places": [p["label"] for p in u["places"]], "when": u["when"].label or None,
                                    "expression": expression, "like": like_ids, "dislike": dislike_ids},
             "items": hydrate(hits), "indexed": len(index)}
@@ -488,6 +513,7 @@ def home():
         "recent": hydrate([r["id"] for r in db.q(
             "SELECT id FROM photos WHERE status='ready' ORDER BY id DESC LIMIT 12")]),
         "people": list_people()[:12],
+        "pets": list_people(kind="pet")[:8],
         "memories": [] if loading else [_memory_card(m) for m in events.compute()[:10]],
         "tidy": duplicates.summary(),
         "places": db.one("SELECT COUNT(*) n FROM photos WHERE status='ready' AND lat IS NOT NULL")["n"],
@@ -661,16 +687,21 @@ def person_or_404(pid: int):
 def person_dict(p, count=None):
     if count is None:
         count = db.one("SELECT COUNT(DISTINCT photo_id) n FROM faces WHERE person_id=?", (p["id"],))["n"]
+    species = None
+    if p["kind"] == "pet":
+        row = db.one("SELECT species, COUNT(*) n FROM faces WHERE person_id=? GROUP BY species ORDER BY n DESC",
+                     (p["id"],))
+        species = row["species"] if row else None
     return {"id": p["id"], "name": p["name"], "hidden": bool(p["hidden"]), "count": count,
-            "face_id": faces.cover_face(p["id"])}
+            "face_id": faces.cover_face(p["id"]), "kind": p["kind"], "species": species}
 
 
 @app.get("/api/people")
-def list_people(hidden: bool = False):
+def list_people(hidden: bool = False, kind: str = "person"):
     rows = db.q(
         "SELECT p.*, COUNT(DISTINCT f.photo_id) n FROM persons p JOIN faces f ON f.person_id=p.id "
-        "WHERE p.hidden=? GROUP BY p.id ORDER BY (p.name IS NULL OR p.name=''), n DESC",
-        (int(hidden),),
+        "WHERE p.hidden=? AND p.kind=? GROUP BY p.id ORDER BY (p.name IS NULL OR p.name=''), n DESC",
+        (int(hidden), kind),
     )
     return [person_dict(r, r["n"]) for r in rows]
 
@@ -704,7 +735,10 @@ def update_person(pid: int, body: PersonPatch):
 def merge_people(body: MergeIn):
     """Fold several people into one: 'these are all Maria'."""
     target = person_or_404(body.into)
-    others = [p for p in body.person_ids if p != body.into]
+    # People merge with people, pets with pets.
+    others = [p["id"] for p in db.q(
+        f"SELECT id FROM persons WHERE kind=? AND id IN ({','.join('?' * len(body.person_ids))})",
+        [target["kind"], *body.person_ids]) if p["id"] != body.into] if body.person_ids else []
     with db.tx() as c:
         name = target["name"]
         for p in others:

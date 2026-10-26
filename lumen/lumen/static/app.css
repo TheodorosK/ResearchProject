@@ -126,6 +126,7 @@ body.on-home .top-search { visibility: hidden; }
 
 /* ------------------------------------------------------------ layout */
 main { padding: 28px 24px 140px; max-width: 1600px; margin: 0 auto; outline: none; }
+main:focus, main:focus-visible { outline: none; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 8px 0 22px; }
 .page-head h1 { margin: 0; font-family: var(--display); font-size: clamp(26px, 3vw, 36px); letter-spacing: -.02em; line-height: 1.15; }
 .page-head p { margin: 4px 0 0; color: var(--muted); }
@@ -372,6 +373,24 @@ main { padding: 28px 24px 140px; max-width: 1600px; margin: 0 auto; outline: non
 .ss-controls .icon-btn { color: #fff; }
 .ss-controls .icon-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
 .ss-count { font-size: 13px; opacity: .8; margin: 0 8px; min-width: 56px; text-align: center; }
+
+/* description, text, colours, picture search */
+.lb-caption { margin: 0 0 8px; font-size: 15px; }
+.lb-text { margin: 0; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.06); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; max-height: 180px; overflow: auto; }
+.lb-side h4 .link { float: right; text-transform: none; letter-spacing: 0; }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); vertical-align: -2px; }
+.swatch + .swatch { margin-left: -4px; }
+.swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; }
+.swatch-grid button, .custom-swatch { height: 44px; border-radius: 12px; border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+.swatch-grid button.on { box-shadow: 0 0 0 3px var(--accent); }
+.custom-swatch { display: grid; place-items: center; font-size: 22px; color: var(--muted); background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); position: relative; }
+.custom-swatch input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.chosen { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.top-search .icon-btn.small { width: 30px; height: 30px; }
+.drop-hint { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(6px); pointer-events: none; }
+.drop-hint > div { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 40px 56px; border: 3px dashed var(--accent); border-radius: 28px; background: var(--surface); font-size: 44px; box-shadow: var(--shadow-lg); }
+.drop-hint strong { font-size: 22px; }
+.drop-hint span { font-size: 15px; color: var(--muted); }
 
 /* refine & video */
 .refine-bar { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 14px; background: var(--accent-soft); flex-wrap: wrap; }

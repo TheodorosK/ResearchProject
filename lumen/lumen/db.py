@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS video_frames (
     model TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS video_frames_photo ON video_frames(photo_id);
+CREATE VIRTUAL TABLE IF NOT EXISTS photo_text USING fts5(text, tokenize='unicode61 remove_diacritics 2');
 CREATE TABLE IF NOT EXISTS dup_ignored (
     group_key TEXT PRIMARY KEY
 );
@@ -118,9 +119,18 @@ MIGRATIONS = {
         "place_cc": "TEXT",
         "kind": "TEXT NOT NULL DEFAULT 'photo'",   # photo | video
         "duration": "REAL",           # seconds, videos only
+        "ocr_v": "INTEGER NOT NULL DEFAULT 0",    # 0 = not considered, 1 = read, 2 = skipped (no text)
+        "pets_v": "INTEGER NOT NULL DEFAULT 0",   # same, for looking for cats and dogs
+        "palette": "TEXT",            # dominant colours, see colors.palette
+    },
+    "persons": {
+        "kind": "TEXT NOT NULL DEFAULT 'person'",  # person | pet
     },
     "faces": {
         "expr_probs": "BLOB",         # FER+ probabilities, float16 x 8, see faces.EXPRESSIONS
+        "kind": "TEXT NOT NULL DEFAULT 'person'",  # person (SFace fingerprint) | pet (image-model fingerprint)
+        "species": "TEXT",            # cat | dog
+        "model": "TEXT",              # image model that fingerprinted a pet
     },
 }
 

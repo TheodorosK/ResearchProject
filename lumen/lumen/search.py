@@ -6,7 +6,7 @@ from datetime import datetime
 
 import numpy as np
 
-from . import dates, db, embedder, faces, places, quality
+from . import colors as colour, dates, db, embedder, faces, ocr, places, quality
 from .vectors import index
 
 # Cutoffs on a robust z-score (median/MAD of the whole library), so they hold for any model and
@@ -105,7 +105,8 @@ EXPRESSION_STEMS = {
     "φοβισμέν": "fear", "φοβισμεν": "fear", "σοβαρ": "neutral",
 }
 EVERYONE_WORDS = {"everyone", "everybody", "all", "όλοι", "ολοι"}
-EXPRESSION_WEIGHT = 3.0   # z-score units added for a confident expression match
+EXPRESSION_WEIGHT = 3.0
+TEXT_WEIGHT = 2.5        # z-score units for a photo whose recognised text contains the query words   # z-score units added for a confident expression match
 
 SUGGESTIONS = [
     "golden hour at the beach", "my dog sleeping on the couch", "a birthday cake with candles",
@@ -151,12 +152,14 @@ def _strip_filler(text):
 def understand(raw: str):
     """Split a query into what to look for and who/where/when it should be."""
     positive, negatives = parse_query(raw)
+    phrases = [p for p in re.findall(r'"([^"]+)"', positive) if p.strip()]
+    positive = positive.replace('"', " ")
     positive, people = people_in_query(positive)
     positive, where = places.places_in_query(positive)
     positive, when = dates.parse(positive)
     positive = _strip_filler(positive)
     label, everyone = expression_in_query(positive)
-    return {"positive": positive, "negatives": negatives, "people": people, "places": where,
+    return {"positive": positive, "negatives": negatives, "phrases": phrases, "people": people, "places": where,
             "when": when, "expression": label, "everyone": everyone}
 
 
@@ -256,8 +259,8 @@ def _rank(scores, ids, limit, min_z, mask=None, exclude=(), min_count=0, bonus=N
 
 
 def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=MIN_RESULTS, sort="relevance",
-                like=(), dislike=()):
-    hits = _text_search(raw, limit, filters, min_z, min_count, like=like, dislike=dislike)
+                like=(), dislike=(), colors=()):
+    hits = _text_search(raw, limit, filters, min_z, min_count, like=like, dislike=dislike, colors=colors)
     if sort == "quality":
         s = quality.scores()
         order = {"best": 0, "good": 1, "maybe": 2}
@@ -265,13 +268,13 @@ def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=M
     return hits
 
 
-def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=()):
+def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=(), colors=()):
     ids, mat = index.snapshot()
     if not len(ids):
         return []
     u = understand(raw)
     positive, negatives, people = u["positive"], u["negatives"], u["people"]
-    if not (positive or negatives or people or u["places"] or u["when"] or like):
+    if not (positive or negatives or people or u["places"] or u["when"] or like or u["phrases"] or colors):
         return []
     mask = _filtered(ids, filters)
 
@@ -284,13 +287,16 @@ def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=()):
         narrow(set(faces.person_photo_ids(p["id"])))
     for pl in u["places"]:
         narrow(places.photo_ids_for(pl))
+    if u["phrases"]:
+        # "Quoted words" must be written in the photo.
+        narrow(ocr.phrase_ids(u["phrases"]))
     date_mask, date_bonus = dates.mask_and_bonus(u["when"], ids, _taken(ids))
     if date_mask is not None:
         mask = date_mask if mask is None else mask & date_mask
-    if mask is not None and (people or u["places"] or date_mask is not None):
+    if mask is not None and (people or u["places"] or date_mask is not None or u["phrases"]):
         # Every photo that satisfies who/where/when should be shown, ranked by the rest.
         min_count = min(limit, int(mask.sum()))
-    if not positive and not negatives and not like and mask is not None:
+    if not positive and not negatives and not like and not colors and mask is not None:
         # Only who/where/when ("Maria in Crete last summer"): all of them, newest first.
         taken = _taken(ids)
         sel = np.nonzero(mask)[0]
@@ -300,11 +306,22 @@ def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=()):
     qv = embedder.embed_query(positive) if positive else np.zeros(mat.shape[1], dtype=np.float32)
     if like or dislike:
         qv = refine(qv, like, dislike, ids, mat)
-    scores, moments = _video_moments(qv, ids, mat @ qv)
+    if colors and not positive and not like:
+        # Colours alone: rank purely by how much of the photo is made of them.
+        scores, moments = colour.scores(ids, colors), {}
+    else:
+        scores, moments = _video_moments(qv, ids, mat @ qv)
     # Among similar matches, prefer the better-looking photo.
     bonus = quality.bonus(ids)
     if date_bonus is not None:
         bonus = bonus + date_bonus
+    if colors and (positive or like):
+        bonus = bonus + 1.5 * np.clip(robust_z(colour.scores(ids, colors)), -1, 3)
+    if positive:
+        # Words written in the photo (signs, menus, receipts) count too.
+        text_hits = ocr.matches(positive)
+        if text_hits:
+            bonus = bonus + TEXT_WEIGHT * np.array([text_hits.get(int(i), 0.0) for i in ids])
     if u["expression"]:
         p = _expression_scores(ids, u["expression"], [x["id"] for x in people], u["everyone"])
         # Faces that show the expression rise; photos without readable faces sink a little.
