@@ -6,3 +6,5 @@ pillow>=10.0
 pillow-heif>=0.16
 opencv-python-headless>=4.9
 send2trash>=1.8
+reverse_geocoder>=1.5
+av>=12.0

@@ -53,6 +53,13 @@ CREATE TABLE IF NOT EXISTS faces (
 );
 CREATE INDEX IF NOT EXISTS faces_photo ON faces(photo_id);
 CREATE INDEX IF NOT EXISTS faces_person ON faces(person_id);
+CREATE TABLE IF NOT EXISTS video_frames (
+    photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+    t REAL NOT NULL,                          -- seconds into the video
+    embedding BLOB NOT NULL,
+    model TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS video_frames_photo ON video_frames(photo_id);
 CREATE TABLE IF NOT EXISTS dup_ignored (
     group_key TEXT PRIMARY KEY
 );
@@ -105,6 +112,12 @@ MIGRATIONS = {
         "brightness": "REAL",         # mean luminance 0-255
         "hi_clip": "REAL",            # share of blown-out highlight pixels
         "lo_clip": "REAL",            # share of crushed shadow pixels
+        "place_city": "TEXT",
+        "place_region": "TEXT",
+        "place_country": "TEXT",
+        "place_cc": "TEXT",
+        "kind": "TEXT NOT NULL DEFAULT 'photo'",   # photo | video
+        "duration": "REAL",           # seconds, videos only
     },
     "faces": {
         "expr_probs": "BLOB",         # FER+ probabilities, float16 x 8, see faces.EXPRESSIONS

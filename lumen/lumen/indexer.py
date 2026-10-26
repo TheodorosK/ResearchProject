@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
-from . import config, db, embedder, faces, quality
+from . import config, db, embedder, faces, places, quality
 from .vectors import index
 
 try:  # iPhone photos
@@ -93,10 +93,67 @@ def _open_original(path):
     return im, {"taken_at": taken, "camera": camera, "lat": lat, "lon": lon}
 
 
+def _parse_iso6709(s):
+    """'+37.9715+023.7257+050.000/' -> (37.9715, 23.7257)."""
+    import re
+
+    m = re.match(r"([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)", s or "")
+    return (float(m.group(1)), float(m.group(2))) if m else (None, None)
+
+
+def _prepare_video(row):
+    """Sample frames from a video: the middle one becomes the preview, all of them get embedded."""
+    import av
+
+    pid, path = row["id"], row["path"]
+    with av.open(path) as c:
+        stream = c.streams.video[0]
+        duration = float(c.duration / av.time_base) if c.duration else float((stream.duration or 0) * stream.time_base)
+        n = int(min(config.VIDEO_MAX_FRAMES, max(1, duration // config.VIDEO_SAMPLE_SECONDS)))
+        times = [duration * (k + 0.5) / n for k in range(n)] if duration else [0.0]
+        frames = []
+        for t in times:
+            try:
+                c.seek(int(t / stream.time_base), stream=stream, any_frame=False, backward=True)
+                frame = next(c.decode(stream))
+            except (StopIteration, av.error.FFmpegError):
+                continue
+            im = frame.to_image()
+            rot = getattr(frame, "rotation", 0) or 0
+            if rot:
+                im = im.rotate(rot, expand=True)
+            im.thumbnail((config.PREVIEW_SIZE, config.PREVIEW_SIZE), Image.Resampling.LANCZOS)
+            frames.append((round(t, 2), im.convert("RGB")))
+        if not frames:
+            raise ValueError("no decodable frames")
+        meta = c.metadata or {}
+        created = meta.get("creation_time")
+        taken = None
+        if created:
+            try:
+                taken = datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                pass
+        lat, lon = _parse_iso6709(meta.get("location") or meta.get("com.apple.quicktime.location.ISO6709"))
+    preview = frames[len(frames) // 2][1]
+    prev = preview_path(pid)
+    prev.parent.mkdir(parents=True, exist_ok=True)
+    preview.save(prev, "WEBP", quality=config.PREVIEW_QUALITY, method=4)
+    out = {"taken_at": taken, "camera": None, "lat": lat, "lon": lon, "width": preview.width,
+           "height": preview.height, "phash": dhash(preview), "duration": duration, "frames": frames,
+           "faces": faces.engine.detect(preview) if faces.engine.enabled else None, **quality.measure(preview)}
+    return pid, preview, out
+
+
 def _prepare(row):
     """Open one photo; return (id, preview image, metadata) or (id, None, error)."""
     pid, path = row["id"], row["path"]
     prev = preview_path(pid)
+    if row["kind"] == "video":
+        try:
+            return _prepare_video(row)
+        except Exception as e:
+            return pid, None, {"error": f"{type(e).__name__}: {e}"[:300]}
     try:
         if prev.exists() and row["width"]:
             # Already have a preview (e.g. switching models): embed from it, skip the original.
@@ -117,6 +174,8 @@ def _prepare(row):
 def _catch_up(row):
     """Extract what an older Lumen version didn't (places, fingerprint, faces) for an indexed photo."""
     pid = row["id"]
+    if row["kind"] == "video":
+        return pid, None  # videos get everything when indexed; nothing to catch up from the original
     want_faces = faces.engine.enabled and not row["faces_v"]
     try:
         if row["meta_v"] >= config.META_VERSION and not want_faces:
@@ -245,6 +304,8 @@ class Indexer:
                     self._index_pending()
                 if not self.paused and not self._scan_requested.is_set():
                     self._catch_up_all()
+                while places.geocode_pending():
+                    pass
                 self._group_faces()
             except Exception as e:  # keep the worker alive no matter what
                 self.last_error = f"{type(e).__name__}: {e}"
@@ -267,7 +328,7 @@ class Indexer:
             if db.one("SELECT 1 FROM photos WHERE status='pending' LIMIT 1"):
                 return
             rows = db.q(
-                "SELECT id, path, meta_v, faces_v FROM photos WHERE status='ready' AND "
+                "SELECT id, path, meta_v, faces_v, kind FROM photos WHERE status='ready' AND "
                 "(meta_v < ? OR (? AND faces_v=0)) ORDER BY id LIMIT ?",
                 (config.META_VERSION, int(faces.engine.enabled), config.BATCH_SIZE * 4),
             )
@@ -306,7 +367,7 @@ class Indexer:
             dirnames[:] = [d for d in dirnames if not d.startswith(".") and os.path.join(dirpath, d) != home]
             self.current = dirpath
             for name in filenames:
-                if name.startswith(".") or os.path.splitext(name)[1].lower() not in config.IMAGE_EXTENSIONS:
+                if name.startswith(".") or os.path.splitext(name)[1].lower() not in config.MEDIA_EXTENSIONS:
                     continue
                 full = os.path.join(dirpath, name)
                 try:
@@ -317,7 +378,8 @@ class Indexer:
                 seen.add(full)
                 prev = known.get(full)
                 if prev is None:
-                    new_rows.append((full, folder_id, st.st_size, st.st_mtime))
+                    kind = "video" if os.path.splitext(name)[1].lower() in config.VIDEO_EXTENSIONS else "photo"
+                    new_rows.append((full, folder_id, st.st_size, st.st_mtime, kind))
                 elif prev[1] != st.st_size or abs((prev[2] or 0) - st.st_mtime) > 1:
                     changed.append((st.st_size, st.st_mtime, prev[0]))
                 if len(new_rows) >= 500:
@@ -349,8 +411,8 @@ class Indexer:
         if rows:
             with db.tx() as c:
                 c.executemany(
-                    "INSERT OR IGNORE INTO photos(path, folder_id, size, mtime, status) "
-                    "VALUES(?, ?, ?, ?, 'pending')",
+                    "INSERT OR IGNORE INTO photos(path, folder_id, size, mtime, kind, status) "
+                    "VALUES(?, ?, ?, ?, ?, 'pending')",
                     rows,
                 )
 
@@ -362,7 +424,7 @@ class Indexer:
             if self._scan_requested.is_set():
                 return  # a new scan was asked for; the loop comes straight back
             rows = db.q(
-                "SELECT id, path, width FROM photos WHERE status='pending' ORDER BY id LIMIT ?",
+                "SELECT id, path, width, kind FROM photos WHERE status='pending' ORDER BY id LIMIT ?",
                 (config.BATCH_SIZE * 4,),
             )
             if not rows:
@@ -374,9 +436,24 @@ class Indexer:
             ok = [(pid, im, meta) for pid, im, meta in prepared if im is not None]
             bad = [(meta["error"], pid) for pid, im, meta in prepared if im is None]
             self.current = os.path.dirname(rows[-1]["path"])
-            vecs = emb.embed_images([im for _, im, _ in ok]) if ok else np.zeros((0, 0))
+            # Videos contribute several frames; the video's own vector is their average.
+            flat, spans = [], []
+            for _, im, meta in ok:
+                frames = (meta or {}).get("frames") or [(None, im)]
+                spans.append((len(flat), len(frames)))
+                flat += [f for _, f in frames]
+            flat_vecs = emb.embed_images(flat) if flat else np.zeros((0, 0))
+            vecs = np.stack([embedder._normalize(flat_vecs[a : a + n].mean(0)) for a, n in spans]) if ok else flat_vecs
             with db.tx() as c:
-                for (pid, _, meta), vec in zip(ok, vecs):
+                for (pid, _, meta), vec, (a, n) in zip(ok, vecs, spans):
+                    if meta and meta.get("frames"):
+                        c.execute("DELETE FROM video_frames WHERE photo_id=?", (pid,))
+                        c.executemany(
+                            "INSERT INTO video_frames(photo_id, t, embedding, model) VALUES(?,?,?,?)",
+                            [(pid, t, flat_vecs[a + k].astype(np.float16).tobytes(), emb.key)
+                             for k, (t, _) in enumerate(meta["frames"])],
+                        )
+                        c.execute("UPDATE photos SET duration=? WHERE id=?", (meta.get("duration"), pid))
                     blob = vec.astype(np.float16).tobytes()
                     if meta:
                         c.execute(

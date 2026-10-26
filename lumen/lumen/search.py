@@ -6,7 +6,7 @@ from datetime import datetime
 
 import numpy as np
 
-from . import db, embedder, faces, quality
+from . import dates, db, embedder, faces, places, quality
 from .vectors import index
 
 # Cutoffs on a robust z-score (median/MAD of the whole library), so they hold for any model and
@@ -140,10 +140,39 @@ def people_in_query(text: str):
         if pat.search(text):
             found.append({"id": r["id"], "name": r["name"]})
             text = pat.sub(" ", text)
+    return _strip_filler(text), found
+
+
+def _strip_filler(text):
     text = " ".join(text.split())
-    if all(w.lower().strip(",.") in FILLER for w in text.split()):
-        text = ""
-    return text, found
+    return "" if all(w.lower().strip(",.") in FILLER for w in text.split()) else text
+
+
+def understand(raw: str):
+    """Split a query into what to look for and who/where/when it should be."""
+    positive, negatives = parse_query(raw)
+    positive, people = people_in_query(positive)
+    positive, where = places.places_in_query(positive)
+    positive, when = dates.parse(positive)
+    positive = _strip_filler(positive)
+    label, everyone = expression_in_query(positive)
+    return {"positive": positive, "negatives": negatives, "people": people, "places": where,
+            "when": when, "expression": label, "everyone": everyone}
+
+
+_taken_cache = {"key": None, "arr": None}
+
+
+def _taken(ids):
+    if _taken_cache["key"] != index.version:
+        rows = dict(db.q("SELECT id, taken_at FROM photos WHERE status='ready'"))
+        _taken_cache.update(key=index.version,
+                            arr=np.array([rows.get(int(i)) or np.nan for i in ids], dtype=float))
+    arr = _taken_cache["arr"]
+    if len(arr) != len(ids):
+        _taken_cache["key"] = None
+        return _taken(ids)
+    return arr
 
 
 def expression_in_query(text: str):
@@ -226,8 +255,9 @@ def _rank(scores, ids, limit, min_z, mask=None, exclude=(), min_count=0, bonus=N
     return out
 
 
-def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=MIN_RESULTS, sort="relevance"):
-    hits = _text_search(raw, limit, filters, min_z, min_count)
+def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=MIN_RESULTS, sort="relevance",
+                like=(), dislike=()):
+    hits = _text_search(raw, limit, filters, min_z, min_count, like=like, dislike=dislike)
     if sort == "quality":
         s = quality.scores()
         order = {"best": 0, "good": 1, "maybe": 2}
@@ -235,34 +265,48 @@ def text_search(raw: str, limit=300, filters=None, min_z=TIER_MAYBE, min_count=M
     return hits
 
 
-def _text_search(raw, limit, filters, min_z, min_count):
+def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=()):
     ids, mat = index.snapshot()
     if not len(ids):
         return []
-    positive, negatives = parse_query(raw)
-    positive, people = people_in_query(positive)
-    if not positive and not negatives and not people:
+    u = understand(raw)
+    positive, negatives, people = u["positive"], u["negatives"], u["people"]
+    if not (positive or negatives or people or u["places"] or u["when"] or like):
         return []
     mask = _filtered(ids, filters)
-    if people:
-        allowed = set(faces.person_photo_ids(people[0]["id"]))
-        for p in people[1:]:
-            allowed &= set(faces.person_photo_ids(p["id"]))
-        in_people = np.isin(ids, np.fromiter(allowed, dtype=np.int64, count=len(allowed)))
-        mask = in_people if mask is None else mask & in_people
+
+    def narrow(allowed):
+        nonlocal mask
+        m = np.isin(ids, np.fromiter(allowed, dtype=np.int64, count=len(allowed)))
+        mask = m if mask is None else mask & m
+
+    for p in people:
+        narrow(set(faces.person_photo_ids(p["id"])))
+    for pl in u["places"]:
+        narrow(places.photo_ids_for(pl))
+    date_mask, date_bonus = dates.mask_and_bonus(u["when"], ids, _taken(ids))
+    if date_mask is not None:
+        mask = date_mask if mask is None else mask & date_mask
+    if mask is not None and (people or u["places"] or date_mask is not None):
+        # Every photo that satisfies who/where/when should be shown, ranked by the rest.
         min_count = min(limit, int(mask.sum()))
-        if not positive and not negatives:
-            # Just a name: everything with them, newest first.
-            keep = set(ids[mask].tolist())
-            ordered = [i for i in faces.person_photo_ids(people[0]["id"]) if i in keep][:limit]
-            return [{"id": i, "score": 1.0, "z": 9.0, "tier": "best"} for i in ordered]
+    if not positive and not negatives and not like and mask is not None:
+        # Only who/where/when ("Maria in Crete last summer"): all of them, newest first.
+        taken = _taken(ids)
+        sel = np.nonzero(mask)[0]
+        sel = sel[np.argsort(-np.nan_to_num(taken[sel], nan=0))][:limit]
+        return [{"id": int(ids[i]), "score": 1.0, "z": 9.0, "tier": "best"} for i in sel]
+
     qv = embedder.embed_query(positive) if positive else np.zeros(mat.shape[1], dtype=np.float32)
-    scores = mat @ qv
+    if like or dislike:
+        qv = refine(qv, like, dislike, ids, mat)
+    scores, moments = _video_moments(qv, ids, mat @ qv)
     # Among similar matches, prefer the better-looking photo.
     bonus = quality.bonus(ids)
-    label, everyone = expression_in_query(positive)
-    if label:
-        p = _expression_scores(ids, label, [x["id"] for x in people], everyone)
+    if date_bonus is not None:
+        bonus = bonus + date_bonus
+    if u["expression"]:
+        p = _expression_scores(ids, u["expression"], [x["id"] for x in people], u["everyone"])
         # Faces that show the expression rise; photos without readable faces sink a little.
         bonus = bonus + np.where(np.isnan(p), -0.5, EXPRESSION_WEIGHT * (np.nan_to_num(p) - 0.3))
     if negatives:
@@ -270,7 +314,62 @@ def _text_search(raw, limit, filters, min_z, min_count):
         neg = np.stack([embedder.embed_query(n) for n in negatives])
         neg_scores = (mat @ neg.T).max(1)
         scores = scores - 0.5 * np.maximum(neg_scores - neg_scores.mean(), 0)
-    return _rank(scores, ids, limit, min_z, mask, min_count=min_count, bonus=bonus)
+    hits = _rank(scores, ids, limit, min_z, mask, min_count=min_count, bonus=bonus, exclude=dislike)
+    for h in hits:
+        if h["id"] in moments:
+            h["t"] = moments[h["id"]]
+    return hits
+
+
+_frames_cache = {"key": None}
+
+
+def _frames():
+    """(video ids, times, matrix) of every sampled video frame for the current model."""
+    model = embedder.get().key
+    key = (model, tuple(db.one("SELECT COUNT(*), MAX(rowid) FROM video_frames WHERE model=?", (model,))))
+    if _frames_cache["key"] != key:
+        rows = db.q("SELECT photo_id, t, embedding FROM video_frames WHERE model=?", (model,))
+        _frames_cache.update(
+            key=key,
+            ids=np.array([r["photo_id"] for r in rows], dtype=np.int64),
+            t=np.array([r["t"] for r in rows], dtype=float),
+            mat=np.stack([np.frombuffer(r["embedding"], dtype=np.float16) for r in rows]).astype(np.float32)
+            if rows else np.zeros((0, 0), dtype=np.float32),
+        )
+    return _frames_cache["ids"], _frames_cache["t"], _frames_cache["mat"]
+
+
+def _video_moments(qv, ids, scores):
+    """Let a video score as well as its best-matching frame; remember where that moment is."""
+    fids, ft, fmat = _frames()
+    if not len(fids):
+        return scores, {}
+    fs = fmat @ qv
+    best = {}
+    for k in np.argsort(fs):  # ascending, so the best frame per video is written last
+        best[int(fids[k])] = (float(fs[k]), float(ft[k]))
+    pos = {int(i): k for k, i in enumerate(ids)}
+    scores = scores.copy()
+    for vid, (sc, _) in best.items():
+        k = pos.get(vid)
+        if k is not None and sc > scores[k]:
+            scores[k] = sc
+    return scores, {vid: t for vid, (_, t) in best.items()}
+
+
+def refine(qv, like, dislike, ids, mat, alpha=1.0, beta=0.8, gamma=0.5):
+    """Rocchio relevance feedback: move the query towards liked photos and away from disliked ones."""
+    pos = {int(i): k for k, i in enumerate(ids)}
+    lv = [mat[pos[i]] for i in like if i in pos]
+    dv = [mat[pos[i]] for i in dislike if i in pos]
+    q = alpha * qv
+    if lv:
+        q = q + beta * np.mean(lv, axis=0)
+    if dv:
+        q = q - gamma * np.mean(dv, axis=0)
+    n = np.linalg.norm(q)
+    return q / n if n else qv
 
 
 def similar(photo_id: int, limit=60, filters=None):

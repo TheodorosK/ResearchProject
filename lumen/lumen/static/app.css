@@ -346,6 +346,43 @@ main { padding: 28px 24px 140px; max-width: 1600px; margin: 0 auto; outline: non
 .fb-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
 .fb-sub .input { height: 34px; flex: 1; min-width: 160px; }
 
+/* ------------------------------------------------------------ memories & slideshow */
+.memory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+.memory { position: relative; display: block; text-decoration: none; border-radius: 20px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); transition: transform .2s, box-shadow .2s; }
+.memory:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.memory .badge { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, .55); color: #fff; backdrop-filter: blur(6px); }
+.memory-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 2px; }
+.memory-body strong { font-family: var(--display); font-size: 16px; line-height: 1.25; }
+.memory-body span { color: var(--muted); font-size: 13px; }
+.scroller.memories { grid-auto-columns: minmax(260px, 300px); }
+.slideshow { position: fixed; inset: 0; z-index: 100; background: #000; color: #fff; cursor: none; }
+.slideshow.show-ui { cursor: default; }
+.ss-stage { position: absolute; inset: 0; overflow: hidden; }
+.ss-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 1.2s ease; animation: kenburns linear forwards; }
+.ss-img.in { opacity: 1; }
+@keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.12); } }
+.ss-title { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; background: radial-gradient(circle, rgba(0,0,0,.55), rgba(0,0,0,.25)); transition: opacity 1s; pointer-events: none; padding: 20px; }
+.ss-title h2 { margin: 0; font-family: var(--display); font-size: clamp(30px, 5vw, 64px); letter-spacing: -.03em; text-shadow: 0 4px 30px rgba(0,0,0,.5); }
+.ss-title p { margin: 8px 0 0; font-size: 18px; opacity: .85; }
+.ss-title.gone { opacity: 0; }
+.ss-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.12); }
+.ss-bar i { display: block; height: 100%; width: 0; background: var(--grad); }
+.ss-controls { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(20, 20, 26, .7); backdrop-filter: blur(10px); opacity: 0; transition: opacity .3s; }
+.slideshow.show-ui .ss-controls { opacity: 1; }
+.ss-controls .icon-btn { color: #fff; }
+.ss-controls .icon-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
+.ss-count { font-size: 13px; opacity: .8; margin: 0 8px; min-width: 56px; text-align: center; }
+
+/* refine & video */
+.refine-bar { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 14px; background: var(--accent-soft); flex-wrap: wrap; }
+.refine-bar .icon { color: var(--accent); }
+.quick button.on { background: var(--accent); color: var(--accent-ink); }
+.vid-badge { position: absolute; left: 8px; bottom: 8px; z-index: 2; display: inline-flex; gap: 4px; align-items: center; padding: 2px 8px 2px 4px; border-radius: 999px; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; font-weight: 700; }
+.vid-badge .icon { width: 14px; height: 14px; fill: #fff; stroke: none; }
+.lb-video { max-width: 100%; max-height: calc(100vh - 112px); border-radius: 6px; background: #000; grid-area: 1 / 1; }
+.lb-novideo { grid-area: 1 / 1; text-align: center; }
+.lb-novideo img { max-width: 100%; max-height: 50vh; border-radius: 6px; opacity: .6; }
+
 /* ------------------------------------------------------------ sources */
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 22px; box-shadow: var(--shadow); }
 .panel + .panel { margin-top: 18px; }

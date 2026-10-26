@@ -16,6 +16,11 @@ IMAGE_EXTENSIONS = {
     ".heic", ".heif", ".avif",
 }
 
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".3gp", ".webm", ".mkv", ".avi", ".mts", ".m2ts"}
+MEDIA_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
+VIDEO_SAMPLE_SECONDS = 5     # one frame every this many seconds...
+VIDEO_MAX_FRAMES = 12        # ...but no more than this many per video
+
 # Models the user can choose between in Settings. Image and text halves must share a space.
 MODELS = {
     "siglip2": {

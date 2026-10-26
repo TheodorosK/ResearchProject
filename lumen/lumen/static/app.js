@@ -11,6 +11,7 @@ const plural = (n, one, many = one + "s") => `${fmt(n)} ${n === 1 ? one : many}`
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const previewUrl = (id) => `/api/photos/${id}/preview`;
 const faceUrl = (id) => `/api/faces/${id}/thumb`;
+const fmtClock = (s) => { s = Math.round(s || 0); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 const fmtBytes = (b) => !b ? "" : b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
 const fmtDate = (ts, opts = { year: "numeric", month: "short", day: "numeric" }) => ts ? new Date(ts * 1000).toLocaleDateString(undefined, opts) : "";
 const fmtDuration = (s) => {
@@ -57,6 +58,9 @@ const I = {
   star: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
   pause: '<svg class="icon" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>',
   play: '<svg class="icon" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>',
+  up: '<svg class="icon" viewBox="0 0 24 24"><path d="M7 11v9H4v-9zM7 11l4-8a2 2 0 0 1 3 2l-1 5h6a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.8 20H7"/></svg>',
+  down: '<svg class="icon" viewBox="0 0 24 24"><path d="M17 13V4h3v9zM17 13l-4 8a2 2 0 0 1-3-2l1-5H5a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 6.2 4H17"/></svg>',
+  slides: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4-2.5z"/></svg>',
   refresh: '<svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
   collection: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v11"/></svg>',
   moon: '<svg class="icon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
@@ -124,7 +128,8 @@ function renderTray() {
 
 // ------------------------------------------------------------------ justified photo grid
 class JGrid {
-  constructor(items = [], { rowHeight, showTier = false, coverId = null, onOpen } = {}) {
+  constructor(items = [], { rowHeight, showTier = false, coverId = null, onOpen, feedback = null } = {}) {
+    this.feedback = feedback;
     this.items = [];
     this.tiles = [];
     this.showTier = showTier;
@@ -148,7 +153,8 @@ class JGrid {
       const t = h(`<div class="tile${isSelected(it.id) ? " selected" : ""}" data-id="${it.id}">
         <img loading="lazy" decoding="async" alt="${esc(it.name)}" src="${previewUrl(it.id)}">
         <button class="check" data-act="select" aria-label="Select">${I.check}</button>
-        <div class="quick"><button data-act="similar" title="Find similar photos" aria-label="Find similar">${I.similar}</button></div>
+        <div class="quick">${this.feedback ? `<button data-act="like" title="More like this" aria-label="More like this" class="${this.feedback.like.has(it.id) ? "on" : ""}">${I.up}</button><button data-act="dislike" title="Less like this" aria-label="Less like this" class="${this.feedback.dislike.has(it.id) ? "on" : ""}">${I.down}</button>` : ""}<button data-act="similar" title="Find similar photos" aria-label="Find similar">${I.similar}</button></div>
+        ${it.kind === "video" ? `<span class="vid-badge">${I.play}${it.t != null ? `${fmtClock(it.t)} / ` : ""}${fmtClock(it.duration)}</span>` : ""}
         ${this.showTier && it.tier ? `<i class="tier ${it.tier}"></i>` : ""}
         ${this.coverId === it.id ? '<span class="cover-flag">Cover</span>' : ""}
       </div>`);
@@ -186,6 +192,7 @@ class JGrid {
     const item = this.items[idx];
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (act === "similar") { go(`#/similar/${item.id}`); return; }
+    if (act === "like" || act === "dislike") { this.feedback.toggle(item.id, act); return; }
     if (act === "select" || state.selection.size > 0 || e.metaKey || e.ctrlKey) {
       if (e.shiftKey && this.lastIdx != null) {
         const [a, b] = [Math.min(this.lastIdx, idx), Math.max(this.lastIdx, idx)];
@@ -222,7 +229,7 @@ async function route() {
   state.view = name;
   state.trayActions = [];
   document.body.classList.toggle("on-home", name === "home");
-  $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === name || (name === "collection" && a.dataset.nav === "collections") || (name === "person" && a.dataset.nav === "people")));
+  $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === name || (name === "collection" && a.dataset.nav === "collections") || (name === "person" && a.dataset.nav === "people") || (name === "memory" && a.dataset.nav === "memories")));
   if (name !== "search") $("#top-search-input").value = "";
   view.innerHTML = "";
   closeLightbox();
@@ -238,6 +245,8 @@ async function route() {
     else if (name === "person") await renderPerson(view, Number(parts[1]));
     else if (name === "map") await renderMap(view, params);
     else if (name === "tidy") await renderTidy(view, params);
+    else if (name === "memories") await renderMemories(view, params);
+    else if (name === "memory") await renderMemory(view, parts.slice(1).join("/"));
     else if (name === "collection") await renderCollection(view, Number(parts[1]));
     else if (name === "sources") await renderSources(view);
     else view.append(emptyState("🧭", "Nothing here", "That page doesn't exist.", '<a class="btn" href="#/">Go home</a>'));
@@ -327,6 +336,12 @@ async function renderHome(view) {
     view.append(psec);
   }
 
+  if (data.memories.length) {
+    const msec = h(`<section class="section fade-in"><div class="section-head"><h2>🧳 Memories</h2><a href="#/memories">See all</a></div><div class="scroller memories"></div></section>`);
+    data.memories.forEach((m) => $(".scroller", msec).append(memoryCard(m)));
+    view.append(msec);
+  }
+
   const hints = [];
   if (data.places) hints.push(`<a class="hint-card" href="#/map"><span class="hint-e">🗺️</span><span><strong>${plural(data.places, "photo")} on the map</strong><span class="muted">See where your memories happened</span></span></a>`);
   if (data.tidy.duplicate_extra) hints.push(`<a class="hint-card" href="#/tidy"><span class="hint-e">🧹</span><span><strong>${plural(data.tidy.duplicate_extra, "duplicate copy", "duplicate copies")}</strong><span class="muted">Free up space by clearing the extras</span></span></a>`);
@@ -402,7 +417,7 @@ const TIERS = [
 
 const legendItems = '<span><i class="tier best"></i>Spot on</span><span><i class="tier good"></i>Strong</span><span><i class="tier maybe"></i>Possible</span>';
 
-function renderTiered(container, items, emptyMsg) {
+function renderTiered(container, items, emptyMsg, gridOpts = {}) {
   if (!items.length) { container.append(emptyMsg); return []; }
   const grids = [];
   const strong = items.some((i) => i.tier !== "maybe");
@@ -412,7 +427,7 @@ function renderTiered(container, items, emptyMsg) {
     const label = !strong ? "Closest we could find" : title;
     const subtitle = !strong ? "Nothing matched strongly — try describing it differently, or with more detail." : sub;
     container.append(h(`<div class="group-head"><i class="dot tier ${tier}"></i><h3>${label}</h3><span class="sub">${plural(group.length, "photo")} · ${subtitle}</span></div>`));
-    const g = new JGrid(group, { showTier: false });
+    const g = new JGrid(group, { showTier: false, ...gridOpts });
     container.append(g.el);
     grids.push(g);
   }
@@ -424,7 +439,7 @@ async function renderSearch(view, params) {
   const title = params.get("title");
   $("#top-search-input").value = title ? "" : q;
   const filters = new URLSearchParams();
-  for (const k of ["year_from", "year_to", "folder_id", "sort"]) if (params.get(k)) filters.set(k, params.get(k));
+  for (const k of ["year_from", "year_to", "folder_id", "sort", "like", "dislike"]) if (params.get(k)) filters.set(k, params.get(k));
   const head = h(`<div class="search-head fade-in">
       <div class="search-top"><h1 class="search-title">${title ? `${esc(title)}` : `<q>${esc(q)}</q>`}</h1><div class="row-actions"></div></div>
       <div class="filters"></div>
@@ -459,6 +474,8 @@ async function renderSearch(view, params) {
   f.append(sortSel);
   const ex = res.parsed.expression;
   if (ex) f.append(h(`<span class="chip" title="Lumen reads the expressions on faces for this">${ex.emoji} ${ex.everyone ? "everyone " : ""}${esc({ happiness: "smiling", sadness: "sad", surprise: "surprised", anger: "angry", fear: "scared", disgust: "disgusted", neutral: "serious", contempt: "unimpressed" }[ex.label])} faces</span>`));
+  if (res.parsed.places?.length) f.append(h(`<span class="chip" title="Only photos taken here">${I.pin} ${res.parsed.places.map(esc).join(", ")}</span>`));
+  if (res.parsed.when) f.append(h(`<span class="chip" title="Only photos from then">📅 ${esc(res.parsed.when)}</span>`));
   if (res.parsed.people?.length) f.append(h(`<span class="muted">with ${res.parsed.people.map((p) => `<a class="chip" href="#/person/${p.id}">${I.person} ${esc(p.name)}</a>`).join(" ")}</span>`));
   const neg = res.parsed.negatives;
   if (neg.length) f.append(h(`<span class="muted">excluding ${neg.map((n) => `<strong>${esc(n)}</strong>`).join(", ")}</span>`));
@@ -474,7 +491,31 @@ async function renderSearch(view, params) {
   }
   const strongCount = res.items.filter((i) => i.tier !== "maybe").length;
   head.append(h(`<div class="legend"><span class="muted">${strongCount ? plural(strongCount, "strong match", "strong matches") : "No strong matches"} among ${fmt(res.indexed)} photos</span>${legendItems}</div>`));
-  const grids = renderTiered(results, res.items, emptyState("🔍", "No photos found", "Try other words, or fewer of them."));
+  // 👍/👎 refinement: kept in the URL so Back undoes it.
+  const like = new Set(res.parsed.like), dislike = new Set(res.parsed.dislike);
+  const feedback = {
+    like, dislike,
+    toggle: (id, act) => {
+      const [on, off] = act === "like" ? [like, dislike] : [dislike, like];
+      on.has(id) ? on.delete(id) : on.add(id);
+      off.delete(id);
+      const p = new URLSearchParams(params);
+      like.size ? p.set("like", [...like].join(",")) : p.delete("like");
+      dislike.size ? p.set("dislike", [...dislike].join(",")) : p.delete("dislike");
+      go(`#/search?${p}`);
+    },
+  };
+  if (like.size || dislike.size) {
+    const bar = h(`<div class="refine-bar fade-in">${I.similar}<span>Refined with <strong>${like.size} 👍</strong> and <strong>${dislike.size} 👎</strong>. Keep rating to get closer.</span><button class="link">Start over</button></div>`);
+    $("button", bar).onclick = () => { const p = new URLSearchParams(params); p.delete("like"); p.delete("dislike"); go(`#/search?${p}`); };
+    head.append(bar);
+  } else {
+    head.append(h(`<p class="hint" style="margin:0">Not quite it? Hover a photo and press 👍 or 👎. Lumen will steer the results.</p>`));
+  }
+  const slideBtn = h(`<button class="btn small">${I.slides} Slideshow</button>`);
+  slideBtn.onclick = () => playSlideshow(res.items.filter((i) => i.tier !== "maybe").length ? res.items.filter((i) => i.tier !== "maybe") : res.items, title || q);
+  $(".row-actions", head).prepend(slideBtn);
+  const grids = renderTiered(results, res.items, emptyState("🔍", "No photos found", "Try other words, or fewer of them."), { feedback });
   selAll.onclick = () => grids.forEach((g) => g.selectAll());
 }
 
@@ -618,6 +659,7 @@ async function renderCollection(view, id) {
       go("#/");
     });
   }
+  if (c.count) btn("Play", I.slides, () => playSlideshow(c.items, c.name, c.description || ""));
   btn("Edit", I.edit, () => openCollectionEditor({ existing: c }));
   if (c.count) {
     btn("Copy to folder", I.copy, () => openFolderBrowser({
@@ -906,6 +948,7 @@ function openLightbox(items, idx) {
 }
 function closeLightbox() {
   $("#lightbox").hidden = true;
+  $("#lightbox").innerHTML = "";  // stops any playing video
   document.body.style.overflow = "";
 }
 async function drawLightbox() {
@@ -914,7 +957,9 @@ async function drawLightbox() {
   const box = $("#lightbox");
   box.innerHTML = `
     <div class="lb-stage">
-      <img class="lb-low" src="${previewUrl(it.id)}" alt="">
+      ${it.kind === "video"
+        ? `<video class="lb-video" src="/api/photos/${it.id}/original#t=${it.t || 0}" controls autoplay playsinline poster="${previewUrl(it.id)}"></video>`
+        : `<img class="lb-low" src="${previewUrl(it.id)}" alt="">`}
       <button class="icon-btn lb-close" aria-label="Close (Esc)">${I.close}</button>
       ${lb.idx > 0 ? `<button class="lb-nav prev" aria-label="Previous">${I.left}</button>` : ""}
       ${lb.idx < lb.items.length - 1 ? `<button class="lb-nav next" aria-label="Next">${I.right}</button>` : ""}
@@ -924,10 +969,13 @@ async function drawLightbox() {
   $(".prev", box)?.addEventListener("click", () => step(-1));
   $(".next", box)?.addEventListener("click", () => step(1));
   $(".lb-stage", box).onclick = (e) => { if (e.target.classList.contains("lb-stage")) closeLightbox(); };
+  const vid = $(".lb-video", box);
+  if (vid) vid.onerror = () => vid.replaceWith(h(`<div class="lb-novideo"><img src="${previewUrl(it.id)}" alt=""><p>Your browser can't play this video format.</p><button class="btn primary small">Open in your video player</button></div>`));
+  $(".lb-stage", box).addEventListener("click", (e) => { if (e.target.closest(".lb-novideo button")) api(`/api/photos/${it.id}/open`, { method: "POST" }).catch(fail); });
   const full = new Image();
   full.alt = it.name;
   full.onload = () => { const low = $(".lb-low", box); if (low && lb.items[lb.idx] === it) low.replaceWith(full); };
-  full.src = `/api/photos/${it.id}/original`;
+  if (!vid) full.src = `/api/photos/${it.id}/original`;
 
   const [d, sim] = await Promise.all([api(`/api/photos/${it.id}`), api(`/api/photos/${it.id}/similar?limit=9`).catch(() => [])]);
   if (lb.items[lb.idx] !== it) return;
@@ -946,7 +994,8 @@ async function drawLightbox() {
       ${d.taken_at ? `<dt>📅</dt><dd>${new Date(d.taken_at * 1000).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}</dd>` : ""}
       ${d.camera ? `<dt>📷</dt><dd>${esc(d.camera)}</dd>` : ""}
       <dt>📁</dt><dd>${esc(d.folder)}</dd>
-      ${d.lat != null ? `<dt>📍</dt><dd><a href="#/map?photo=${d.id}">${d.lat.toFixed(4)}, ${d.lon.toFixed(4)} · View on map</a></dd>` : ""}
+      ${d.lat != null ? `<dt>📍</dt><dd><a href="#/map?photo=${d.id}">${esc(d.place || `${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}`)} · View on map</a></dd>` : ""}
+      ${d.kind === "video" ? `<dt>🎬</dt><dd>Video · ${fmtClock(d.duration)}${it.t != null ? ` · best moment at ${fmtClock(it.t)}` : ""}</dd>` : ""}
       ${d.size ? `<dt>💾</dt><dd>${d.size >= 1048576 ? (d.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(d.size / 1024)) + " KB"}</dd>` : ""}
       ${d.quality != null ? `<dt>⭐</dt><dd>${d.quality >= 90 ? "One of your best shots · " : d.quality >= 70 ? "Looks great · " : ""}<span class="muted">Quality ${d.quality}/100</span></dd>` : ""}
       ${it.tier ? `<dt>🎯</dt><dd>${{ best: "Spot-on match", good: "Strong match", maybe: "Possible match" }[it.tier]}</dd>` : ""}
@@ -1215,6 +1264,9 @@ async function renderMap(view, params) {
         : "None of your photos has GPS information. Phones usually add it when location is enabled for the camera."));
     return;
   }
+  const placeList = await api("/api/places").catch(() => []);
+  const chips = h('<div class="chips" style="margin-bottom:14px"></div>');
+  view.append(chips);
   const mapEl = h('<div class="map fade-in" id="map"></div>');
   const below = h(`<section class="section"><div class="group-head"><h3>In this area</h3><span class="sub"></span><span style="flex:1"></span><button class="link">Select all</button></div><div class="area"></div></section>`);
   view.append(mapEl, below);
@@ -1238,6 +1290,11 @@ async function renderMap(view, params) {
     cluster.addLayer(mk);
   }
   map.addLayer(cluster);
+  placeList.slice(0, 16).forEach((pl) => {
+    const c = h(`<button class="chip">${esc(pl.city)}${pl.country ? ` <span class="n">${esc(pl.country)}</span>` : ""} <span class="n">${fmt(pl.n)}</span></button>`);
+    c.onclick = () => map.flyTo([pl.lat, pl.lon], 12);
+    chips.append(c);
+  });
   const focus = Number(params.get("photo"));
   const fp = focus && points.find((p) => p[0] === focus);
   if (fp) map.setView([fp[1], fp[2]], 15);
@@ -1329,6 +1386,145 @@ async function renderTidy(view, params) {
     } catch (e) { fail(e); }
   };
   syncBar();
+}
+
+// ------------------------------------------------------------------ memories (trips & events)
+function memoryCard(m) {
+  const ids = m.covers.map((c) => c.id);
+  return h(`<a class="memory fade-in" href="#/memory/${m.key}">
+    <div class="memory-media mosaic n${Math.min(ids.length, 3)}">${ids.slice(0, 3).map((id) => `<img loading="lazy" src="${previewUrl(id)}" alt="">`).join("")}</div>
+    <span class="badge">${m.kind === "trip" ? "🧳 Trip" : "✨ Event"}</span>
+    <div class="memory-body"><strong>${esc(m.title)}</strong><span>${esc(m.when)} · ${plural(m.count, "photo")}</span></div></a>`);
+}
+
+async function renderMemories(view, params) {
+  const kind = params.get("kind") || "";
+  const res = await api(`/api/memories?limit=200${kind ? `&kind=${kind}` : ""}`);
+  view.append(h(`<div class="page-head fade-in"><div><h1>Memories</h1><p>Your library, told as trips and days out. Lumen builds these from when and where photos were taken, and who is in them.</p></div></div>`));
+  view.append(h(`<div class="chips" style="margin-bottom:22px">
+    <a class="chip ${!kind ? "active" : ""}" href="#/memories">All</a>
+    <a class="chip ${kind === "trip" ? "active" : ""}" href="#/memories?kind=trip">🧳 Trips</a>
+    <a class="chip ${kind === "event" ? "active" : ""}" href="#/memories?kind=event">✨ Events</a></div>`));
+  if (!res.items.length) {
+    view.append(emptyState("🧳", "No memories yet", "Memories appear once there are groups of photos taken close together in time. Trips need photos with locations."));
+    return;
+  }
+  let year = null, grid = null;
+  for (const m of res.items) {
+    const y = new Date(m.start * 1000).getFullYear();
+    if (y !== year) {
+      year = y;
+      view.append(h(`<div class="group-head"><h3>${y}</h3></div>`));
+      grid = h('<div class="memory-grid"></div>');
+      view.append(grid);
+    }
+    grid.append(memoryCard(m));
+  }
+}
+
+async function renderMemory(view, key) {
+  const m = await api(`/api/memories/${key}`);
+  const cover = m.covers[0]?.id;
+  const heroEl = h(`<section class="c-hero fade-in ${cover ? "" : "noimg"}">
+      ${cover ? `<img class="bg" src="${previewUrl(cover)}" alt="">` : ""}
+      <div class="c-hero-inner"><div><div class="e">${m.kind === "trip" ? "🧳" : "✨"}</div><h1>${esc(m.title)}</h1>
+        <p>${esc(m.when)} · ${plural(m.count, "photo")}${m.place ? ` · ${esc(m.place)}` : ""}</p></div>
+        <div class="row-actions"></div></div></section>`);
+  const actions = $(".row-actions", heroEl);
+  const play = h(`<button class="btn small">${I.slides} Play</button>`);
+  play.onclick = () => playSlideshow(m.items, m.title, m.when);
+  const save = h(`<button class="btn small">${I.collection} Save as collection</button>`);
+  save.onclick = async () => {
+    try {
+      const c = await api(`/api/memories/${key}/save`, { method: "POST" });
+      toast(`Saved as <strong>${esc(c.name)}</strong>`, { action: "Open", onAction: () => go(`#/collection/${c.id}`) });
+    } catch (e) { fail(e); }
+  };
+  actions.append(play, save);
+  view.append(heroEl);
+  const head = h('<div class="section-head"><span class="muted">Photos in order, as the day unfolded.</span><button class="link">Select all</button></div>');
+  const grid = new JGrid(m.items);
+  $(".link", head).onclick = () => grid.selectAll();
+  view.append(head, grid.el);
+}
+
+// ------------------------------------------------------------------ slideshow
+function playSlideshow(items, title = "", subtitle = "") {
+  items = items.filter(Boolean);
+  if (!items.length) return;
+  const el = h(`<div class="slideshow" role="dialog" aria-label="Slideshow">
+      <div class="ss-stage"></div>
+      <div class="ss-title"><h2>${esc(title)}</h2>${subtitle ? `<p>${esc(subtitle)}</p>` : ""}</div>
+      <div class="ss-bar"><i></i></div>
+      <div class="ss-controls">
+        <button class="icon-btn" data-a="prev" aria-label="Previous">${I.left}</button>
+        <button class="icon-btn" data-a="pause" aria-label="Pause">${I.pause}</button>
+        <button class="icon-btn" data-a="next" aria-label="Next">${I.right}</button>
+        <span class="ss-count"></span>
+        <button class="icon-btn" data-a="close" aria-label="Close">${I.close}</button>
+      </div></div>`);
+  document.body.append(el);
+  document.body.style.overflow = "hidden";
+  el.requestFullscreen?.().catch(() => {});
+  const stage = $(".ss-stage", el);
+  const SLIDE_MS = 5000;
+  let i = -1, timer = null, paused = false;
+  const src = (it) => (it.kind === "video" ? previewUrl(it.id) : `/api/photos/${it.id}/original`);
+  const preload = (k) => { if (items[k]) { const im = new Image(); im.src = src(items[k]); } };
+  const show = (k) => {
+    i = (k + items.length) % items.length;
+    // A real document element: images inside a <template> don't load until adopted.
+    const img = document.createElement("img");
+    img.className = "ss-img";
+    img.alt = "";
+    // Ken Burns: a slow zoom towards a random corner.
+    const ox = 30 + Math.random() * 40, oy = 30 + Math.random() * 40;
+    img.style.transformOrigin = `${ox}% ${oy}%`;
+    img.style.animationDuration = `${SLIDE_MS + 1500}ms`;
+    img.onload = () => {
+      stage.append(img);
+      requestAnimationFrame(() => img.classList.add("in"));
+      [...stage.children].slice(0, -1).forEach((old) => { old.classList.remove("in"); setTimeout(() => old.remove(), 1400); });
+    };
+    img.onerror = () => { img.src = previewUrl(items[i].id); };
+    img.src = src(items[i]);
+    $(".ss-count", el).textContent = `${i + 1} / ${items.length}`;
+    const bar = $(".ss-bar i", el);
+    bar.style.transition = "none";
+    bar.style.width = "0";
+    requestAnimationFrame(() => { bar.style.transition = paused ? "none" : `width ${SLIDE_MS}ms linear`; bar.style.width = paused ? "0" : "100%"; });
+    preload(i + 1);
+    clearTimeout(timer);
+    if (!paused) timer = setTimeout(() => show(i + 1), SLIDE_MS);
+  };
+  const close = () => {
+    clearTimeout(timer);
+    document.removeEventListener("keydown", onKey, true);
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    el.remove();
+    document.body.style.overflow = "";
+  };
+  const toggle = () => {
+    paused = !paused;
+    $("[data-a=pause]", el).innerHTML = paused ? I.play : I.pause;
+    show(i);
+  };
+  const onKey = (e) => {
+    const k = { Escape: close, ArrowRight: () => show(i + 1), ArrowLeft: () => show(i - 1), " ": toggle }[e.key];
+    if (k) { e.preventDefault(); e.stopPropagation(); k(); }
+  };
+  document.addEventListener("keydown", onKey, true);
+  el.onclick = (e) => {
+    const a = e.target.closest("[data-a]")?.dataset.a;
+    if (a === "close") close();
+    if (a === "next") show(i + 1);
+    if (a === "prev") show(i - 1);
+    if (a === "pause") toggle();
+  };
+  let idle;
+  el.onmousemove = () => { el.classList.add("show-ui"); clearTimeout(idle); idle = setTimeout(() => el.classList.remove("show-ui"), 2200); };
+  setTimeout(() => $(".ss-title", el).classList.add("gone"), 2600);
+  show(0);
 }
 
 // ------------------------------------------------------------------ status polling

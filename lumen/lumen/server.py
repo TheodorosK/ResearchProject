@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import config, db, duplicates, embedder, faces, jobs, quality, search
+from . import config, db, duplicates, embedder, events, faces, jobs, places, quality, search
 from .indexer import delete_photos, preview_path, switch_model, worker
 from .vectors import index
 
@@ -46,7 +46,8 @@ def hydrate(items):
     for i in range(0, len(ids), 900):
         chunk = ids[i : i + 900]
         for r in db.q(
-            f"SELECT id, path, width, height, taken_at, camera, folder_id, lat, lon, size FROM photos "
+            f"SELECT id, path, width, height, taken_at, camera, folder_id, lat, lon, size, kind, duration, "
+            f"place_city, place_region, place_country FROM photos "
             f"WHERE id IN ({','.join('?' * len(chunk))})",
             chunk,
         ):
@@ -68,6 +69,9 @@ def hydrate(items):
             "lon": r["lon"],
             "size": r["size"],
             "dir": os.path.basename(os.path.dirname(r["path"])),
+            "place": places.label(r),
+            "kind": r["kind"],
+            "duration": r["duration"],
         })
     return out
 
@@ -378,7 +382,7 @@ def photo_original(photo_id: int):
     path = r["path"]
     if not os.path.exists(path):
         raise HTTPException(410, "The original file has moved or been deleted")
-    if os.path.splitext(path)[1].lower() in BROWSER_FRIENDLY:
+    if r["kind"] == "video" or os.path.splitext(path)[1].lower() in BROWSER_FRIENDLY:
         return FileResponse(path, headers={"Cache-Control": "private, max-age=3600"})
     # HEIC/TIFF: browsers can't show these, so convert on the fly.
     with Image.open(path) as im:
@@ -395,6 +399,23 @@ def photo_download(photo_id: int):
     if not os.path.exists(r["path"]):
         raise HTTPException(410, "The original file has moved or been deleted")
     return FileResponse(r["path"], filename=os.path.basename(r["path"]))
+
+
+@app.post("/api/photos/{photo_id}/open")
+def photo_open(photo_id: int):
+    """Open the file in its default app (for videos the browser can't play)."""
+    path = photo_or_404(photo_id)["path"]
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            subprocess.Popen(["open", path])
+        elif system == "Windows":
+            os.startfile(path)  # noqa: S606 - local app, user's own file
+        else:
+            subprocess.Popen(["xdg-open", path])
+    except OSError as e:
+        raise HTTPException(500, f"Couldn't open it: {e}")
+    return {"ok": True}
 
 
 @app.post("/api/photos/{photo_id}/reveal")
@@ -430,20 +451,26 @@ def similar_many(body: IdsIn):
 
 
 # ---------------------------------------------------------------- search & discovery
+def _ids_param(v: str | None):
+    return [int(x) for x in (v or "").split(",") if x.strip().isdigit()][:200]
+
+
 @app.get("/api/search")
 def do_search(
-    q: str, limit: int = Query(300, le=1000), folder_id: int | None = None,
+    q: str = "", limit: int = Query(300, le=1000), folder_id: int | None = None,
     year_from: int | None = None, year_to: int | None = None, collection_id: int | None = None,
-    sort: str = "relevance",
+    sort: str = "relevance", like: str | None = None, dislike: str | None = None,
 ):
     require_model()
-    hits = search.text_search(q, limit, sort=sort, filters=filters_from(folder_id, year_from, year_to, collection_id))
-    positive, negatives = search.parse_query(q)
-    rest, people = search.people_in_query(positive)
-    label, everyone = search.expression_in_query(rest)
-    expression = {"label": label, "emoji": faces.EXPRESSION_EMOJI[label], "everyone": everyone} if label else None
-    return {"query": q, "parsed": {"positive": positive, "negatives": negatives, "people": people,
-                                   "expression": expression},
+    like_ids, dislike_ids = _ids_param(like), _ids_param(dislike)
+    hits = search.text_search(q, limit, sort=sort, filters=filters_from(folder_id, year_from, year_to, collection_id),
+                              like=like_ids, dislike=dislike_ids)
+    u = search.understand(q)
+    label = u["expression"]
+    expression = {"label": label, "emoji": faces.EXPRESSION_EMOJI[label], "everyone": u["everyone"]} if label else None
+    return {"query": q, "parsed": {"positive": u["positive"], "negatives": u["negatives"], "people": u["people"],
+                                   "places": [p["label"] for p in u["places"]], "when": u["when"].label or None,
+                                   "expression": expression, "like": like_ids, "dislike": dislike_ids},
             "items": hydrate(hits), "indexed": len(index)}
 
 
@@ -461,6 +488,7 @@ def home():
         "recent": hydrate([r["id"] for r in db.q(
             "SELECT id FROM photos WHERE status='ready' ORDER BY id DESC LIMIT 12")]),
         "people": list_people()[:12],
+        "memories": [] if loading else [_memory_card(m) for m in events.compute()[:10]],
         "tidy": duplicates.summary(),
         "places": db.one("SELECT COUNT(*) n FROM photos WHERE status='ready' AND lat IS NOT NULL")["n"],
     }
@@ -720,6 +748,43 @@ def map_points():
 def photos_batch(body: IdsIn):
     """Grid data for a list of ids (e.g. the photos inside the map's current view)."""
     return hydrate(body.photo_ids[:1000])
+
+
+@app.get("/api/places")
+def list_places():
+    return places.top_places(40)
+
+
+# ---------------------------------------------------------------- memories (trips & events)
+def _memory_card(m):
+    return {k: v for k, v in m.items() if k != "photo_ids"} | {"covers": hydrate(m["cover_ids"])}
+
+
+@app.get("/api/memories")
+def list_memories(offset: int = 0, limit: int = Query(40, le=200), kind: str | None = None):
+    ms = [m for m in events.compute() if not kind or m["kind"] == kind]
+    return {"total": len(ms), "items": [_memory_card(m) for m in ms[offset : offset + limit]]}
+
+
+@app.get("/api/memories/{key}")
+def get_memory(key: str):
+    m = events.get(key)
+    if not m:
+        raise HTTPException(404, "That memory no longer exists (the library changed)")
+    return _memory_card(m) | {"items": hydrate(m["photo_ids"])}
+
+
+@app.post("/api/memories/{key}/save")
+def save_memory(key: str):
+    """Keep a memory as a regular collection."""
+    m = events.get(key)
+    if not m:
+        raise HTTPException(404, "That memory no longer exists")
+    name, n = m["title"], 2
+    while db.one("SELECT id FROM collections WHERE lower(name)=lower(?)", (name,)):
+        name, n = f"{m['title']} ({n})", n + 1
+    emoji = "🧳" if m["kind"] == "trip" else "✨"
+    return create_collection(CollectionIn(name=name, emoji=emoji, description=m["when"], photo_ids=m["photo_ids"]))
 
 
 # ---------------------------------------------------------------- tidy up
