@@ -1,0 +1,1044 @@
+/* Lumen front-end: a small hash-routed single page app, no build step. */
+"use strict";
+
+// ------------------------------------------------------------------ utilities
+const $ = (sel, el = document) => el.querySelector(sel);
+const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const h = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const fmt = (n) => Number(n || 0).toLocaleString();
+const plural = (n, one, many = one + "s") => `${fmt(n)} ${n === 1 ? one : many}`;
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+const previewUrl = (id) => `/api/photos/${id}/preview`;
+const fmtDate = (ts, opts = { year: "numeric", month: "short", day: "numeric" }) => ts ? new Date(ts * 1000).toLocaleDateString(undefined, opts) : "";
+const fmtDuration = (s) => {
+  if (s == null) return "";
+  if (s < 90) return "under 2 min";
+  if (s < 3600) return `~${Math.round(s / 60)} min`;
+  return `~${(s / 3600).toFixed(s < 36000 ? 1 : 0)} h`;
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("lumen:" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("lumen:" + k, JSON.stringify(v)); } catch { /* private mode */ } },
+};
+
+async function api(path, opts = {}) {
+  const init = { ...opts, headers: { ...(opts.headers || {}) } };
+  if (opts.body !== undefined && typeof opts.body !== "string") {
+    init.body = JSON.stringify(opts.body);
+    init.headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(path, init);
+  let data = null;
+  try { data = await res.json(); } catch { /* empty body */ }
+  if (!res.ok) {
+    const d = data && data.detail;
+    const err = new Error(typeof d === "string" ? d : Array.isArray(d) ? d.map((x) => x.msg).join(", ") : `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+const I = {
+  search: '<svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  similar: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>',
+  plus: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  close: '<svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  left: '<svg class="icon" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
+  right: '<svg class="icon" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
+  folder: '<svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  download: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>',
+  trash: '<svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  edit: '<svg class="icon" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  star: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
+  pause: '<svg class="icon" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>',
+  play: '<svg class="icon" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>',
+  refresh: '<svg class="icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
+  collection: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v11"/></svg>',
+  moon: '<svg class="icon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  sun: '<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+};
+
+const EMOJIS = ["📸", "🏖️", "🏔️", "🌅", "🎉", "❤️", "👨‍👩‍👧", "🐶", "🐱", "🍝", "✈️", "🚗", "🎄", "🎂", "💍", "🌸", "🌊", "🏛️", "⭐", "🌙", "🎨", "⚽", "🎶", "🏝️", "🍷", "👶", "🧳", "🏡"];
+const COLORS = ["#ff8a5b", "#ff6f91", "#c77dff", "#7c9cff", "#38bdf8", "#3ddc97", "#facc15", "#a3a3a3"];
+const COLLECTION_IDEAS = ["Summer 2024", "Best of the kids", "Food diary", "Wall-worthy", "Our trips", "Family portraits"];
+
+// ------------------------------------------------------------------ app state
+const state = {
+  status: null,
+  selection: new Map(),     // id -> item, survives navigation so you can gather from several searches
+  target: null,             // collection being filled via "Add photos"
+  trayActions: [],          // per-view extra tray buttons
+  view: null,
+};
+
+// ------------------------------------------------------------------ toasts
+function toast(msg, { action, onAction, error = false, ms = 4200 } = {}) {
+  const el = h(`<div class="toast${error ? " err" : ""}"><span>${msg}</span>${action ? `<button>${esc(action)}</button>` : ""}</div>`);
+  if (action) $("button", el).onclick = () => { onAction?.(); el.remove(); };
+  $("#toasts").append(el);
+  setTimeout(() => el.remove(), ms);
+}
+const fail = (e) => toast(esc(e.message || e), { error: true });
+
+// ------------------------------------------------------------------ selection
+function isSelected(id) { return state.selection.has(id); }
+function setSelected(item, on) {
+  if (on) state.selection.set(item.id, item); else state.selection.delete(item.id);
+  $$(`.tile[data-id="${item.id}"]`).forEach((t) => t.classList.toggle("selected", on));
+}
+function clearSelection() {
+  state.selection.clear();
+  $$(".tile.selected").forEach((t) => t.classList.remove("selected"));
+  renderTray();
+}
+function renderTray() {
+  const n = state.selection.size;
+  document.body.classList.toggle("selecting", n > 0);
+  $("#tray").hidden = n === 0;
+  $("#tray-n").textContent = fmt(n);
+  const actions = $("#tray-actions");
+  actions.innerHTML = "";
+  const ids = () => [...state.selection.keys()];
+  const add = (label, icon, fn, cls = "") => {
+    const b = h(`<button class="btn ${cls}">${icon}<span>${esc(label)}</span></button>`);
+    b.onclick = fn;
+    actions.append(b);
+  };
+  if (state.target) {
+    add(`Add to ${state.target.emoji || ""} ${state.target.name}`, I.plus, () => addPhotosTo(state.target, ids()), "primary");
+  }
+  for (const a of state.trayActions) add(a.label, a.icon, () => a.run(ids()), a.cls || "");
+  add("Add to collection", I.collection, () => openAddToCollection(ids()), state.target ? "" : "primary");
+  add("More like these", I.similar, () => go(`#/like?ids=${ids().slice(0, 60).join(",")}`));
+}
+
+// ------------------------------------------------------------------ justified photo grid
+class JGrid {
+  constructor(items = [], { rowHeight, showTier = false, coverId = null, onOpen } = {}) {
+    this.items = [];
+    this.tiles = [];
+    this.showTier = showTier;
+    this.coverId = coverId;
+    this.onOpen = onOpen || ((idx) => openLightbox(this.items, idx));
+    this.rowHeight = rowHeight || (() => (innerWidth < 600 ? 120 : innerWidth < 1100 ? 180 : 220));
+    this.el = h('<div class="jgrid"></div>');
+    this.lastIdx = null;
+    this.el.addEventListener("click", (e) => this.onClick(e));
+    let raf = 0, lastW = 0;
+    this.ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => { if (this.el.clientWidth !== lastW) { lastW = this.el.clientWidth; this.layout(); } });
+    });
+    this.ro.observe(this.el);
+    this.add(items);
+  }
+  add(items) {
+    const frag = document.createDocumentFragment();
+    for (const it of items) {
+      const t = h(`<div class="tile${isSelected(it.id) ? " selected" : ""}" data-id="${it.id}">
+        <img loading="lazy" decoding="async" alt="${esc(it.name)}" src="${previewUrl(it.id)}">
+        <button class="check" data-act="select" aria-label="Select">${I.check}</button>
+        <div class="quick"><button data-act="similar" title="Find similar photos" aria-label="Find similar">${I.similar}</button></div>
+        ${this.showTier && it.tier ? `<i class="tier ${it.tier}"></i>` : ""}
+        ${this.coverId === it.id ? '<span class="cover-flag">Cover</span>' : ""}
+      </div>`);
+      const img = $("img", t);
+      img.onload = () => img.classList.add("loaded");
+      img.onerror = () => { img.classList.add("loaded"); img.style.visibility = "hidden"; };
+      this.tiles.push(t);
+      this.items.push(it);
+      frag.append(t);
+    }
+    this.el.append(frag);
+    this.layout();
+  }
+  layout() {
+    const W = this.el.clientWidth;
+    if (!W) return;
+    const gap = 6, target = this.rowHeight();
+    let row = [], sum = 0;
+    const size = (tiles, hgt) => tiles.forEach(([t, ar]) => { t.style.height = hgt + "px"; t.style.width = ar * hgt + "px"; });
+    this.items.forEach((it, i) => {
+      const ar = Math.min(3, Math.max(0.4, (it.w || 4) / (it.h || 3)));
+      row.push([this.tiles[i], ar]);
+      sum += ar;
+      if (sum * target + gap * (row.length - 1) >= W) {
+        size(row, (W - gap * (row.length - 1) - 1) / sum);
+        row = []; sum = 0;
+      }
+    });
+    if (row.length) size(row, target);
+  }
+  onClick(e) {
+    const tile = e.target.closest(".tile");
+    if (!tile) return;
+    const idx = this.tiles.indexOf(tile);
+    const item = this.items[idx];
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (act === "similar") { go(`#/similar/${item.id}`); return; }
+    if (act === "select" || state.selection.size > 0 || e.metaKey || e.ctrlKey) {
+      if (e.shiftKey && this.lastIdx != null) {
+        const [a, b] = [Math.min(this.lastIdx, idx), Math.max(this.lastIdx, idx)];
+        for (let i = a; i <= b; i++) setSelected(this.items[i], true);
+      } else {
+        setSelected(item, !isSelected(item.id));
+      }
+      this.lastIdx = idx;
+      renderTray();
+      return;
+    }
+    this.onOpen(idx);
+  }
+  selectAll() { this.items.forEach((it) => setSelected(it, true)); renderTray(); }
+}
+
+function emptyState(emoji, title, text, actionsHtml = "") {
+  return h(`<div class="empty fade-in"><div class="big">${emoji}</div><h3>${title}</h3><p>${text}</p>${actionsHtml}</div>`);
+}
+
+// ------------------------------------------------------------------ router
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+
+function parseHash() {
+  const raw = location.hash.replace(/^#/, "") || "/";
+  const [path, qs] = raw.split("?");
+  return { parts: path.split("/").filter(Boolean), params: new URLSearchParams(qs || "") };
+}
+
+async function route() {
+  const { parts, params } = parseHash();
+  const view = $("#view");
+  const name = parts[0] || "home";
+  state.view = name;
+  state.trayActions = [];
+  document.body.classList.toggle("on-home", name === "home");
+  $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === name || (name === "collection" && a.dataset.nav === "collections")));
+  if (name !== "search") $("#top-search-input").value = "";
+  view.innerHTML = "";
+  closeLightbox();
+  window.scrollTo(0, 0);
+  try {
+    if (name === "home") await renderHome(view);
+    else if (name === "search") await renderSearch(view, params);
+    else if (name === "similar") await renderSimilar(view, Number(parts[1]));
+    else if (name === "like") await renderLike(view, params);
+    else if (name === "library") await renderLibrary(view, params);
+    else if (name === "collections") await renderCollections(view);
+    else if (name === "collection") await renderCollection(view, Number(parts[1]));
+    else if (name === "sources") await renderSources(view);
+    else view.append(emptyState("🧭", "Nothing here", "That page doesn't exist.", '<a class="btn" href="#/">Go home</a>'));
+  } catch (e) {
+    view.append(e.status === 503
+      ? emptyState("⏳", "Almost ready", esc(e.message), '<button class="btn" onclick="route()">Try again</button>')
+      : emptyState("😵", "Something went wrong", esc(e.message)));
+  }
+  renderTray();
+  renderTargetBanner();
+}
+
+function renderTargetBanner() {
+  $("#target-banner")?.remove();
+  if (!state.target || state.view === "collection") return;
+  const b = h(`<div id="target-banner" class="panel fade-in" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;margin-bottom:18px">
+    <span>Collecting photos for <strong>${esc(state.target.emoji || "")} ${esc(state.target.name)}</strong> — search, select, then press <em>Add</em>.</span>
+    <a class="btn small" href="#/collection/${state.target.id}">Done</a></div>`);
+  $("#view").prepend(b);
+}
+
+// ------------------------------------------------------------------ home
+async function renderHome(view) {
+  const st = state.status || (await refreshStatus());
+  if (!st.folders) return renderWelcome(view);
+  const data = await api("/api/home");
+  const mosaic = data.recent.slice(0, 12).map((p) => `<img src="${previewUrl(p.id)}" alt="">`).join("");
+  const hero = h(`<section class="hero fade-in">
+      <div class="hero-mosaic" aria-hidden="true">${mosaic}</div>
+      <h1>What would you like to <span class="grad-text">remember</span>?</h1>
+      <p class="lede">Describe a moment, a place, a feeling — in your own words. Lumen finds the photos that fit.</p>
+      <form class="hero-search" role="search">
+        ${I.search}
+        <input type="search" name="q" autocomplete="off" aria-label="Describe what you're looking for">
+        <button class="btn primary" type="submit">${I.search}<span>Search</span></button>
+      </form>
+      <div class="chips"></div>
+      <div class="hint">Tip: add <kbd>-word</kbd> to leave something out, like <em>beach -people</em>. Press <kbd>/</kbd> to search from anywhere.</div>
+    </section>`);
+  const input = $("input", hero);
+  $("form", hero).onsubmit = (e) => { e.preventDefault(); if (input.value.trim()) go(`#/search?q=${encodeURIComponent(input.value.trim())}`); };
+  const chips = $(".chips", hero);
+  for (const s of data.suggestions) {
+    const c = h(`<a class="chip" href="#/search?q=${encodeURIComponent(s)}">${esc(s)}</a>`);
+    chips.append(c);
+  }
+  const surprise = h('<button class="chip" type="button">🎲 Surprise me</button>');
+  surprise.onclick = () => {
+    const pool = data.explore.length ? data.explore.map((g) => g.query) : data.suggestions;
+    go(`#/search?q=${encodeURIComponent(pool[Math.floor(Math.random() * pool.length)])}`);
+  };
+  chips.append(surprise);
+  view.append(hero);
+  typePlaceholder(input, data.suggestions);
+  setTimeout(() => input.focus({ preventScroll: true }), 50);
+
+  if (!st.ready && st.pending) {
+    view.append(h(`<section class="section panel fade-in"><h2>Lumen is getting to know your photos ✨</h2>
+      <p class="muted">The first photos will show up here in a moment. You can already search — results grow as indexing continues.</p>
+      <div class="bar"><i style="width:${st.total ? (100 * st.ready) / st.total : 2}%"></i></div></section>`));
+  }
+
+  if (data.on_this_day.length) {
+    const years = [...new Set(data.on_this_day.map((p) => new Date(p.taken_at * 1000).getFullYear()))];
+    const sec = h(`<section class="section fade-in"><div class="section-head"><h2>🕰️ On this day</h2><span class="muted">${years.join(" · ")}</span></div></section>`);
+    const g = new JGrid(data.on_this_day, { rowHeight: () => (innerWidth < 600 ? 110 : 170) });
+    sec.append(g.el);
+    view.append(sec);
+  }
+
+  const cols = await api("/api/collections");
+  const csec = h(`<section class="section fade-in"><div class="section-head"><h2>📚 Your collections</h2><a href="#/collections">See all</a></div><div class="scroller"></div></section>`);
+  const sc = $(".scroller", csec);
+  cols.slice(0, 10).forEach((c) => sc.append(collectionCard(c)));
+  sc.append(newCollectionCard());
+  view.append(csec);
+
+  if (data.explore.length) {
+    const sec = h(`<section class="section fade-in"><div class="section-head"><h2>🧭 Your world at a glance</h2><span class="muted">Themes Lumen spotted in your library</span></div><div class="card-grid"></div></section>`);
+    const grid = $(".card-grid", sec);
+    for (const g of data.explore.slice(0, 16)) {
+      const cover = g.photos[0];
+      grid.append(h(`<a class="explore-card" href="#/search?q=${encodeURIComponent(g.query)}&title=${encodeURIComponent(g.name)}">
+        ${cover ? `<img loading="lazy" src="${previewUrl(cover.id)}" alt="">` : ""}
+        <div class="label"><span class="e">${g.emoji}</span><strong>${esc(g.name)}</strong><span>${plural(g.count, "photo")}</span></div></a>`));
+    }
+    view.append(sec);
+  }
+
+  if (data.recent.length) {
+    const sec = h(`<section class="section fade-in"><div class="section-head"><h2>🆕 Recently added</h2><a href="#/library">Browse library</a></div></section>`);
+    sec.append(new JGrid(data.recent).el);
+    view.append(sec);
+  }
+}
+
+function typePlaceholder(input, phrases) {
+  let p = 0, i = 0, deleting = false;
+  const tick = () => {
+    if (!input.isConnected) return;
+    const word = phrases[p % phrases.length];
+    i += deleting ? -1 : 1;
+    input.placeholder = `Try “${word.slice(0, i)}”`;
+    let delay = deleting ? 28 : 55 + Math.random() * 40;
+    if (!deleting && i >= word.length) { deleting = true; delay = 1800; }
+    else if (deleting && i <= 0) { deleting = false; p++; delay = 300; }
+    setTimeout(tick, delay);
+  };
+  tick();
+}
+
+function renderWelcome(view) {
+  const el = h(`<section class="hero fade-in">
+    <h1>Your photos, <span class="grad-text">understood</span>.</h1>
+    <p class="lede">Point Lumen at the folders where your photos live. It looks at every picture — on this computer, nothing is uploaded — so you can find any moment just by describing it.</p>
+    <div class="row-actions"><button class="btn primary" id="welcome-add">${I.folder} Choose photo folders</button></div>
+    <div class="steps">
+      <div class="step"><b>1</b><h4>Pick folders</h4><p class="muted">Add as many as you like — your Pictures folder, an external drive, old phone backups.</p></div>
+      <div class="step"><b>2</b><h4>Lumen learns</h4><p class="muted">It builds a smart preview and an understanding of each photo. You can search while it works.</p></div>
+      <div class="step"><b>3</b><h4>Just ask</h4><p class="muted">“Grandma's garden in spring”, “sunset from the ferry”, “dogs in the snow”. Then gather favourites into collections.</p></div>
+    </div></section>`);
+  $("#welcome-add", el).onclick = () => openFolderBrowser();
+  view.append(el);
+}
+
+// ------------------------------------------------------------------ search
+const TIERS = [
+  ["best", "Spot on", "Photos that match your description closely"],
+  ["good", "Strong matches", "Very likely what you mean"],
+  ["maybe", "Might be it", "Looser matches worth a glance"],
+];
+
+const legendItems = '<span><i class="tier best"></i>Spot on</span><span><i class="tier good"></i>Strong</span><span><i class="tier maybe"></i>Possible</span>';
+
+function renderTiered(container, items, emptyMsg) {
+  if (!items.length) { container.append(emptyMsg); return []; }
+  const grids = [];
+  const strong = items.some((i) => i.tier !== "maybe");
+  for (const [tier, title, sub] of TIERS) {
+    const group = items.filter((i) => i.tier === tier);
+    if (!group.length) continue;
+    const label = !strong ? "Closest we could find" : title;
+    const subtitle = !strong ? "Nothing matched strongly — try describing it differently, or with more detail." : sub;
+    container.append(h(`<div class="group-head"><i class="dot tier ${tier}"></i><h3>${label}</h3><span class="sub">${plural(group.length, "photo")} · ${subtitle}</span></div>`));
+    const g = new JGrid(group, { showTier: false });
+    container.append(g.el);
+    grids.push(g);
+  }
+  return grids;
+}
+
+async function renderSearch(view, params) {
+  const q = params.get("q") || "";
+  const title = params.get("title");
+  $("#top-search-input").value = title ? "" : q;
+  const filters = new URLSearchParams();
+  for (const k of ["year_from", "year_to", "folder_id"]) if (params.get(k)) filters.set(k, params.get(k));
+  const head = h(`<div class="search-head fade-in">
+      <div class="search-top"><h1 class="search-title">${title ? `${esc(title)}` : `<q>${esc(q)}</q>`}</h1><div class="row-actions"></div></div>
+      <div class="filters"></div>
+    </div>`);
+  view.append(head);
+  const results = h('<div><div class="skeleton">' + "<div></div>".repeat(12) + "</div></div>");
+  view.append(results);
+
+  const [res, years, folders] = await Promise.all([
+    api(`/api/search?q=${encodeURIComponent(q)}&${filters}`),
+    api("/api/years"),
+    api("/api/folders"),
+  ]);
+  const f = $(".filters", head);
+  const setParam = (k, v) => { const p = new URLSearchParams(params); v ? p.set(k, v) : p.delete(k); go(`#/search?${p}`); };
+  if (years.length > 1) {
+    const yf = h(`<select aria-label="From year"><option value="">Any year</option>${years.map((y) => `<option ${params.get("year_from") == y.year ? "selected" : ""}>${y.year}</option>`).join("")}</select>`);
+    yf.onchange = () => {
+      const p = new URLSearchParams(params);
+      yf.value ? (p.set("year_from", yf.value), p.set("year_to", yf.value)) : (p.delete("year_from"), p.delete("year_to"));
+      go(`#/search?${p}`);
+    };
+    f.append(yf);
+  }
+  if (folders.length > 1) {
+    const fs = h(`<select aria-label="Folder"><option value="">All folders</option>${folders.map((x) => `<option value="${x.id}" ${params.get("folder_id") == x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>`);
+    fs.onchange = () => setParam("folder_id", fs.value);
+    f.append(fs);
+  }
+  const neg = res.parsed.negatives;
+  if (neg.length) f.append(h(`<span class="muted">excluding ${neg.map((n) => `<strong>${esc(n)}</strong>`).join(", ")}</span>`));
+  const saveBtn = h(`<button class="btn small">${I.star} Save as smart collection</button>`);
+  saveBtn.onclick = () => openCollectionEditor({ kind: "smart", query: q, name: title || q.replace(/^./, (c) => c.toUpperCase()) });
+  const selAll = h('<button class="btn small">Select all</button>');
+  $(".row-actions", head).append(selAll, saveBtn);
+
+  results.innerHTML = "";
+  if (!res.indexed) {
+    results.append(emptyState("⏳", "Still learning your photos", "Nothing is indexed yet. Results will appear as soon as the first photos are ready.", '<a class="btn" href="#/sources">See progress</a>'));
+    return;
+  }
+  const strongCount = res.items.filter((i) => i.tier !== "maybe").length;
+  head.append(h(`<div class="legend"><span class="muted">${strongCount ? plural(strongCount, "strong match", "strong matches") : "No strong matches"} among ${fmt(res.indexed)} photos</span>${legendItems}</div>`));
+  const grids = renderTiered(results, res.items, emptyState("🔍", "No photos found", "Try other words, or fewer of them."));
+  selAll.onclick = () => grids.forEach((g) => g.selectAll());
+}
+
+async function renderSimilar(view, id) {
+  const [items, photo] = await Promise.all([api(`/api/photos/${id}/similar?limit=120`), api(`/api/photos/${id}`)]);
+  const head = h(`<div class="page-head fade-in"><div style="display:flex;gap:16px;align-items:center">
+      <img src="${previewUrl(id)}" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:16px;box-shadow:var(--shadow);cursor:pointer">
+      <div><h1>Photos like this one</h1><p>${esc(photo.name)} · ${fmtDate(photo.taken_at)}</p></div></div>
+      <div class="row-actions"><button class="btn small">Select all</button></div></div>`);
+  $("img", head).onclick = () => openLightbox([photo], 0);
+  view.append(head);
+  const grids = renderTiered(view, items, emptyState("🌫️", "Nothing similar yet", "As more photos are indexed, look-alikes will show up here."));
+  $(".btn", head).onclick = () => grids.forEach((g) => g.selectAll());
+}
+
+async function renderLike(view, params) {
+  const ids = (params.get("ids") || "").split(",").map(Number).filter(Boolean);
+  const items = await api("/api/similar", { method: "POST", body: { photo_ids: ids } });
+  const head = h(`<div class="page-head fade-in"><div><h1>More like your selection</h1><p>Based on ${plural(ids.length, "photo")} you picked</p></div>
+     <div class="row-actions"><button class="btn small">Select all</button></div></div>`);
+  view.append(head);
+  const grids = renderTiered(view, items, emptyState("🌫️", "Nothing similar found", "Try selecting different photos."));
+  $(".btn", head).onclick = () => grids.forEach((g) => g.selectAll());
+}
+
+// ------------------------------------------------------------------ library
+async function renderLibrary(view, params) {
+  const year = params.get("year");
+  const order = params.get("order") || "newest";
+  const years = await api("/api/years");
+  const head = h(`<div class="page-head fade-in"><div><h1>Library</h1><p class="lib-count">&nbsp;</p></div>
+     <div class="row-actions"><select class="input" style="height:36px;width:auto;border-radius:999px" aria-label="Order">
+       <option value="newest">Newest first</option><option value="oldest" ${order === "oldest" ? "selected" : ""}>Oldest first</option></select></div></div>`);
+  $("select", head).onchange = (e) => go(`#/library?order=${e.target.value}${year ? `&year=${year}` : ""}`);
+  view.append(head);
+  if (years.length) {
+    const chips = h('<div class="chips" style="margin-bottom:20px"></div>');
+    chips.append(h(`<a class="chip ${!year ? "active" : ""}" href="#/library?order=${order}">All</a>`));
+    years.forEach((y) => chips.append(h(`<a class="chip ${year == y.year ? "active" : ""}" href="#/library?order=${order}&year=${y.year}">${y.year} <span class="n">${fmt(y.count)}</span></a>`)));
+    view.append(chips);
+  }
+  const body = h("<div></div>");
+  const sentinel = h('<div style="height:1px"></div>');
+  view.append(body, sentinel);
+  const months = new Map();
+  const all = [];
+  let offset = 0, total = Infinity, loading = false;
+  const load = async () => {
+    if (loading || offset >= total) return;
+    loading = true;
+    const res = await api(`/api/photos?offset=${offset}&limit=300&order=${order}${year ? `&year=${year}` : ""}`);
+    total = res.total;
+    offset += res.items.length;
+    $(".lib-count", head).textContent = total ? plural(total, "photo") : "";
+    if (!total) body.append(emptyState("🖼️", "No photos yet", "Add a folder in Sources and they'll appear here.", '<a class="btn primary" href="#/sources">Add folders</a>'));
+    const fresh = new Map();
+    for (const it of res.items) {
+      const key = it.taken_at ? fmtDate(it.taken_at, { year: "numeric", month: "long" }) : "Undated";
+      if (!fresh.has(key)) fresh.set(key, []);
+      fresh.get(key).push(it);
+    }
+    for (const [key, items] of fresh) {
+      let m = months.get(key);
+      if (!m) {
+        const sec = h(`<section class="month"><div class="group-head"><h3>${esc(key)}</h3><span class="sub"></span></div></section>`);
+        const grid = new JGrid([], { onOpen: (idx) => openLightbox(all, all.indexOf(grid.items[idx])) });
+        sec.append(grid.el);
+        body.append(sec);
+        m = { grid, sec };
+        months.set(key, m);
+      }
+      m.grid.add(items);
+      all.push(...items);
+      $(".sub", m.sec).textContent = plural(m.grid.items.length, "photo");
+    }
+    loading = false;
+  };
+  const io = new IntersectionObserver((e) => { if (e[0].isIntersecting) load().catch(fail); }, { rootMargin: "1200px" });
+  io.observe(sentinel);
+  await load();
+}
+
+// ------------------------------------------------------------------ collections
+function collectionCard(c) {
+  const ids = c.preview_ids || [];
+  const media = ids.length
+    ? `<div class="mosaic n${Math.min(ids.length, 3)}">${ids.slice(0, 3).map((id) => `<img loading="lazy" src="${previewUrl(id)}" alt="">`).join("")}</div>`
+    : `<div class="mosaic-empty">${esc(c.emoji || "📁")}</div>`;
+  return h(`<a class="ccard fade-in" href="#/collection/${c.id}">
+    ${media}${c.kind === "smart" ? '<span class="badge">✨ Smart</span>' : ""}
+    <div class="ccard-body"><div class="ccard-emoji" style="${c.color ? `background:${c.color}33` : ""}">${esc(c.emoji || "📁")}</div>
+    <div style="min-width:0"><div class="ccard-title">${esc(c.name)}</div><div class="ccard-sub">${plural(c.count, "photo")}</div></div></div></a>`);
+}
+
+function newCollectionCard(preset = {}) {
+  const el = h(`<button class="ccard new"><span><span class="plus">+</span>New collection</span></button>`);
+  el.onclick = () => openCollectionEditor(preset);
+  return el;
+}
+
+async function renderCollections(view) {
+  const cols = await api("/api/collections");
+  const head = h(`<div class="page-head fade-in"><div><h1>Collections</h1><p>Your own albums and catalogues — hand-picked, or smart ones that fill themselves.</p></div>
+    <div class="row-actions"><button class="btn primary">${I.plus} New collection</button></div></div>`);
+  $(".btn", head).onclick = () => openCollectionEditor();
+  view.append(head);
+  if (!cols.length) {
+    const e = emptyState("📚", "No collections yet", "Group photos however you like: a trip, a person, a year, a feeling. Pick a name to start:");
+    const chips = h('<div class="chips" style="justify-content:center"></div>');
+    COLLECTION_IDEAS.forEach((n) => {
+      const c = h(`<button class="chip">${esc(n)}</button>`);
+      c.onclick = () => openCollectionEditor({ name: n });
+      chips.append(c);
+    });
+    e.append(chips);
+    view.append(e);
+    return;
+  }
+  const grid = h('<div class="card-grid"></div>');
+  cols.forEach((c) => grid.append(collectionCard(c)));
+  grid.append(newCollectionCard());
+  view.append(grid);
+}
+
+async function renderCollection(view, id) {
+  const c = await api(`/api/collections/${id}`);
+  const cover = c.cover_photo_id && c.items.some((i) => i.id === c.cover_photo_id) ? c.cover_photo_id : c.items[0]?.id;
+  const heroEl = h(`<section class="c-hero fade-in ${cover ? "" : "noimg"}">
+      ${cover ? `<img class="bg" src="${previewUrl(cover)}" alt="">` : ""}
+      <div class="c-hero-inner">
+        <div><div class="e">${esc(c.emoji || "📁")}</div><h1>${esc(c.name)}</h1>
+          <p>${plural(c.count, "photo")}${c.kind === "smart" ? ` · ✨ Smart: “${esc(c.query)}”` : ""}${c.description ? ` · ${esc(c.description)}` : ""}</p></div>
+        <div class="row-actions"></div>
+      </div></section>`);
+  const actions = $(".row-actions", heroEl);
+  const btn = (label, icon, fn, extra = "") => { const b = h(`<button class="btn small ${extra}">${icon} ${label}</button>`); b.onclick = fn; actions.append(b); return b; };
+  if (c.kind === "manual") {
+    btn("Add photos", I.plus, () => {
+      state.target = { id: c.id, name: c.name, emoji: c.emoji };
+      toast(`Search for photos, select them, then press <strong>Add to ${esc(c.name)}</strong>.`);
+      go("#/");
+    });
+  }
+  btn("Edit", I.edit, () => openCollectionEditor({ existing: c }));
+  if (c.count) {
+    const a = h(`<a class="btn small" href="/api/collections/${c.id}/export" download>${I.download} Export</a>`);
+    actions.append(a);
+  }
+  if (c.kind === "smart") {
+    btn("Keep as is", I.star, async () => {
+      if (!(await confirmDialog("Freeze this collection?", "It becomes a regular collection with the photos it holds right now, and stops updating itself. You can then add and remove photos by hand.", "Freeze"))) return;
+      await api(`/api/collections/${c.id}/freeze`, { method: "POST" }).catch(fail);
+      route();
+    });
+  }
+  btn("Delete", I.trash, async () => {
+    if (!(await confirmDialog(`Delete “${c.name}”?`, "Only the collection goes away. Your photos stay exactly where they are.", "Delete collection", true))) return;
+    await api(`/api/collections/${c.id}`, { method: "DELETE" });
+    if (state.target?.id === c.id) state.target = null;
+    toast(`Deleted “${esc(c.name)}”`);
+    go("#/collections");
+  });
+  view.append(heroEl);
+
+  if (state.target?.id === c.id) state.target = null;
+
+  if (!c.items.length) {
+    view.append(c.kind === "smart"
+      ? emptyState("✨", "Nothing matches yet", "This collection fills itself with photos that match its description. Try editing the description, or wait until more photos are indexed.")
+      : emptyState(c.emoji || "📁", "This collection is empty", "Find photos with a search, select them, and add them here.", ""));
+    if (c.kind === "manual") {
+      const b = h(`<div style="text-align:center;margin-top:-40px;position:relative"><button class="btn primary">${I.plus} Find photos to add</button></div>`);
+      $("button", b).onclick = () => actions.querySelector(".btn").click();
+      view.append(b);
+    }
+    return;
+  }
+  const head = h(`<div class="section-head"><span class="muted">${c.kind === "smart" ? "Updates automatically as new photos are indexed." : "Select photos to remove them or pick a cover."}</span><button class="link">Select all</button></div>`);
+  view.append(head);
+  const grid = new JGrid(c.items, { coverId: c.cover_photo_id });
+  view.append(grid.el);
+  $(".link", head).onclick = () => grid.selectAll();
+
+  const inThis = (ids) => ids.filter((i) => c.items.some((x) => x.id === i));
+  state.trayActions = [
+    { label: "Set as cover", icon: I.star, run: async (ids) => {
+      const mine = inThis(ids);
+      if (!mine.length) return;
+      await api(`/api/collections/${c.id}`, { method: "PATCH", body: { cover_photo_id: mine[mine.length - 1] } }).catch(fail);
+      clearSelection();
+      route();
+    } },
+  ];
+  if (c.kind === "manual") {
+    state.trayActions.unshift({ label: "Remove from collection", icon: I.trash, run: async (ids) => {
+      const mine = inThis(ids);
+      await api(`/api/collections/${c.id}/photos/remove`, { method: "POST", body: { photo_ids: mine } }).catch(fail);
+      toast(`Removed ${plural(mine.length, "photo")} from “${esc(c.name)}”`, {
+        action: "Undo", onAction: async () => { await api(`/api/collections/${c.id}/photos`, { method: "POST", body: { photo_ids: mine } }); route(); },
+      });
+      clearSelection();
+      route();
+    } });
+  }
+}
+
+async function addPhotosTo(col, ids) {
+  try {
+    const res = await api(`/api/collections/${col.id}/photos`, { method: "POST", body: { photo_ids: ids } });
+    const dup = ids.length - res.added;
+    toast(`Added ${plural(res.added, "photo")} to ${esc(col.emoji || "")} <strong>${esc(col.name)}</strong>${dup ? ` (${dup} already there)` : ""}`, {
+      action: "View", onAction: () => go(`#/collection/${col.id}`),
+    });
+    clearSelection();
+  } catch (e) { fail(e); }
+}
+
+// ------------------------------------------------------------------ modals
+function openModal(html, { wide = false } = {}) {
+  const root = $("#modal-root");
+  const back = h(`<div class="modal-backdrop"><div class="modal ${wide ? "wide" : ""}" role="dialog" aria-modal="true">${html}</div></div>`);
+  const close = () => { back.remove(); document.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
+  document.addEventListener("keydown", onKey, true);
+  root.append(back);
+  $$("[data-close]", back).forEach((b) => (b.onclick = close));
+  const modal = $(".modal", back);
+  setTimeout(() => $("input:not([type=radio]), textarea, button.primary", modal)?.focus(), 30);
+  return { el: modal, close };
+}
+
+function confirmDialog(title, text, ok = "OK", danger = false) {
+  return new Promise((resolve) => {
+    const m = openModal(`<div class="modal-head"><div><h2>${esc(title)}</h2><p>${esc(text)}</p></div></div>
+      <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary ok" style="${danger ? "background:#e5484d;color:#fff" : ""}">${esc(ok)}</button></div>`);
+    const origClose = m.close;
+    let done = false;
+    m.close = () => { origClose(); if (!done) resolve(false); };
+    $$("[data-close]", m.el).forEach((b) => (b.onclick = () => m.close()));
+    $(".ok", m.el).onclick = () => { done = true; origClose(); resolve(true); };
+  });
+}
+
+function openCollectionEditor({ existing = null, name = "", kind = "manual", query = "", photoIds = [], onCreated } = {}) {
+  const c = existing || {};
+  let emoji = c.emoji || EMOJIS[Math.floor(Math.random() * 8)];
+  let color = c.color || COLORS[0];
+  const isEdit = !!existing;
+  kind = c.kind || kind;
+  const m = openModal(`
+    <div class="modal-head"><div><h2>${isEdit ? "Edit collection" : "New collection"}</h2>
+      <p>${isEdit ? "Rename it, change its look or what it's about." : photoIds.length ? `Starting with ${plural(photoIds.length, "selected photo")}.` : "Give it a name you'll recognise."}</p></div>
+      <button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+    <form class="modal-body" id="ced">
+      <div class="field"><label for="c-name">Name</label><input class="input" id="c-name" maxlength="120" required placeholder="e.g. Summer in Crete" value="${esc(c.name || name)}"></div>
+      ${isEdit ? "" : `<div class="field"><label>How should it fill up?</label><div class="seg">
+        <label><input type="radio" name="kind" value="manual" ${kind === "manual" ? "checked" : ""}><strong>🖐️ I'll pick photos</strong><span>Add exactly the ones you choose.</span></label>
+        <label><input type="radio" name="kind" value="smart" ${kind === "smart" ? "checked" : ""}><strong>✨ Smart</strong><span>Describe it; matching photos join automatically.</span></label>
+      </div></div>`}
+      <div class="field" id="q-field"><label for="c-query">Describe what belongs in it</label>
+        <textarea class="input" id="c-query" placeholder="e.g. sunsets over the sea, golden sky">${esc(c.query || query)}</textarea>
+        <small id="q-count"></small><div class="preview-strip" id="q-prev"></div></div>
+      <div class="field"><label>Icon</label><div class="emoji-grid">${EMOJIS.map((e) => `<button type="button" class="${e === emoji ? "on" : ""}">${e}</button>`).join("")}</div></div>
+      <div class="field"><label>Colour</label><div class="swatches">${COLORS.map((x) => `<button type="button" aria-label="${x}" style="background:${x}" class="${x === color ? "on" : ""}" data-c="${x}"></button>`).join("")}</div></div>
+      ${isEdit ? `<div class="field"><label for="c-desc">Note <span class="muted">(optional)</span></label><input class="input" id="c-desc" maxlength="300" value="${esc(c.description || "")}" placeholder="A few words about it"></div>` : ""}
+    </form>
+    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" form="ced" type="submit">${isEdit ? "Save" : "Create collection"}</button></div>`);
+  const el = m.el;
+  const qField = $("#q-field", el);
+  const currentKind = () => (isEdit ? kind : $("input[name=kind]:checked", el).value);
+  const syncKind = () => { qField.hidden = currentKind() !== "smart"; if (!qField.hidden) preview(); };
+  $$("input[name=kind]", el).forEach((r) => (r.onchange = syncKind));
+  $$(".emoji-grid button", el).forEach((b) => (b.onclick = () => { emoji = b.textContent; $$(".emoji-grid button", el).forEach((x) => x.classList.toggle("on", x === b)); }));
+  $$(".swatches button", el).forEach((b) => (b.onclick = () => { color = b.dataset.c; $$(".swatches button", el).forEach((x) => x.classList.toggle("on", x === b)); }));
+  const preview = debounce(async () => {
+    const q = $("#c-query", el).value.trim();
+    const box = $("#q-prev", el), count = $("#q-count", el);
+    if (!q) { box.innerHTML = ""; count.textContent = "Lumen will keep it up to date as new photos arrive."; return; }
+    try {
+      const res = await api(`/api/search?q=${encodeURIComponent(q)}&limit=500`);
+      const strong = res.items.filter((i) => i.tier !== "maybe");
+      count.textContent = strong.length ? `≈ ${plural(strong.length, "photo")} match right now` : "No strong matches yet — try different words.";
+      box.innerHTML = strong.slice(0, 12).map((i) => `<img src="${previewUrl(i.id)}" alt="">`).join("");
+    } catch { /* ignore while typing */ }
+  }, 450);
+  $("#c-query", el).oninput = preview;
+  syncKind();
+  $("#ced", el).onsubmit = async (e) => {
+    e.preventDefault();
+    const body = { name: $("#c-name", el).value.trim(), emoji, color };
+    if (currentKind() === "smart") body.query = $("#c-query", el).value.trim();
+    try {
+      let res;
+      if (isEdit) {
+        if ($("#c-desc", el)) body.description = $("#c-desc", el).value.trim() || null;
+        res = await api(`/api/collections/${c.id}`, { method: "PATCH", body });
+      } else {
+        res = await api("/api/collections", { method: "POST", body: { ...body, kind: currentKind(), photo_ids: photoIds } });
+      }
+      m.close();
+      if (onCreated) { onCreated(res); return; }
+      toast(isEdit ? "Saved" : `Created ${esc(emoji)} <strong>${esc(res.name)}</strong>`);
+      if (isEdit) route(); else go(`#/collection/${res.id}`);
+    } catch (err) { fail(err); }
+  };
+}
+
+async function openAddToCollection(ids) {
+  const cols = (await api("/api/collections")).filter((c) => c.kind === "manual");
+  const m = openModal(`
+    <div class="modal-head"><div><h2>Add ${plural(ids.length, "photo")} to…</h2><p>Pick a collection, or start a new one.</p></div>
+      <button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+    <div class="modal-body">
+      ${cols.length > 5 ? '<input class="input" id="pick-filter" placeholder="Filter collections…" style="margin-bottom:10px">' : ""}
+      <div class="pick-list"></div>
+    </div>
+    <div class="modal-foot"><button class="btn primary" id="pick-new">${I.plus} New collection with these</button></div>`);
+  const list = $(".pick-list", m.el);
+  const draw = (filter = "") => {
+    list.innerHTML = "";
+    cols.filter((c) => c.name.toLowerCase().includes(filter.toLowerCase())).forEach((c) => {
+      const media = c.preview_ids?.length ? `<img src="${previewUrl(c.preview_ids[0])}" alt="">` : `<span class="ph">${esc(c.emoji || "📁")}</span>`;
+      const b = h(`<button class="pick">${media}<span class="t"><strong>${esc(c.emoji || "")} ${esc(c.name)}</strong><span>${plural(c.count, "photo")}</span></span>${I.plus}</button>`);
+      b.onclick = async () => { m.close(); await addPhotosTo(c, ids); };
+      list.append(b);
+    });
+    if (!cols.length) list.append(h('<p class="muted" style="text-align:center;margin:20px 0">You have no collections yet — create your first one below.</p>'));
+  };
+  draw();
+  $("#pick-filter", m.el)?.addEventListener("input", (e) => draw(e.target.value));
+  $("#pick-new", m.el).onclick = () => {
+    m.close();
+    openCollectionEditor({ photoIds: ids, onCreated: (res) => {
+      clearSelection();
+      toast(`Created ${esc(res.emoji || "")} <strong>${esc(res.name)}</strong> with ${plural(res.count, "photo")}`, { action: "View", onAction: () => go(`#/collection/${res.id}`) });
+      if (state.view === "collections" || state.view === "home") route();
+    } });
+  };
+}
+
+async function openFolderBrowser() {
+  const added = [];
+  const m = openModal(`
+    <div class="modal-head"><div><h2>Choose photo folders</h2><p>Browse to a folder and add it. Subfolders are included. Add as many as you like.</p></div>
+      <button class="icon-btn" data-close aria-label="Close">${I.close}</button></div>
+    <div class="modal-body">
+      <div class="fb"><div class="fb-roots"></div>
+        <div class="fb-main"><div class="crumbs"></div><div class="fb-dirs"></div>
+          <div class="fb-here"><span class="here-text"></span><button class="btn primary small" id="fb-add">${I.plus} Add this folder</button></div>
+          <form id="fb-path" style="display:flex;gap:8px;margin-top:10px"><input class="input" placeholder="…or paste a folder path" style="height:38px"><button class="btn small">Go</button></form>
+          <div class="added-list"></div>
+        </div></div>
+    </div>
+    <div class="modal-foot"><span class="muted" style="margin-right:auto;font-size:13px">🔒 Lumen only reads your photos. Nothing leaves this computer.</span><button class="btn" data-close>Done</button></div>`, { wide: true });
+  const el = m.el;
+  let cur = null;
+  const open = async (path) => {
+    try {
+      const d = await api(`/api/fs${path ? `?path=${encodeURIComponent(path)}` : ""}`);
+      cur = d;
+      $(".fb-roots", el).innerHTML = "";
+      d.roots.forEach((r) => {
+        const b = h(`<button title="${esc(r.path)}">${r.name === "Home" ? "🏠" : r.name === "Pictures" || r.name === "Photos" ? "🖼️" : "💽"} ${esc(r.name)}</button>`);
+        b.onclick = () => open(r.path);
+        $(".fb-roots", el).append(b);
+      });
+      const crumbs = $(".crumbs", el);
+      crumbs.innerHTML = "";
+      const sep = d.path.includes("\\") ? "\\" : "/";
+      const segs = d.path.split(/[\\/]/).filter(Boolean);
+      let acc = d.path.startsWith("/") ? "" : "";
+      const rootBtn = h(`<button>${sep === "/" ? "/" : segs[0]}</button>`);
+      rootBtn.onclick = () => open(sep === "/" ? "/" : segs[0] + "\\");
+      crumbs.append(rootBtn);
+      (sep === "/" ? segs : segs.slice(1)).forEach((s, i, arr) => {
+        acc = sep === "/" ? acc + "/" + s : (i === 0 ? segs[0] + "\\" + s : acc + "\\" + s);
+        const target = acc;
+        const b = h(`<button>${esc(s)}</button>`);
+        b.onclick = () => open(target);
+        crumbs.append(h('<span class="muted">›</span>'), b);
+      });
+      const dirs = $(".fb-dirs", el);
+      dirs.innerHTML = "";
+      if (d.parent) { const up = h("<button>⬆️ ..</button>"); up.onclick = () => open(d.parent); dirs.append(up); }
+      d.dirs.forEach((x) => { const b = h(`<button>📁 ${esc(x.name)}</button>`); b.onclick = () => open(x.path); dirs.append(b); });
+      if (!d.dirs.length) dirs.append(h('<p class="muted" style="padding:10px">No subfolders here.</p>'));
+      $(".here-text", el).innerHTML = `<strong>${esc(d.path.split(/[\\/]/).filter(Boolean).pop() || d.path)}</strong> · ${d.images ? plural(d.images, "photo") + " right here" : "no photos directly here"}${d.dirs.length ? `, ${plural(d.dirs.length, "subfolder")}` : ""}`;
+    } catch (e) { fail(e); }
+  };
+  $("#fb-add", el).onclick = async () => {
+    try {
+      const r = await api("/api/folders", { method: "POST", body: { path: cur.path } });
+      added.push(r.path);
+      $(".added-list", el).append(h(`<span class="chip active">✓ ${esc(r.path.split(/[\\/]/).filter(Boolean).pop() || r.path)}</span>`));
+      toast("Folder added — Lumen is scanning it now ✨");
+      refreshStatus();
+    } catch (e) { fail(e); }
+  };
+  $("#fb-path", el).onsubmit = (e) => { e.preventDefault(); const v = $("input", e.target).value.trim(); if (v) open(v); };
+  const origClose = m.close;
+  m.close = () => { origClose(); if (added.length && ["home", "sources"].includes(state.view)) route(); };
+  $$("[data-close]", el).forEach((b) => (b.onclick = () => m.close()));
+  const pics = (await api("/api/fs")).roots.find((r) => r.name === "Pictures");
+  open(pics?.path);
+}
+
+// ------------------------------------------------------------------ lightbox
+const lb = { items: [], idx: 0, extra: null };
+
+function openLightbox(items, idx) {
+  lb.items = items;
+  lb.idx = idx;
+  $("#lightbox").hidden = false;
+  document.body.style.overflow = "hidden";
+  drawLightbox();
+}
+function closeLightbox() {
+  $("#lightbox").hidden = true;
+  document.body.style.overflow = "";
+}
+async function drawLightbox() {
+  const it = lb.items[lb.idx];
+  if (!it) return closeLightbox();
+  const box = $("#lightbox");
+  box.innerHTML = `
+    <div class="lb-stage">
+      <img class="lb-low" src="${previewUrl(it.id)}" alt="">
+      <button class="icon-btn lb-close" aria-label="Close (Esc)">${I.close}</button>
+      ${lb.idx > 0 ? `<button class="lb-nav prev" aria-label="Previous">${I.left}</button>` : ""}
+      ${lb.idx < lb.items.length - 1 ? `<button class="lb-nav next" aria-label="Next">${I.right}</button>` : ""}
+    </div>
+    <aside class="lb-side"><h3>${esc(it.name)}</h3><div class="lb-details muted">Loading…</div></aside>`;
+  $(".lb-close", box).onclick = closeLightbox;
+  $(".prev", box)?.addEventListener("click", () => step(-1));
+  $(".next", box)?.addEventListener("click", () => step(1));
+  $(".lb-stage", box).onclick = (e) => { if (e.target.classList.contains("lb-stage")) closeLightbox(); };
+  const full = new Image();
+  full.alt = it.name;
+  full.onload = () => { const low = $(".lb-low", box); if (low && lb.items[lb.idx] === it) low.replaceWith(full); };
+  full.src = `/api/photos/${it.id}/original`;
+
+  const [d, sim] = await Promise.all([api(`/api/photos/${it.id}`), api(`/api/photos/${it.id}/similar?limit=9`).catch(() => [])]);
+  if (lb.items[lb.idx] !== it) return;
+  const side = $(".lb-side", box);
+  const sel = isSelected(it.id);
+  side.innerHTML = `
+    <h3>${esc(d.name)}</h3>
+    <div class="lb-actions">
+      <button class="btn primary small" data-a="add">${I.collection} Add to collection</button>
+      <button class="btn small" data-a="select">${sel ? "✓ Selected" : "Select"}</button>
+      <button class="btn small" data-a="similar">${I.similar} Find similar</button>
+      <button class="btn small" data-a="reveal">${I.folder} Show in folder</button>
+      <a class="btn small" href="/api/photos/${it.id}/download">${I.download} Download</a>
+    </div>
+    <dl>
+      ${d.taken_at ? `<dt>📅</dt><dd>${new Date(d.taken_at * 1000).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}</dd>` : ""}
+      ${d.camera ? `<dt>📷</dt><dd>${esc(d.camera)}</dd>` : ""}
+      <dt>📁</dt><dd>${esc(d.folder)}</dd>
+      ${d.size ? `<dt>💾</dt><dd>${d.size >= 1048576 ? (d.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(d.size / 1024)) + " KB"}</dd>` : ""}
+      ${it.tier ? `<dt>🎯</dt><dd>${{ best: "Spot-on match", good: "Strong match", maybe: "Possible match" }[it.tier]}</dd>` : ""}
+    </dl>
+    ${d.collections.length ? `<div><h4>In collections</h4><div class="chips">${d.collections.map((c) => `<a class="chip" href="#/collection/${c.id}">${esc(c.emoji || "📁")} ${esc(c.name)}</a>`).join("")}</div></div>` : ""}
+    ${sim.length ? `<div><h4>Looks similar</h4><div class="lb-similar">${sim.map((s, i) => `<img src="${previewUrl(s.id)}" data-i="${i}" alt="${esc(s.name)}">`).join("")}</div></div>` : ""}
+    <div class="muted" style="font-size:12px;margin-top:auto">← → to browse · Esc to close</div>`;
+  side.onclick = async (e) => {
+    const a = e.target.closest("[data-a]")?.dataset.a;
+    const simImg = e.target.closest(".lb-similar img");
+    if (simImg) { openLightbox(sim, Number(simImg.dataset.i)); return; }
+    if (a === "add") openAddToCollection([it.id]);
+    if (a === "similar") go(`#/similar/${it.id}`);
+    if (a === "reveal") api(`/api/photos/${it.id}/reveal`, { method: "POST" }).then(() => toast("Opened in your file manager")).catch(fail);
+    if (a === "select") { setSelected(it, !isSelected(it.id)); renderTray(); e.target.closest("button").textContent = isSelected(it.id) ? "✓ Selected" : "Select"; }
+  };
+}
+function step(d) {
+  const n = lb.idx + d;
+  if (n >= 0 && n < lb.items.length) { lb.idx = n; drawLightbox(); }
+}
+
+// ------------------------------------------------------------------ sources
+async function renderSources(view) {
+  const [folders, settings] = await Promise.all([api("/api/folders"), api("/api/settings")]);
+  view.append(h(`<div class="page-head fade-in"><div><h1>Sources</h1><p>The folders Lumen looks after, and how it's getting on.</p></div>
+    <div class="row-actions"><button class="btn" id="rescan">${I.refresh} Check for new photos</button><button class="btn primary" id="add-folder">${I.folder} Add folders</button></div></div>`));
+  const grid = h('<div class="two-col"></div>');
+  const left = h(`<div class="panel fade-in"><h2>Photo folders</h2><p class="muted" style="margin:0">Subfolders are included. Removing a folder only forgets it — your files are never touched.</p><div class="folder-list"></div></div>`);
+  const list = $(".folder-list", left);
+  if (!folders.length) list.append(emptyState("🗂️", "No folders yet", "Add the folders where your photos live.", ""));
+  for (const f of folders) {
+    const pct = f.photos ? (100 * f.ready) / f.photos : 0;
+    const row = h(`<div class="folder"><div class="ficon">${f.exists ? "📁" : "⚠️"}</div>
+      <div class="meta"><strong>${esc(f.name)}</strong><div class="path" title="${esc(f.path)}">&lrm;${esc(f.path)}</div>
+        <div class="muted" style="font-size:13px">${f.exists ? "" : "Not reachable right now (unplugged drive?) · "}${plural(f.photos, "photo")}${f.pending ? ` · ${fmt(f.pending)} to go` : ""}${f.errors ? ` · ${fmt(f.errors)} couldn't be read` : ""}</div>
+        ${f.pending ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ""}</div>
+      <button class="icon-btn" title="Remove folder" aria-label="Remove folder">${I.trash}</button></div>`);
+    $("button", row).onclick = async () => {
+      if (!(await confirmDialog(`Stop watching “${f.name}”?`, `Lumen will forget its ${plural(f.photos, "photo")} and remove them from your collections. The files on disk are not touched.`, "Remove folder", true))) return;
+      await api(`/api/folders/${f.id}`, { method: "DELETE" }).catch(fail);
+      toast(`Removed “${esc(f.name)}”`);
+      route();
+    };
+    list.append(row);
+  }
+  const right = h(`<div><div class="panel fade-in" id="index-panel"></div>
+    <div class="panel fade-in"><h2>Understanding model</h2><p class="muted" style="margin:0">Runs entirely on this computer. Switching re-reads every photo (previews are reused, so it's quicker than the first time).</p>
+      <form id="model-form">${settings.models.map((x) => `<label class="model-opt"><input type="radio" name="model" value="${x.key}" ${x.key === settings.model ? "checked" : ""}><span><strong>${esc(x.label)}</strong><br><span class="muted">${esc(x.description)}</span></span></label>`).join("")}</form>
+      <p class="muted" style="font-size:13px;margin:14px 0 0">🔒 Library and previews are stored in <code>${esc(settings.data_dir)}</code></p></div></div>`);
+  $$("input[name=model]", right).forEach((r) => (r.onchange = async () => {
+    const ok = await confirmDialog("Switch model?", "Lumen will re-index all photos with the new model. Search keeps working with the photos already done.", "Switch");
+    if (!ok) { $(`input[value="${settings.model}"]`, right).checked = true; return; }
+    await api("/api/settings", { method: "PUT", body: { model: r.value } }).catch(fail);
+    toast("Switching model — re-indexing in the background");
+    route();
+  }));
+  grid.append(left, right);
+  view.append(grid);
+  $("#add-folder").onclick = () => openFolderBrowser();
+  $("#rescan").onclick = async () => { await api("/api/scan", { method: "POST" }); toast("Looking for new and changed photos…"); refreshStatus(); };
+  drawIndexPanel();
+}
+
+function drawIndexPanel() {
+  const p = $("#index-panel");
+  const s = state.status;
+  if (!p || !s) return;
+  const pct = s.total ? Math.round((100 * s.ready) / s.total) : 0;
+  const label = { idle: s.pending ? "Waiting" : "All caught up ✓", scanning: "Looking for photos…", indexing: "Learning your photos…", paused: "Paused" }[s.state] || s.state;
+  p.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2>${label}</h2>
+      ${s.pending || s.state === "paused" ? `<button class="btn small" id="pp">${s.state === "paused" ? I.play + " Resume" : I.pause + " Pause"}</button>` : ""}</div>
+    <div class="bar" style="height:10px"><i style="width:${pct}%"></i></div>
+    <div class="stats">
+      <div class="stat"><b>${fmt(s.ready)}</b><span>photos understood</span></div>
+      <div class="stat"><b>${fmt(s.pending)}</b><span>still to go</span></div>
+      <div class="stat"><b>${s.rate ? s.rate.toFixed(1) + "/s" : "—"}</b><span>${s.eta_seconds ? fmtDuration(s.eta_seconds) + " left" : "speed"}</span></div>
+      ${s.errors ? `<div class="stat"><b>${fmt(s.errors)}</b><span>unreadable · <button class="link" id="retry">retry</button></span></div>` : ""}
+    </div>
+    <p class="muted" style="font-size:13px;margin:12px 0 0;word-break:break-all">${s.state === "scanning" ? `Scanned ${fmt(s.scanned_files)} files · ` : ""}${s.current ? esc(s.current) : ""}${s.model_state !== "ready" ? ` · Model: ${esc(s.model_state)}` : ""}${s.last_error ? `<br>⚠️ ${esc(s.last_error)}` : ""}</p>`;
+  $("#pp", p)?.addEventListener("click", async () => {
+    state.status = await api(`/api/index/${s.state === "paused" ? "resume" : "pause"}`, { method: "POST" });
+    refreshStatus();
+  });
+  $("#retry", p)?.addEventListener("click", async () => { await api("/api/index/retry-errors", { method: "POST" }); refreshStatus(); });
+}
+
+// ------------------------------------------------------------------ status polling
+let pollTimer = null;
+async function refreshStatus() {
+  clearTimeout(pollTimer);
+  const prev = state.status;
+  try {
+    state.status = await api("/api/status");
+  } catch {
+    pollTimer = setTimeout(refreshStatus, 5000);
+    return prev;
+  }
+  const s = state.status;
+  const pill = $("#index-pill");
+  const busy = s.state === "scanning" || s.state === "indexing" || s.state === "paused" || s.pending > 0;
+  pill.hidden = !busy;
+  if (busy) {
+    const pct = s.total ? s.ready / s.total : 0;
+    pill.classList.toggle("spinning", s.state === "scanning" || (s.model_state !== "ready" && s.state === "indexing"));
+    $(".ring-fill", pill).style.strokeDashoffset = 94.25 * (1 - pct);
+    $(".index-pill-text", pill).textContent = s.state === "scanning" ? `Scanning… ${fmt(s.scanned_files)}`
+      : s.state === "paused" ? `Paused · ${fmt(s.ready)} / ${fmt(s.total)}`
+      : `${fmt(s.ready)} / ${fmt(s.total)}${s.eta_seconds ? " · " + fmtDuration(s.eta_seconds) : ""}`;
+  }
+  drawIndexPanel();
+  // First photos became searchable, or a big batch finished: refresh home if the user isn't typing.
+  if (prev && state.view === "home" && !document.activeElement?.matches("input") &&
+      ((prev.ready === 0 && s.ready > 0) || (prev.pending > 0 && s.pending === 0) || prev.folders !== s.folders)) route();
+  pollTimer = setTimeout(refreshStatus, busy ? 2000 : 10000);
+  return s;
+}
+
+// ------------------------------------------------------------------ theme & global keys
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  $("#theme-toggle").innerHTML = dark ? I.sun : I.moon;
+}
+$("#theme-toggle").onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const t = dark ? "light" : "dark";
+  store.set("theme", t);
+  applyTheme(t);
+};
+
+$("#top-search").onsubmit = (e) => {
+  e.preventDefault();
+  const q = $("#top-search-input").value.trim();
+  if (q) go(`#/search?q=${encodeURIComponent(q)}`);
+};
+$("#tray-clear").onclick = () => { clearSelection(); };
+
+document.addEventListener("keydown", (e) => {
+  const typing = e.target.matches("input, textarea, select");
+  if (!$("#lightbox").hidden) {
+    if (e.key === "Escape") closeLightbox();
+    if (e.key === "ArrowLeft") step(-1);
+    if (e.key === "ArrowRight") step(1);
+    return;
+  }
+  if (e.key === "/" && !typing) {
+    e.preventDefault();
+    (state.view === "home" ? $(".hero-search input") : $("#top-search-input"))?.focus();
+  }
+  if (e.key === "Escape" && !typing && state.selection.size) clearSelection();
+});
+
+window.addEventListener("hashchange", route);
+applyTheme(store.get("theme", null));
+refreshStatus().then(route);

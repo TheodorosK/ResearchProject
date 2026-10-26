@@ -1,0 +1,6 @@
+fastapi>=0.110
+uvicorn>=0.29
+fastembed>=0.7
+numpy>=1.26
+pillow>=10.0
+pillow-heif>=0.16

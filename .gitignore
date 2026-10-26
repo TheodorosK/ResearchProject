@@ -6,3 +6,8 @@
 
 # Generated at deploy time by news-dashboard/scripts/generate-briefing.mjs
 news-dashboard/briefing.json
+
+# Lumen
+__pycache__/
+.pytest_cache/
+lumen/.venv/
