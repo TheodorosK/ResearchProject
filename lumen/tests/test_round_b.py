@@ -45,6 +45,7 @@ def client(tmp_path_factory):
     root = tmp_path_factory.mktemp("roundB")
     sign(root / "menu.jpg", ["TAVERNA NIKOS", "Grilled octopus 14.50"])
     sign(root / "ticket.jpg", ["BOARDING PASS", "ATHENS - PARIS"], bg=(225, 235, 245))
+    sign(root / "plaque.jpg", ["MANKIND IS CAPABLE", "OFANAWARENESS"], bg=(250, 250, 250))
     for k, rgb in enumerate([(230, 20, 20), (220, 40, 30), (30, 40, 230), (40, 60, 220), (20, 180, 60)]):
         arr = np.clip(np.array(rgb) + np.random.default_rng(k).integers(-10, 10, (200, 300, 3)), 0, 255)
         Image.fromarray(arr.astype(np.uint8)).save(root / f"plain_{k}.jpg")
@@ -76,6 +77,16 @@ def test_text_in_photos_is_read_and_searchable(client):
     assert res["items"][0]["name"] == "menu.jpg"
     exact = client.get("/api/search", params={"q": '"boarding pass"'}).json()
     assert [i["name"] for i in exact["items"]] == ["ticket.jpg"] and exact["parsed"]["phrases"] == ["boarding pass"]
+    # Words run together on a sign are still found.
+    assert client.get("/api/search", params={"q": "awareness"}).json()["items"][0]["name"] == "plaque.jpg"
+
+
+def test_read_text_fixes_zero_and_o_lookalikes():
+    from lumen.ocr import tidy
+
+    assert tidy("19014 KALAM0S, HOTEL 0LYMPIA") == "19014 KALAMOS, HOTEL OLYMPIA"
+    assert tidy("SINCE 198O, OK 2O24") == "SINCE 1980, OK 2024"
+    assert tidy("Room 101, Windows10, O2 arena, B2B") == "Room 101, Windows10, O2 arena, B2B"
 
 
 def test_descriptions_have_a_shape():

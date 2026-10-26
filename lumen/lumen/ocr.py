@@ -19,6 +19,7 @@ TEXT_PROMPTS = [
 MIN_Z = 2.0          # how text-like a photo must look, relative to the library, to be read
 BATCH = 8
 MAX_SIDE = 1600
+MIN_CONFIDENCE = 0.65  # below this lines are mostly guesses: old handwriting, or scripts the model can't read
 
 _engine = None
 _lock = threading.Lock()
@@ -39,6 +40,14 @@ def _get_engine():
         return _engine
 
 
+def tidy(text: str) -> str:
+    """KALAM0S -> KALAMOS, 198O -> 1980: a zero among capitals, or an O among digits, is a misread."""
+    import re
+
+    text = re.sub(r"(?<=[A-Z])0(?=[A-Z]|\b)|\b0(?=[A-Z]{2})", "O", text)
+    return re.sub(r"(?<=\d)O(?=\d|\b)|\bO(?=\d{2})", "0", text)
+
+
 def read(im) -> str:
     """Recognised text of a PIL image, top to bottom."""
     im = im.convert("RGB")
@@ -47,7 +56,7 @@ def read(im) -> str:
     if not result:
         return ""
     lines = sorted(result, key=lambda r: (round(r[0][0][1] / 20), r[0][0][0]))  # rows, then left to right
-    return "\n".join(r[1] for r in lines if float(r[2]) >= 0.5)  # RapidOCR reports scores as strings
+    return "\n".join(tidy(r[1]) for r in lines if float(r[2]) >= MIN_CONFIDENCE)  # RapidOCR reports scores as strings
 
 
 def _select():
@@ -136,6 +145,10 @@ def matches(text: str, phrases=()) -> dict:
             best = min(r["r"] for r in rows)  # bm25: lower is better, negative
             for r in rows:
                 out[r["rowid"]] = max(0.2, r["r"] / best) if best else 1.0
+    # Words run together with their neighbours on signs ("OFANAWARENESS") only match as part of a word.
+    for w in {w.lower().replace("_", "") for w in words if len(w) >= 5}:
+        for r in db.q("SELECT rowid FROM photo_text WHERE text LIKE ?", (f"%{w}%",)):
+            out.setdefault(r["rowid"], 0.5)
     for ph in phrases:
         for r in db.q("SELECT rowid FROM photo_text WHERE photo_text MATCH ?", (_phrase_query(ph),)):
             out[r["rowid"]] = 1.0

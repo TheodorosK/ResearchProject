@@ -11,6 +11,8 @@ from . import config, db
 ASSIGN_THRESHOLD = 0.42   # new face joins an existing person
 LINK_THRESHOLD = 0.45     # an unassigned face joins a forming group of new faces
 MIN_SCORE = 0.85          # detector confidence
+LARGE_FACE_SCORE = 0.7    # ...relaxed for faces filling much of the frame (selfies in coloured stage light)
+LARGE_FACE_SHARE = 0.12   # a face this wide, relative to the photo's short side, counts as large
 MIN_FACE_PX = 36          # smaller faces are too blurry to recognise reliably
 DETECT_SIZE = 1280        # long edge the detector sees
 THUMB_SIZE = 160
@@ -63,7 +65,7 @@ class FaceEngine:
                 pass
             self._ensure_models()
             det = cv2.FaceDetectorYN.create(
-                str(config.FACE_DIR / config.FACE_MODELS["detector"]["file"]), "", (320, 320), MIN_SCORE
+                str(config.FACE_DIR / config.FACE_MODELS["detector"]["file"]), "", (320, 320), LARGE_FACE_SCORE
             )
             rec = cv2.FaceRecognizerSF.create(str(config.FACE_DIR / config.FACE_MODELS["recognizer"]["file"]), "")
             m = self._local.models = (det, rec)
@@ -87,7 +89,8 @@ class FaceEngine:
         out = []
         for f in found if found is not None else []:
             x, y, fw, fh, score = float(f[0]), float(f[1]), float(f[2]), float(f[3]), float(f[-1])
-            if score < MIN_SCORE or min(fw, fh) < MIN_FACE_PX:
+            large = fw >= LARGE_FACE_SHARE * min(w, h)
+            if score < (LARGE_FACE_SCORE if large else MIN_SCORE) or min(fw, fh) < MIN_FACE_PX:
                 continue
             emb = rec.feature(rec.alignCrop(bgr, f)).reshape(-1).astype(np.float32)
             emb /= np.linalg.norm(emb) or 1
