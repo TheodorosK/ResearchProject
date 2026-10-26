@@ -109,8 +109,8 @@ def _describe(group, info, kind):
         # Different shots of one moment: keep the best-looking (sharpest, best composed) one.
         items = quality.sort_by_quality(group)
     else:
-        # Copies of one shot: keep the highest resolution, then the largest file.
-        items = sorted(group, key=lambda i: (-(info[i]["width"] or 0) * (info[i]["height"] or 0),
+        # Copies of one shot: keep the unframed original, then the highest resolution, then the largest file.
+        items = sorted(group, key=lambda i: (info[i]["framed"] or 0, -(info[i]["width"] or 0) * (info[i]["height"] or 0),
                                              -(info[i]["size"] or 0), info[i]["taken_at"] or 0))
     sizes = {info[i]["size"] for i in group}
     hashes = {info[i]["phash"] for i in group}
@@ -130,7 +130,7 @@ def find(kind="duplicates"):
             _cache["key"][1] != soft and time.time() - _cache["at"] > 60)
         if stale:
             version = (hard, soft)
-            rows = db.q("SELECT id, phash, size, width, height, taken_at, date_source FROM photos "
+            rows = db.q("SELECT id, phash, size, width, height, taken_at, date_source, framed FROM photos "
                         "WHERE status='ready' AND phash IS NOT NULL")
             info = {r["id"]: r for r in rows}
             cos = _cosine_lookup()

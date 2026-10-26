@@ -33,7 +33,11 @@ _lock = threading.Lock()
 def measure(im: Image.Image) -> dict:
     """Technical measurements on a preview-sized image."""
     a = np.asarray(im.convert("L"), dtype=np.float32)
-    lap = a[:-2, 1:-1] + a[2:, 1:-1] + a[1:-1, :-2] + a[1:-1, 2:] - 4 * a[1:-1, 1:-1]
+    # Focus is judged on a contrast-stretched copy, so dark low-key or night photos aren't
+    # mistaken for blurry ones just because their detail is dim.
+    lo, hi = np.percentile(a, (1, 99.5))
+    s = np.clip((a - lo) * (255.0 / max(hi - lo, 16.0)), 0, 255)
+    lap = s[:-2, 1:-1] + s[2:, 1:-1] + s[1:-1, :-2] + s[1:-1, 2:] - 4 * s[1:-1, 1:-1]
     from .colors import palette
 
     return {

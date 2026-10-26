@@ -76,6 +76,27 @@ def _read_meta(im: Image.Image):
     return taken, camera or None, lat, lon
 
 
+def trim_frame(im: Image.Image) -> Image.Image:
+    """The photo inside a plain border (the white or black frames added for Instagram and prints),
+    so a framed copy is analysed like the original. Returns the image unchanged if there's no frame."""
+    from PIL import ImageChops
+
+    rgb = im.convert("RGB")
+    w, h = rgb.size
+    corners = [rgb.getpixel(p) for p in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1))]
+    if max(max(abs(a - b) for a, b in zip(c, corners[0])) for c in corners) > 24:
+        return im  # corners differ: no uniform frame
+    diff = ImageChops.difference(rgb, Image.new("RGB", rgb.size, corners[0])).convert("L")
+    box = diff.point(lambda v: 255 if v > 28 else 0).getbbox()
+    if not box:
+        return im
+    bw, bh = box[2] - box[0], box[3] - box[1]
+    # Only a real frame: a few percent at least, and the photo still most of the picture.
+    if bw * bh > 0.95 * w * h or bw * bh < 0.3 * w * h:
+        return im
+    return im.crop(box)
+
+
 def dhash(im: Image.Image) -> int:
     """64-bit difference hash: survives resizing and re-compression, so it spots copies of a photo."""
     a = np.asarray(im.convert("L").resize((9, 8), Image.Resampling.BILINEAR), dtype=np.int16)
@@ -189,8 +210,9 @@ def _prepare_video(row):
     prev.parent.mkdir(parents=True, exist_ok=True)
     preview.save(prev, "WEBP", quality=config.PREVIEW_QUALITY, method=4)
     out = {"taken_at": taken, "camera": None, "lat": lat, "lon": lon, "width": preview.width,
-           "height": preview.height, "phash": dhash(preview), "duration": duration, "frames": frames,
-           "faces": faces.engine.detect(preview) if faces.engine.enabled else None, **quality.measure(preview)}
+           "height": preview.height, "phash": dhash(trim_frame(preview)), "duration": duration, "frames": frames,
+           "faces": faces.engine.detect(preview) if faces.engine.enabled else None,
+           **quality.measure(trim_frame(preview))}
     return pid, preview, out
 
 
@@ -214,8 +236,11 @@ def _prepare(row):
         # Aspect ratio of the preview equals the oriented original; that's all the grid needs.
         prev.parent.mkdir(parents=True, exist_ok=True)
         im.save(prev, "WEBP", quality=config.PREVIEW_QUALITY, method=4)
-        meta.update(width=im.width, height=im.height, phash=dhash(im), **quality.measure(im))
-        return pid, im, meta
+        core = trim_frame(im)
+        meta.update(width=im.width, height=im.height, phash=dhash(core), framed=int(core is not im),
+                    **quality.measure(core))
+        # The image model sees the photo without its frame, so framed copies search alike.
+        return pid, core, meta
     except Exception as e:  # corrupt, unsupported, vanished...
         return pid, None, {"error": f"{type(e).__name__}: {e}"[:300]}
 
@@ -246,6 +271,9 @@ def _catch_up(row):
                 im, _ = _open_original(row["path"])
             p = im
             p.thumbnail((config.PREVIEW_SIZE, config.PREVIEW_SIZE))
+        core = trim_frame(p)
+        meta["framed"] = int(core is not p)
+        p = core
         meta["phash"] = dhash(p)
         meta.update(quality.measure(p))
         return pid, meta
@@ -263,6 +291,8 @@ def _write_meta(c, pid, meta):
     )
     if "lat" in meta:
         c.execute("UPDATE photos SET lat=?, lon=? WHERE id=?", (meta["lat"], meta["lon"], pid))
+    if "framed" in meta:
+        c.execute("UPDATE photos SET framed=? WHERE id=?", (meta["framed"], pid))
     if "taken_at" in meta and meta.get("width") is None:  # catch-up pass (new photos are dated above)
         _set_date(c, pid, meta["taken_at"])
         if meta.get("camera"):

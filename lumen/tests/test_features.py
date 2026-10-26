@@ -247,3 +247,22 @@ def test_people_are_found_named_searched_and_corrected(client, tmp_path):
     from lumen import faces
     faces.cluster_new_faces()
     assert client.get(f"/api/people/{pid}").json()["count"] == 2
+
+
+def test_framed_copies_are_duplicates_and_the_original_is_kept(client, tmp_path):
+    from lumen.indexer import trim_frame
+    photo = textured(11, size=(600, 400))
+    framed = Image.new("RGB", (700, 700), "white")
+    framed.paste(photo, (50, 150))
+    assert trim_frame(framed).size == (600, 400)
+    assert trim_frame(photo) is photo                      # no frame: untouched
+    folder = tmp_path / "framed"
+    folder.mkdir()
+    photo.save(folder / "original.jpg", quality=95)
+    framed.save(folder / "instagram.jpg", quality=95)
+    client.post("/api/folders", json={"path": str(folder)})
+    time.sleep(0.3)
+    wait_settled(client)
+    ids = by_name(client)
+    g = next(g for g in client.get("/api/duplicates").json()["groups"] if ids["original.jpg"] in g["photo_ids"])
+    assert set(g["photo_ids"]) == {ids["original.jpg"], ids["instagram.jpg"]} and g["keep"] == ids["original.jpg"]
