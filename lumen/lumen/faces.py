@@ -271,6 +271,12 @@ def score_expressions(limit=512):
     return len(rows)
 
 
+def probability(blob, label):
+    if not blob:
+        return 0.0
+    return float(np.frombuffer(blob, dtype=np.float16)[EXPRESSIONS.index(label)])
+
+
 def expression_of(blob):
     """(label, probability) of the dominant expression, or (None, 0)."""
     if not blob:

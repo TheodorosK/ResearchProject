@@ -1075,7 +1075,7 @@ async function drawLightbox() {
     <div class="stars" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((n) => `<button data-star="${n}" class="${(d.rating || 0) >= n ? "on" : ""}" aria-label="${n} star${n > 1 ? "s" : ""}">★</button>`).join("")}</div>
     <div class="lb-tags">${d.tags.map((t) => `<span class="chip"><a href="#/search?q=%23${encodeURIComponent(t)}">#${esc(t)}</a><button data-untag="${esc(t)}" aria-label="Remove tag">✕</button></span>`).join("")}<button class="chip" data-a="tag">${I.tag} Add tag</button></div>
     <dl>
-      ${d.taken_at ? `<dt>📅</dt><dd>${new Date(d.taken_at * 1000).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}</dd>` : ""}
+      ${d.taken_at ? `<dt>📅</dt><dd>${new Date(d.taken_at * 1000).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })}${d.date_source === "file" ? '<br><span class="muted">File date: this photo has no camera date, so it may be when it was saved or copied.</span>' : d.date_source === "filename" ? '<br><span class="muted">From the file name</span>' : ""}</dd>` : ""}
       ${d.camera ? `<dt>📷</dt><dd>${esc(d.camera)}</dd>` : ""}
       <dt>📁</dt><dd>${esc(d.folder)}</dd>
       ${d.lat != null ? `<dt>📍</dt><dd><a href="#/map?photo=${d.id}">${esc(d.place || `${d.lat.toFixed(4)}, ${d.lon.toFixed(4)}`)} · View on map</a></dd>` : ""}
@@ -1086,7 +1086,7 @@ async function drawLightbox() {
     </dl>
     ${d.seen && (d.seen.caption || d.seen.tags.length) ? `<div><h4>What Lumen sees</h4>${d.seen.caption ? `<p class="lb-caption">${esc(d.seen.caption)}</p>` : ""}<div class="chips">${d.seen.tags.map((t) => `<a class="chip" href="#/search?q=${encodeURIComponent(t)}">${esc(t)}</a>`).join("")}</div></div>` : ""}
     ${d.text ? `<div><h4>Text in this photo <button class="link" data-a="copytext">Copy</button></h4><pre class="lb-text">${esc(d.text)}</pre></div>` : ""}
-    ${d.people.length ? `<div><h4>People${d.people.some((p) => p.kind === "pet") ? " & pets" : ""}</h4><div class="lb-people">${d.people.map((p) => `<a class="lb-person" href="${p.id ? `#/person/${p.id}` : "#/people"}"><span class="lb-face"><img src="${faceUrl(p.face_id)}" alt="">${p.expression_emoji ? `<i title="${esc(p.expression)}">${p.expression_emoji}</i>` : ""}</span><span>${p.kind === "pet" ? (p.species === "dog" ? "🐶 " : "🐱 ") : ""}${p.id ? esc(p.name || "Add a name") : "Not grouped yet"}</span></a>`).join("")}</div></div>` : ""}
+    ${d.people.length ? `<div><h4>People${d.people.some((p) => p.kind === "pet") ? " & pets" : ""}</h4><div class="lb-people">${d.people.map((p) => `<a class="lb-person" href="${p.id ? `#/person/${p.id}` : "#/people"}"><span class="lb-face"><img src="${faceUrl(p.face_id)}" alt="">${p.expression_emoji ? `<i title="${esc(p.expression === "happiness" ? "smiling" : p.expression)}">${p.expression_emoji}</i>` : ""}</span><span>${p.kind === "pet" ? (p.species === "dog" ? "🐶 " : "🐱 ") : ""}${p.id ? esc(p.name || "Add a name") : "Not grouped yet"}</span></a>`).join("")}</div></div>` : ""}
     ${d.collections.length ? `<div><h4>In collections</h4><div class="chips">${d.collections.map((c) => `<a class="chip" href="#/collection/${c.id}">${esc(c.emoji || "📁")} ${esc(c.name)}</a>`).join("")}</div></div>` : ""}
     ${sim.length ? `<div><h4>Looks similar</h4><div class="lb-similar">${sim.map((s, i) => `<img src="${previewUrl(s.id)}" data-i="${i}" alt="${esc(s.name)}">`).join("")}</div></div>` : ""}
     <div class="muted" style="font-size:12px;margin-top:auto">← → to browse · Esc to close</div>`;

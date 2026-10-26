@@ -131,6 +131,7 @@ MIGRATIONS = {
         "favorite": "INTEGER NOT NULL DEFAULT 0",
         "rating": "INTEGER NOT NULL DEFAULT 0",   # 0-5 stars
         "xmp_v": "INTEGER NOT NULL DEFAULT 0",    # 1 = existing XMP sidecar imported
+        "date_source": "TEXT",        # camera (EXIF/video metadata) | filename | file (modification time)
     },
     "persons": {
         "kind": "TEXT NOT NULL DEFAULT 'person'",  # person | pet

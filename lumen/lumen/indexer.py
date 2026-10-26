@@ -1,5 +1,6 @@
 """Background worker: walks folders, builds smart previews, reads EXIF and embeds photos."""
 import os
+import re
 import threading
 import time
 from collections import deque
@@ -109,6 +110,38 @@ def _inside_library_cache(dirpath):
     return any(dirpath.lower().endswith(s) for s in config.LIBRARY_ORIGINALS)
 
 
+FILENAME_DATE = re.compile(
+    r"(?<!\d)((?:19|20)\d\d)[-_.]?(0[1-9]|1[0-2])[-_.]?(0[1-9]|[12]\d|3[01])"
+    r"(?:\D{1,4}?([01]\d|2[0-3])[-_.:h]?([0-5]\d)[-_.:m]?(?:([0-5]\d)\d{0,3})?)?(?!\d)")  # PXL_…_142233123
+
+
+def date_from_filename(path):
+    """IMG_20230712_142233.jpg, PXL_20230712…, 2023-07-12 14.22.33.jpg, 'WhatsApp Image 2023-07-12 at
+    14.22.33.jpeg', 'Screenshot 2023-07-12 at 14.22.33.png' -> timestamp, or None."""
+    m = FILENAME_DATE.search(os.path.basename(path))
+    if not m:
+        return None
+    y, mo, d, hh, mm, ss = (int(g) if g else 0 for g in m.groups())
+    try:
+        dt = datetime(y, mo, d, hh, mm, ss)
+    except ValueError:
+        return None
+    return dt.timestamp() if datetime(1990, 1, 1) <= dt <= datetime.now() else None
+
+
+def _set_date(c, pid, camera_taken):
+    """Best available capture date. Camera dates beat dates in file names, which beat the file's
+    modification time (that one is often just when the file was copied or exported)."""
+    row = c.execute("SELECT path, mtime FROM photos WHERE id=?", (pid,)).fetchone()
+    if camera_taken:
+        taken, source = camera_taken, "camera"
+    elif (from_name := date_from_filename(row["path"])):
+        taken, source = from_name, "filename"
+    else:
+        taken, source = row["mtime"], "file"
+    c.execute("UPDATE photos SET taken_at=?, date_source=? WHERE id=?", (taken, source, pid))
+
+
 def _parse_iso6709(s):
     """'+37.9715+023.7257+050.000/' -> (37.9715, 23.7257)."""
     import re
@@ -201,6 +234,9 @@ def _catch_up(row):
         if row["meta_v"] < 2 or want_faces:
             im, meta = _open_original(row["path"])
             meta["faces"] = faces.engine.detect(im) if want_faces else None
+        if row["meta_v"] < 5 and "taken_at" not in meta:
+            with Image.open(row["path"]) as orig:  # header only: no decoding
+                meta["taken_at"], meta["camera"], _, _ = _read_meta(orig)
         prev = preview_path(pid)
         if prev.exists():
             with Image.open(prev) as p:
@@ -227,6 +263,10 @@ def _write_meta(c, pid, meta):
     )
     if "lat" in meta:
         c.execute("UPDATE photos SET lat=?, lon=? WHERE id=?", (meta["lat"], meta["lon"], pid))
+    if "taken_at" in meta and meta.get("width") is None:  # catch-up pass (new photos are dated above)
+        _set_date(c, pid, meta["taken_at"])
+        if meta.get("camera"):
+            c.execute("UPDATE photos SET camera=? WHERE id=?", (meta["camera"], pid))
     if meta.get("faces") is not None and faces.engine.enabled:
         old = [r["id"] for r in c.execute("SELECT id FROM faces WHERE photo_id=? AND kind='person'", (pid,))]
         c.execute("DELETE FROM faces WHERE photo_id=? AND kind='person'", (pid,))
@@ -496,9 +536,10 @@ class Indexer:
                     if meta:
                         c.execute(
                             "UPDATE photos SET status='ready', error=NULL, embedding=?, model=?, "
-                            "width=?, height=?, taken_at=COALESCE(?, mtime), camera=? WHERE id=?",
-                            (blob, emb.key, meta["width"], meta["height"], meta["taken_at"], meta["camera"], pid),
+                            "width=?, height=?, camera=? WHERE id=?",
+                            (blob, emb.key, meta["width"], meta["height"], meta["camera"], pid),
                         )
+                        _set_date(c, pid, meta["taken_at"])
                         self._new_faces += _write_meta(c, pid, meta)
                     else:
                         c.execute(

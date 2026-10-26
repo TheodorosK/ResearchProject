@@ -86,7 +86,9 @@ def _duplicate_groups(rows, cos):
 
 def _burst_groups(rows, cos, exclude):
     uf = _UnionFind()
-    timed = sorted((r["taken_at"], r["id"]) for r in rows if r["taken_at"])
+    # Only real capture times: a folder of exported files shares one modification time.
+    timed = sorted((r["taken_at"], r["id"]) for r in rows
+                   if r["taken_at"] and r["date_source"] in ("camera", "filename"))
     for i, (t, a) in enumerate(timed):
         if a in exclude:
             continue
@@ -128,7 +130,7 @@ def find(kind="duplicates"):
             _cache["key"][1] != soft and time.time() - _cache["at"] > 60)
         if stale:
             version = (hard, soft)
-            rows = db.q("SELECT id, phash, size, width, height, taken_at FROM photos "
+            rows = db.q("SELECT id, phash, size, width, height, taken_at, date_source FROM photos "
                         "WHERE status='ready' AND phash IS NOT NULL")
             info = {r["id"]: r for r in rows}
             cos = _cosine_lookup()

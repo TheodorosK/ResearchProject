@@ -108,7 +108,7 @@ def compute():
             return _cache["data"]
         rows = db.q(
             "SELECT id, taken_at, place_city, place_region, place_country FROM photos "
-            "WHERE status='ready' AND taken_at IS NOT NULL ORDER BY taken_at"
+            "WHERE status='ready' AND taken_at IS NOT NULL AND date_source IN ('camera', 'filename') ORDER BY taken_at"
         )
         # 1. Events: runs of photos without long pauses.
         events, cur = [], []

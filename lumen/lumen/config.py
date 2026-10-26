@@ -56,7 +56,7 @@ PORT = int(os.environ.get("LUMEN_PORT", "8765"))
 
 # Bumped when indexing starts extracting something new (faces, places, fingerprints), so
 # photos indexed by an older version get a quick catch-up pass instead of a full re-index.
-META_VERSION = 4
+META_VERSION = 5
 
 # Face grouping and expressions. Small ONNX models (~75 MB) fetched once on first use.
 FACES = os.environ.get("LUMEN_FACES", "1") != "0"

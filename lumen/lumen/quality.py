@@ -80,11 +80,10 @@ def scores():
         sharp_z = np.zeros(len(ids))
         if have.sum() > 2:
             sharp_z[have] = np.clip(_robust_z(sharp[have]), -3, 2)
-        # Blown highlights hurt; deep shadows only when most of the frame is black (moody is fine).
-        penalty = np.array([
-            2 * max(0.0, (tech[i]["hi_clip"] or 0) - 0.15) + max(0.0, (tech[i]["lo_clip"] or 0) - 0.6)
-            if i in tech else 0.0 for i in ids.tolist()
-        ])
+        # Blown-out highlights hurt. Deep shadows don't: low-key, silhouette and night photos are
+        # deliberately mostly black.
+        penalty = np.array([2 * max(0.0, (tech[i]["hi_clip"] or 0) - 0.15) if i in tech else 0.0
+                            for i in ids.tolist()])
         q = AESTHETIC_WEIGHT * aes + SHARPNESS_WEIGHT * sharp_z - 4 * penalty
         taste = _taste(ids, mat)
         if taste is not None:

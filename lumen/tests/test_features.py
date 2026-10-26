@@ -57,8 +57,9 @@ def client(tmp_path_factory):
     with_gps(textured(4), root / "paris.jpg", 48.8584, -2.2945)
     # A burst: two framings of one scene, one of them out of focus.
     scene = textured(7, size=(1000, 600))
-    scene.crop((0, 0, 640, 480)).save(root / "burst sharp.jpg", quality=95)
-    scene.crop((120, 60, 760, 540)).filter(ImageFilter.GaussianBlur(6)).save(root / "burst blurry.jpg", quality=95)
+    # Similar shots need real capture times (a camera date, or one in the file name).
+    scene.crop((0, 0, 640, 480)).save(root / "IMG_20240601_101500.jpg", quality=95)
+    scene.crop((120, 60, 760, 540)).filter(ImageFilter.GaussianBlur(6)).save(root / "IMG_20240601_101530.jpg", quality=95)
     with TestClient(app) as c:
         c.root = root
         assert c.post("/api/folders", json={"path": str(root)}).status_code == 200
@@ -106,22 +107,22 @@ def test_quality_measures_sharpness_and_clipping():
 def test_bursts_keep_the_sharpest_shot(client):
     ids = by_name(client)
     groups = client.get("/api/duplicates?kind=bursts").json()["groups"]
-    g = next(g for g in groups if ids["burst sharp.jpg"] in g["photo_ids"])
+    g = next(g for g in groups if ids["IMG_20240601_101500.jpg"] in g["photo_ids"])
     # (The stand-in embedder sees all these grey-ish test images as alike, so the burst may hold more.)
-    assert ids["burst blurry.jpg"] in g["photo_ids"]
-    assert g["photo_ids"].index(ids["burst sharp.jpg"]) < g["photo_ids"].index(ids["burst blurry.jpg"])
+    assert ids["IMG_20240601_101530.jpg"] in g["photo_ids"]
+    assert g["photo_ids"].index(ids["IMG_20240601_101500.jpg"]) < g["photo_ids"].index(ids["IMG_20240601_101530.jpg"])
 
 
 def test_best_shots_and_quality_sort(client):
     ids = by_name(client)
     s = quality.scores()
-    assert s[ids["burst sharp.jpg"]][0] > s[ids["burst blurry.jpg"]][0]
+    assert s[ids["IMG_20240601_101500.jpg"]][0] > s[ids["IMG_20240601_101530.jpg"]][0]
     home = client.get("/api/home").json()
     assert "moods" in home and home["best"]
     best = client.get("/api/photos", params={"order": "best", "limit": 100}).json()["items"]
     names = [i["name"] for i in best]
-    assert names.index("burst sharp.jpg") < names.index("burst blurry.jpg")
-    detail = client.get(f"/api/photos/{ids['burst sharp.jpg']}").json()
+    assert names.index("IMG_20240601_101500.jpg") < names.index("IMG_20240601_101530.jpg")
+    detail = client.get(f"/api/photos/{ids['IMG_20240601_101500.jpg']}").json()
     assert 0 <= detail["quality"] <= 100
 
 

@@ -70,7 +70,7 @@ def hydrate(items):
     for i in range(0, len(ids), 900):
         chunk = ids[i : i + 900]
         for r in db.q(
-            f"SELECT id, path, width, height, taken_at, camera, folder_id, lat, lon, size, kind, duration, favorite, rating, "
+            f"SELECT id, path, width, height, taken_at, camera, folder_id, lat, lon, size, kind, duration, favorite, rating, date_source, "
             f"place_city, place_region, place_country FROM photos "
             f"WHERE id IN ({','.join('?' * len(chunk))})",
             chunk,
@@ -96,6 +96,7 @@ def hydrate(items):
             "place": places.label(r),
             "kind": r["kind"],
             "duration": r["duration"],
+            "date_source": r["date_source"],
             "fav": bool(r["favorite"]),
             "rating": r["rating"],
         })
@@ -461,8 +462,14 @@ def photo_detail(photo_id: int):
 def _face_entry(row):
     d = {k: row[k] for k in row.keys() if k != "expr_probs"}
     label, prob = faces.expression_of(row["expr_probs"])
-    d["expression"] = label if label and prob >= 0.5 else None
-    d["expression_emoji"] = faces.EXPRESSION_EMOJI.get(d["expression"])
+    smile = faces.probability(row["expr_probs"], "happiness")
+    if label and prob >= 0.5:
+        d["expression"] = label
+    elif smile >= 0.3:
+        d["expression"] = "slight smile"
+    else:
+        d["expression"] = None
+    d["expression_emoji"] = faces.EXPRESSION_EMOJI.get(d["expression"], "🙂" if d["expression"] else None)
     return d
 
 

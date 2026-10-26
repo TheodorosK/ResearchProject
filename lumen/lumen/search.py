@@ -473,7 +473,7 @@ def moods(per_concept=6):
 def on_this_day(limit=24):
     today = datetime.now()
     rows = db.q(
-        "SELECT id, taken_at FROM photos WHERE status='ready' AND taken_at IS NOT NULL "
+        "SELECT id, taken_at FROM photos WHERE status='ready' AND taken_at IS NOT NULL AND date_source IN ('camera', 'filename') "
         "AND strftime('%m-%d', taken_at, 'unixepoch', 'localtime') = ? "
         "AND strftime('%Y', taken_at, 'unixepoch', 'localtime') < ? ORDER BY taken_at DESC LIMIT ?",
         (today.strftime("%m-%d"), today.strftime("%Y"), limit),

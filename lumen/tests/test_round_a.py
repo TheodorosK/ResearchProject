@@ -152,3 +152,22 @@ def test_videos_are_searchable_by_moment(client):
     assert hit["t"] < 5
     r = client.get(f"/api/photos/{v['id']}/original", headers={"Range": "bytes=0-99"})
     assert r.status_code == 206 and len(r.content) == 100
+
+
+def test_dates_come_from_camera_then_file_name_then_file():
+    from lumen.indexer import date_from_filename
+    from datetime import datetime as dt
+    assert dt.fromtimestamp(date_from_filename("IMG_20230712_142233.jpg")) == dt(2023, 7, 12, 14, 22, 33)
+    assert dt.fromtimestamp(date_from_filename("PXL_20230712_142233123.jpg")) == dt(2023, 7, 12, 14, 22, 33)
+    assert dt.fromtimestamp(date_from_filename("WhatsApp Image 2023-07-12 at 14.22.33.jpeg")) == dt(2023, 7, 12, 14, 22, 33)
+    assert date_from_filename("DSC_0042.JPG") is None and date_from_filename("photo_2019-02-30.jpg") is None
+
+
+def test_file_dates_stay_out_of_memories(client):
+    # Photos with camera dates are in memories; ones dated only by the file system are not.
+    items = {i["name"]: i for i in client.get("/api/photos?limit=100").json()["items"]}
+    assert items["crete_0.jpg"]["date_source"] == "camera"
+    assert items["clip.mp4"]["date_source"] == "file"
+    in_memories = {i for m in client.get("/api/memories").json()["items"]
+                   for i in [x["id"] for x in client.get(f"/api/memories/{m['key']}").json()["items"]]}
+    assert items["clip.mp4"]["id"] not in in_memories
