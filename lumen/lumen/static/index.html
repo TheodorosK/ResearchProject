@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lumen</title>
+  <meta name="description" content="Search your photos by describing them.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ffb454'/%3E%3Cstop offset='.5' stop-color='%23ff6f91'/%3E%3Cstop offset='1' stop-color='%237c9cff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Ccircle cx='32' cy='32' r='12' fill='none' stroke='white' stroke-width='5'/%3E%3Ccircle cx='32' cy='32' r='4' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/" aria-label="Lumen home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Lumen</span>
+    </a>
+    <form class="top-search" id="top-search" role="search">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="top-search-input" type="search" placeholder="Describe a photo…" autocomplete="off" aria-label="Search photos">
+      <button type="button" class="icon-btn small" id="pic-search" title="Search with a picture" aria-label="Search with a picture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+      <kbd>/</kbd>
+    </form>
+    <nav class="nav" aria-label="Main">
+      <a href="#/" data-nav="home">Home</a>
+      <a href="#/library" data-nav="library">Library</a>
+      <a href="#/memories" data-nav="memories">Memories</a>
+      <a href="#/people" data-nav="people">People</a>
+      <a href="#/map" data-nav="map">Places</a>
+      <a href="#/collections" data-nav="collections">Collections</a>
+      <a href="#/sources" data-nav="sources">Sources</a>
+    </nav>
+    <a class="index-pill" id="index-pill" href="#/sources" hidden>
+      <svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15"/><circle class="ring-fill" cx="18" cy="18" r="15"/></svg>
+      <span class="index-pill-text"></span>
+    </a>
+    <button class="icon-btn" id="theme-toggle" title="Switch light / dark" aria-label="Switch light or dark theme">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </header>
+
+  <main id="view" tabindex="-1"></main>
+
+  <div class="tray" id="tray" hidden>
+    <div class="tray-count"><strong id="tray-n">0</strong> selected</div>
+    <div class="tray-actions" id="tray-actions"></div>
+    <button class="icon-btn" id="tray-clear" title="Clear selection (Esc)" aria-label="Clear selection">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+
+  <div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Photo viewer"></div>
+  <div class="modal-root" id="modal-root"></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
