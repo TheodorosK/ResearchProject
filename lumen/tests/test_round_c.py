@@ -254,3 +254,33 @@ def test_lookalike_faces_are_suggested_and_answers_stick(client):
         with db.tx() as c:
             c.execute("DELETE FROM faces WHERE photo_id IN (?, ?, ?, ?)", photos)
             c.execute("DELETE FROM persons WHERE id=?", (pid,))
+
+
+def test_face_grouping_does_not_depend_on_indexing_order(client):
+    from lumen import faces
+
+    rng = np.random.default_rng(11)
+    a, b = rng.normal(size=128), rng.normal(size=128)
+    a /= np.linalg.norm(a)
+    b -= (b @ a) * a
+    b /= np.linalg.norm(b)
+    at = lambda cos: cos * a + np.sqrt(1 - cos ** 2) * b  # noqa: E731
+    photos = [r["id"] for r in db.q("SELECT id FROM photos WHERE status='ready' ORDER BY id LIMIT 4")]
+    with db.tx() as c:
+        pid = c.execute("INSERT INTO persons(created_at) VALUES(?)", (db.now(),)).lastrowid
+        def face(photo, vec, person=None):
+            return c.execute("INSERT INTO faces(photo_id, x, y, w, h, score, embedding, person_id) "
+                             "VALUES(?, 0, 0, .3, .3, .9, ?, ?)",
+                             (photo, vec.astype(np.float16).tobytes(), person)).lastrowid
+        face(photos[0], a, pid)
+        face(photos[1], a, pid)
+        bridge = face(photos[2], at(0.75))   # joins at once, and pulls the centre towards b
+        late = face(photos[3], at(0.38))     # too far from the old centre, close enough to the new one
+    try:
+        faces.cluster_new_faces()
+        got = {r["id"]: r["person_id"] for r in db.q("SELECT id, person_id FROM faces WHERE id IN (?, ?)", (bridge, late))}
+        assert got == {bridge: pid, late: pid}
+    finally:
+        with db.tx() as c:
+            c.execute("DELETE FROM faces WHERE photo_id IN (?, ?, ?, ?)", photos)
+            c.execute("DELETE FROM persons WHERE id=?", (pid,))

@@ -223,7 +223,20 @@ def cluster_new_faces(kind="person", assign=ASSIGN_THRESHOLD, link=LINK_THRESHOL
     1. A face close enough to an existing person's centre joins that person.
     2. The rest are grouped with each other; every group of two or more becomes a new,
        unnamed person. Lone faces wait for company.
+
+    Repeated until nothing moves: a person's centre shifts as faces join, and a face left out
+    earlier may now be close enough, so the result doesn't depend on which photos came first.
     """
+    moved = 0
+    for _ in range(5):
+        n = _cluster_pass(kind, assign, link)
+        moved += n
+        if not n:
+            break
+    return moved
+
+
+def _cluster_pass(kind, assign, link):
     loose = db.q("SELECT id, embedding FROM faces WHERE person_id IS NULL AND locked=0 AND kind=? "
                  "ORDER BY score DESC", (kind,))
     if not loose:
