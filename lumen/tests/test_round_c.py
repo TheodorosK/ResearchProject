@@ -211,3 +211,13 @@ def test_photo_app_libraries_index_only_originals(client):
     assert not names & {"IMG_1_thumb.jpg", "preview.jpg", "SYNOPHOTO_THUMB.jpg"}
     listing = client.get("/api/fs", params={"path": str(client.root)}).json()
     assert any(d["library"] for d in listing["dirs"] if d["name"].endswith(".photoslibrary"))
+
+
+def test_overlapping_face_detections_from_brightened_copies_count_once():
+    import numpy as np
+
+    from lumen.faces import _strongest
+
+    a, b, far = (np.array([10, 10, 50, 50, 0.8]), np.array([12, 11, 49, 52, 0.9]), np.array([200, 10, 50, 50, 0.95]))
+    kept = _strongest([(0.8, a, "orig"), (0.9, b, "lifted"), (0.95, far, "orig")])
+    assert [(s, src) for s, _, src in kept] == [(0.95, "orig"), (0.9, "lifted")]

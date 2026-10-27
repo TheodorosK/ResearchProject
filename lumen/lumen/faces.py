@@ -17,11 +17,39 @@ MIN_FACE_PX = 36          # smaller faces are too blurry to recognise reliably
 DETECT_SIZE = 1280        # long edge the detector sees
 THUMB_SIZE = 160
 THUMB_MARGIN = 1.5        # face thumbnails show the face box enlarged by this factor
+DARK_BRIGHTNESS = 70      # photos darker than this (mean 0-255) are also searched brightened
 
 # FER+ output order.
 EXPRESSIONS = ["neutral", "happiness", "surprise", "sadness", "anger", "disgust", "fear", "contempt"]
 EXPRESSION_EMOJI = {"neutral": "😐", "happiness": "😊", "surprise": "😮", "sadness": "😢",
                     "anger": "😠", "disgust": "🤢", "fear": "😨", "contempt": "😒"}
+
+
+def _brightened(bgr):
+    """Lifted copies of a dark photo: faces in shadow or low-key light are often only found in these."""
+    import cv2
+
+    lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
+    lab[:, :, 0] = cv2.createCLAHE(3.0, (8, 8)).apply(lab[:, :, 0])
+    gamma = (255 * (np.arange(256) / 255.0) ** 0.5).astype(np.uint8)
+    return [cv2.cvtColor(lab, cv2.COLOR_LAB2BGR), cv2.LUT(bgr, gamma)]
+
+
+def _strongest(found):
+    """One detection per face: the most confident of overlapping boxes from the different copies."""
+    keep = []
+    for score, f, src in sorted(found, key=lambda t: -t[0]):
+        x, y, w, h = (float(v) for v in f[:4])
+        if all(_iou((x, y, w, h), tuple(float(v) for v in k[1][:4])) < 0.3 for k in keep):
+            keep.append((score, f, src))
+    return keep
+
+
+def _iou(a, b):
+    ix = max(0.0, min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]))
+    inter = ix * iy
+    return inter / (a[2] * a[3] + b[2] * b[3] - inter or 1)
 
 
 class FaceEngine:
@@ -80,25 +108,31 @@ class FaceEngine:
         except Exception as e:
             self.state = f"unavailable: {e}"
             return []
+        from PIL import Image as PILImage
+
         im = im.copy()
         im.thumbnail((DETECT_SIZE, DETECT_SIZE))
         bgr = np.ascontiguousarray(np.asarray(im)[:, :, ::-1])
         h, w = bgr.shape[:2]
         det.setInputSize((w, h))
-        _, found = det.detect(bgr)
+        found = []
+        for src in [bgr] + (_brightened(bgr) if bgr.mean() < DARK_BRIGHTNESS else []):
+            _, fs = det.detect(src)
+            for f in fs if fs is not None else []:
+                fw, score = float(f[2]), float(f[-1])
+                large = fw >= LARGE_FACE_SHARE * min(w, h)
+                if score >= (LARGE_FACE_SCORE if large else MIN_SCORE) and min(fw, float(f[3])) >= MIN_FACE_PX:
+                    found.append((score, f, src))
         out = []
-        for f in found if found is not None else []:
-            x, y, fw, fh, score = float(f[0]), float(f[1]), float(f[2]), float(f[3]), float(f[-1])
-            large = fw >= LARGE_FACE_SHARE * min(w, h)
-            if score < (LARGE_FACE_SCORE if large else MIN_SCORE) or min(fw, fh) < MIN_FACE_PX:
-                continue
-            emb = rec.feature(rec.alignCrop(bgr, f)).reshape(-1).astype(np.float32)
+        for score, f, src in _strongest(found):
+            x, y, fw, fh = float(f[0]), float(f[1]), float(f[2]), float(f[3])
+            emb = rec.feature(rec.alignCrop(src, f)).reshape(-1).astype(np.float32)
             emb /= np.linalg.norm(emb) or 1
             # A square crop with some margin, for the round avatars in the UI.
             side = max(fw, fh) * THUMB_MARGIN
             cx, cy = x + fw / 2, y + fh / 2
             box = (max(0, cx - side / 2), max(0, cy - side / 2), min(w, cx + side / 2), min(h, cy + side / 2))
-            thumb = im.crop(tuple(int(v) for v in box))
+            thumb = PILImage.fromarray(np.ascontiguousarray(src[:, :, ::-1])).crop(tuple(int(v) for v in box))
             thumb.thumbnail((THUMB_SIZE, THUMB_SIZE))
             out.append({
                 "box": (max(0.0, x / w), max(0.0, y / h), fw / w, fh / h),

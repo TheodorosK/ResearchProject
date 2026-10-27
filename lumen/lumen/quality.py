@@ -16,6 +16,7 @@ GOOD = [
     "a beautiful, stunning photograph",
     "an award-winning photo with great composition",
     "a sharp, well exposed, professional photo",
+    "a moody, cinematic fine art photograph",
 ]
 BAD = [
     "a blurry, out of focus photo",
@@ -84,6 +85,10 @@ def scores():
         sharp_z = np.zeros(len(ids))
         if have.sum() > 2:
             sharp_z[have] = np.clip(_robust_z(sharp[have]), -3, 2)
+        # Softness the image model likes is a choice (multiple exposures, motion, defocus, haze), so
+        # it costs less the better the photo looks; a blurry snapshot still pays in full.
+        soft = sharp_z < 0
+        sharp_z[soft] *= 1 - np.clip(aes[soft], 0, 2) / 2
         # Blown-out highlights hurt. Deep shadows don't: low-key, silhouette and night photos are
         # deliberately mostly black.
         penalty = np.array([2 * max(0.0, (tech[i]["hi_clip"] or 0) - 0.15) if i in tech else 0.0
