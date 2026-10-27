@@ -927,6 +927,32 @@ def merge_people(body: MergeIn):
     return person_dict(person_or_404(body.into))
 
 
+class FaceAnswerIn(BaseModel):
+    face_ids: list[int]
+    accept: bool
+
+
+@app.get("/api/people/{pid}/suggestions")
+def person_suggestions(pid: int):
+    """Faces that might also be this person, for a yes/no from the user."""
+    person_or_404(pid)
+    return faces.suggestions(pid)
+
+
+@app.post("/api/people/{pid}/faces")
+def answer_suggestions(pid: int, body: FaceAnswerIn):
+    """'Yes, that's them' adds the faces to this person; 'no' keeps them from being suggested again.
+    Either way the answer is the user's, so automatic grouping leaves these faces alone."""
+    p = person_or_404(pid)
+    if not body.face_ids:
+        return person_dict(p)
+    marks = ",".join("?" * len(body.face_ids))
+    with db.tx() as c:
+        c.execute(f"UPDATE faces SET person_id=?, locked=1 WHERE person_id IS NULL AND kind=? AND id IN ({marks})",
+                  [pid if body.accept else None, p["kind"], *body.face_ids])
+    return person_dict(person_or_404(pid))
+
+
 @app.post("/api/people/{pid}/remove-photos")
 def remove_person_photos(pid: int, body: IdsIn):
     """'That's not them': detach this person from the given photos, and remember it."""

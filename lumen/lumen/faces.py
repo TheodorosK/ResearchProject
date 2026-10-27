@@ -10,6 +10,7 @@ from . import config, db
 # stricter, because merging two people is one click but untangling a wrong group is tedious.
 ASSIGN_THRESHOLD = 0.42   # new face joins an existing person
 LINK_THRESHOLD = 0.45     # an unassigned face joins a forming group of new faces
+SUGGEST_THRESHOLD = 0.30  # below the bar for grouping, but worth asking "is this them too?"
 MIN_SCORE = 0.85          # detector confidence
 LARGE_FACE_SCORE = 0.7    # ...relaxed for faces filling much of the frame (selfies in coloured stage light)
 LARGE_FACE_SHARE = 0.12   # a face this wide, relative to the photo's short side, counts as large
@@ -270,6 +271,28 @@ def cluster_new_faces(kind="person", assign=ASSIGN_THRESHOLD, link=LINK_THRESHOL
             pid = c.execute("INSERT INTO persons(created_at, kind) VALUES(?, ?)", (db.now(), kind)).lastrowid
             c.executemany("UPDATE faces SET person_id=? WHERE id=?", [(pid, f) for f in g])
     return len(assignments) + sum(len(g) for g in new_groups)
+
+
+def suggestions(person_id: int, limit=24):
+    """Ungrouped faces that look somewhat like this person: tilted, grimacing, dimly lit or
+    years-apart faces often miss the automatic bar. Faces in photos they're already in are skipped."""
+    own = db.q("SELECT embedding, photo_id, locked FROM faces WHERE person_id=? AND kind='person'", (person_id,))
+    if not own:
+        return []
+    # Compared with the faces grouped automatically, so a confirmed odd one out (a grimace, a
+    # ghosted double exposure) doesn't pull in strangers who resemble it.
+    sure = [r for r in own if not r["locked"]] or own
+    centre = _unit(np.stack([_emb(r["embedding"]) for r in sure]).mean(0))
+    seen = {r["photo_id"] for r in own}
+    loose = [r for r in db.q("SELECT f.id, f.photo_id, f.embedding FROM faces f JOIN photos p ON p.id=f.photo_id "
+                             "WHERE f.person_id IS NULL AND f.locked=0 AND f.kind='person' AND p.status='ready'")
+             if r["photo_id"] not in seen]
+    if not loose:
+        return []
+    sims = _unit(np.stack([_emb(r["embedding"]) for r in loose])) @ centre
+    out = [{"face_id": r["id"], "photo_id": r["photo_id"], "similarity": round(float(s), 3)}
+           for r, s in zip(loose, sims) if s >= SUGGEST_THRESHOLD]
+    return sorted(out, key=lambda d: -d["similarity"])[:limit]
 
 
 def person_photo_ids(person_id: int):

@@ -596,3 +596,13 @@ textarea.input { height: auto; min-height: 72px; padding: 10px 14px; resize: ver
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* "Is this them too?" suggestions on a person's page */
+.suggest { margin: 0 0 28px; padding: 18px 20px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
+.suggest .muted { margin: -6px 0 14px; }
+.suggest-row { display: flex; gap: 18px; overflow-x: auto; padding: 4px 2px 6px; }
+.suggest-face { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+.suggest-face .avatar { width: 84px; height: 84px; padding: 0; border: 0; cursor: zoom-in; }
+.suggest-actions { display: flex; gap: 6px; }
+.suggest-actions .icon-btn { width: 34px; height: 34px; }
+.suggest-actions .yes:hover { color: var(--accent); }

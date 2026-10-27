@@ -1418,6 +1418,7 @@ async function renderPerson(view, id) {
   }
   view.append(head);
   if (!p.name) setTimeout(() => input.focus(), 50);
+  if (p.kind !== "pet") renderSuggestions(view, p);
 
   const sub = h(`<div class="section-head"><span class="muted">Spotted someone else? Select those photos and choose <strong>Not them</strong>.</span><button class="link">Select all</button></div>`);
   const grid = new JGrid(p.items);
@@ -1430,6 +1431,36 @@ async function renderPerson(view, id) {
     toast(`Removed ${plural(mine.length, "photo")} from ${esc(p.name || "this person")}`);
     if (r && !r.remaining) go("#/people"); else route();
   } }];
+}
+
+// "Is this them too?": faces just under the bar for automatic grouping, answered one click at a time.
+async function renderSuggestions(view, p) {
+  const sugg = await api(`/api/people/${p.id}/suggestions`).catch(() => []);
+  if (!sugg.length) return;
+  const who = esc(p.name || "this person");
+  const box = h(`<section class="suggest fade-in">
+      <div class="section-head"><h2>${p.name ? `Is this ${who} too?` : "Is this the same person?"}</h2><button class="link">Yes to all</button></div>
+      <p class="muted">These faces look a little like ${who}, but not enough for Lumen to be sure.</p>
+      <div class="suggest-row"></div></section>`);
+  const row = $(".suggest-row", box);
+  const answer = async (ids, accept) => {
+    await api(`/api/people/${p.id}/faces`, { method: "POST", body: { face_ids: ids, accept } }).catch(fail);
+    ids.forEach((fid) => $(`[data-face="${fid}"]`, row)?.remove());
+    if (accept) { toast(`Added ${plural(ids.length, "photo")} to ${who}`); route(); }
+    else if (!row.children.length) box.remove();
+  };
+  sugg.forEach((s) => {
+    const card = h(`<div class="suggest-face" data-face="${s.face_id}">
+        <button class="avatar" title="Show the photo"><img src="${faceUrl(s.face_id)}" alt=""></button>
+        <div class="suggest-actions"><button class="icon-btn yes" aria-label="Yes, it's ${who}">${I.check.replace("<svg ", "<svg class=\"icon\" ")}</button>
+        <button class="icon-btn no" aria-label="No, someone else">${I.close}</button></div></div>`);
+    $(".avatar", card).onclick = async () => openLightbox(await api("/api/photos/batch", { method: "POST", body: { photo_ids: [s.photo_id] } }), 0);
+    $(".yes", card).onclick = () => answer([s.face_id], true);
+    $(".no", card).onclick = () => answer([s.face_id], false);
+    row.append(card);
+  });
+  $(".link", box).onclick = () => answer(sugg.map((s) => s.face_id).filter((fid) => $(`[data-face="${fid}"]`, row)), true);
+  $(".person-hero", view).after(box);
 }
 
 async function openMergePeople(p) {

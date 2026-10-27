@@ -221,3 +221,36 @@ def test_overlapping_face_detections_from_brightened_copies_count_once():
     a, b, far = (np.array([10, 10, 50, 50, 0.8]), np.array([12, 11, 49, 52, 0.9]), np.array([200, 10, 50, 50, 0.95]))
     kept = _strongest([(0.8, a, "orig"), (0.9, b, "lifted"), (0.95, far, "orig")])
     assert [(s, src) for s, _, src in kept] == [(0.95, "orig"), (0.9, "lifted")]
+
+
+def test_lookalike_faces_are_suggested_and_answers_stick(client):
+    rng = np.random.default_rng(7)
+    me = rng.normal(size=128)
+    me /= np.linalg.norm(me)
+    other = rng.normal(size=128)
+    other -= (other @ me) * me
+    other /= np.linalg.norm(other)
+    photos = [r["id"] for r in db.q("SELECT id FROM photos WHERE status='ready' ORDER BY id LIMIT 4")]
+    with db.tx() as c:
+        pid = c.execute("INSERT INTO persons(created_at) VALUES(?)", (db.now(),)).lastrowid
+        def face(photo, vec, person=None):
+            return c.execute("INSERT INTO faces(photo_id, x, y, w, h, score, embedding, person_id) "
+                             "VALUES(?, 0, 0, .3, .3, .9, ?, ?)",
+                             (photo, vec.astype(np.float16).tobytes(), person)).lastrowid
+        face(photos[0], me, pid)
+        face(photos[1], me, pid)
+        tilted = face(photos[2], 0.36 * me + np.sqrt(1 - 0.36 ** 2) * other)  # under the 0.42 bar
+        stranger = face(photos[3], other)
+        same_photo = face(photos[0], 0.5 * me + np.sqrt(0.75) * other)        # they're already in it
+    try:
+        assert [s["face_id"] for s in client.get(f"/api/people/{pid}/suggestions").json()] == [tilted]
+        assert client.post(f"/api/people/{pid}/faces", json={"face_ids": [tilted], "accept": True}).json()["count"] == 3
+        assert client.get(f"/api/people/{pid}/suggestions").json() == []
+        client.post(f"/api/people/{pid}/faces", json={"face_ids": [stranger], "accept": False})
+        rows = {r["id"]: r for r in db.q("SELECT id, person_id, locked FROM faces WHERE id IN (?, ?)", (tilted, stranger))}
+        assert (rows[tilted]["person_id"], rows[tilted]["locked"]) == (pid, 1)
+        assert (rows[stranger]["person_id"], rows[stranger]["locked"]) == (None, 1)
+    finally:
+        with db.tx() as c:
+            c.execute("DELETE FROM faces WHERE photo_id IN (?, ?, ?, ?)", photos)
+            c.execute("DELETE FROM persons WHERE id=?", (pid,))
