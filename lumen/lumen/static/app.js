@@ -536,6 +536,7 @@ async function renderSearch(view, params) {
   f.append(sortSel);
   const ex = res.parsed.expression;
   if (ex) f.append(h(`<span class="chip" title="Lumen reads the expressions on faces for this">${ex.emoji} ${ex.everyone ? "everyone " : ""}${esc({ happiness: "smiling", sadness: "sad", surprise: "surprised", anger: "angry", fear: "scared", disgust: "disgusted", neutral: "serious", contempt: "unimpressed" }[ex.label])} faces</span>`));
+  if (res.parsed.tone) f.append(h(`<span class="chip" title="Lumen also measures how light or dark each photo is">${res.parsed.tone === "dark" ? "🌑 Darker photos first" : "☀️ Brighter photos first"}</span>`));
   const chosen = res.parsed.colors || [];
   const colBtn = h(`<button class="chip">${I.palette} ${chosen.length ? chosen.map((c) => `<i class="swatch" style="background:#${c}"></i>`).join("") : "Colour"}</button>`);
   colBtn.onclick = () => openColourPicker(chosen, (list) => setParam("colors", list.join(",")));

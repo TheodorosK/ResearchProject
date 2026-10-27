@@ -165,7 +165,7 @@ def understand(raw: str):
     label, everyone = expression_in_query(positive)
     return {"positive": positive, "negatives": negatives, "phrases": phrases, "tags": tags, "favourites": favourites,
             "people": people, "places": where,
-            "when": when, "expression": label, "everyone": everyone}
+            "when": when, "expression": label, "everyone": everyone, "tone": tone_in_query(positive, negatives)}
 
 
 _taken_cache = {"key": None, "arr": None}
@@ -181,6 +181,42 @@ def _taken(ids):
         _taken_cache["key"] = None
         return _taken(ids)
     return arr
+
+
+# Words about light and tone. The image model understands them too; the photos' measured
+# brightness backs it up, so "dark" finds dark photos even where the model is unsure.
+DARK_WORDS = {
+    "dark", "darker", "darkness", "moody", "lowkey", "low-key", "night", "nighttime", "night-time",
+    "shadow", "shadows", "shadowy", "gloomy", "gloom", "dim", "dimly", "noir",
+    "σκοτεινό", "σκοτεινή", "σκοτεινός", "σκοτεινά", "σκοτεινές", "σκοτεινοί", "σκοτάδι",
+    "νύχτα", "νυχτερινό", "νυχτερινή", "νυχτερινές", "σκιά", "σκιές",
+}
+BRIGHT_WORDS = {
+    "bright", "brighter", "sunny", "sunlit", "highkey", "high-key", "airy", "luminous",
+    "φωτεινό", "φωτεινή", "φωτεινός", "φωτεινά", "φωτεινές", "ηλιόλουστο", "ηλιόλουστη", "ηλιόλουστες",
+}
+TONE_WEIGHT = 1.0   # z-score units per unit of (clipped) brightness z
+
+
+def tone_in_query(text: str, negatives=()):
+    """-1 for dark ('moody dark', 'low key'), +1 for bright ('sunny'), 0 if the words cancel or are absent.
+    An excluded word counts the other way ('beach -dark' prefers bright beaches)."""
+    def votes(t):
+        t = re.sub(r"\b(low|high)\s+key\b", r"\1key", t.lower())
+        words = re.findall(r"[\w-]+", t)
+        return sum(w in BRIGHT_WORDS for w in words) - sum(w in DARK_WORDS for w in words)
+    v = votes(text) - sum(votes(n) for n in negatives)
+    return int(np.sign(v))
+
+
+def _tone_bonus(ids, tone):
+    rows = dict(db.q("SELECT id, brightness FROM photos WHERE brightness IS NOT NULL"))
+    b = np.array([rows.get(int(i), np.nan) for i in ids], dtype=float)
+    have = ~np.isnan(b)
+    out = np.zeros(len(ids))
+    if have.sum() > 2:
+        out[have] = TONE_WEIGHT * np.clip(tone * robust_z(b[have]), -1.5, 2.5)
+    return out
 
 
 def expression_in_query(text: str):
@@ -333,6 +369,8 @@ def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=(), col
         text_hits = ocr.matches(positive)
         if text_hits:
             bonus = bonus + TEXT_WEIGHT * np.array([text_hits.get(int(i), 0.0) for i in ids])
+    if u["tone"]:
+        bonus = bonus + _tone_bonus(ids, u["tone"])
     if u["expression"]:
         p = _expression_scores(ids, u["expression"], [x["id"] for x in people], u["everyone"])
         # Faces that show the expression rise; photos without readable faces sink a little.

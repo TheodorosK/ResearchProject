@@ -598,7 +598,8 @@ def do_search(
     return {"query": q, "parsed": {"positive": u["positive"], "negatives": u["negatives"], "people": u["people"],
                                    "phrases": u["phrases"], "colors": _hex_param(colors),
                                    "places": [p["label"] for p in u["places"]], "when": u["when"].label or None,
-                                   "expression": expression, "like": like_ids, "dislike": dislike_ids},
+                                   "expression": expression, "tone": {-1: "dark", 1: "bright"}.get(u["tone"]),
+                                   "like": like_ids, "dislike": dislike_ids},
             "items": hydrate(hits), "indexed": len(index)}
 
 

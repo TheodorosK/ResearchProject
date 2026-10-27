@@ -111,6 +111,16 @@ def test_palette_and_colour_search(client):
     assert res["parsed"]["colors"] == ["e61414"]
 
 
+def test_light_and_dark_words_use_measured_brightness(client):
+    dark = client.get("/api/search", params={"q": "moody dark"}).json()
+    assert dark["parsed"]["tone"] == "dark"
+    assert {i["name"] for i in dark["items"][:2]} == {"plain_2.jpg", "plain_3.jpg"}  # the deep blue ones
+    bright = client.get("/api/search", params={"q": "something sunny"}).json()
+    assert bright["parsed"]["tone"] == "bright"
+    assert bright["items"][0]["name"] in {"menu.jpg", "ticket.jpg", "plaque.jpg"}  # pale paper signs
+    assert client.get("/api/search", params={"q": "a darkroom"}).json()["parsed"]["tone"] is None
+
+
 def test_search_by_picture(client):
     buf = io.BytesIO()
     Image.new("RGB", (300, 200), (35, 50, 225)).save(buf, "PNG")
