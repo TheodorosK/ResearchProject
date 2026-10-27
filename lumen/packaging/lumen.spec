@@ -8,7 +8,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 datas = [("../lumen/static", "lumen/static")]
 binaries = []
 hiddenimports = collect_submodules("uvicorn") + collect_submodules("lumen") + ["pystray"]
-for pkg in ("fastembed", "rapidocr_onnxruntime", "reverse_geocoder", "pillow_heif", "av", "onnxruntime", "segno"):
+for pkg in ("fastembed", "rapidocr", "reverse_geocoder", "pillow_heif", "av", "onnxruntime", "segno"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b

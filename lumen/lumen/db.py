@@ -4,7 +4,7 @@ import threading
 import time
 from contextlib import contextmanager
 
-from . import config
+from . import config, textnorm
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS video_frames (
 );
 CREATE INDEX IF NOT EXISTS video_frames_photo ON video_frames(photo_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS photo_text USING fts5(text, tokenize='unicode61 remove_diacritics 2');
+-- The same text, lower-cased and without accents (see textnorm), which is what searches match:
+-- SQLite only strips accents from Latin letters, so "καλημερα" wouldn't find "Καλημέρα".
+CREATE VIRTUAL TABLE IF NOT EXISTS photo_text_plain USING fts5(plain, tokenize='unicode61 remove_diacritics 2');
 CREATE TABLE IF NOT EXISTS photo_tags (
     photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
     tag TEXT NOT NULL COLLATE NOCASE,
@@ -133,6 +136,7 @@ MIGRATIONS = {
         "xmp_v": "INTEGER NOT NULL DEFAULT 0",    # 1 = existing XMP sidecar imported
         "framed": "INTEGER NOT NULL DEFAULT 0",   # 1 = has a plain border (an edited/exported copy)
         "date_source": "TEXT",        # camera (EXIF/video metadata) | filename | file (modification time)
+        "ocr_key": "TEXT",            # which text readers read it, see ocr.engine_key
     },
     "persons": {
         "kind": "TEXT NOT NULL DEFAULT 'person'",  # person | pet
@@ -163,6 +167,10 @@ def init():
                 if col not in have:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
         conn.execute("CREATE INDEX IF NOT EXISTS photos_geo ON photos(lat) WHERE lat IS NOT NULL")
+        if not conn.execute("SELECT 1 FROM photo_text_plain LIMIT 1").fetchone():
+            conn.executemany("INSERT INTO photo_text_plain(rowid, plain) VALUES(?, ?)",
+                             [(r["rowid"], textnorm.searchable(r["text"]))
+                              for r in conn.execute("SELECT rowid, text FROM photo_text")])
         conn.commit()
         _init_done = True
 

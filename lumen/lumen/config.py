@@ -83,6 +83,11 @@ FACE_MODELS = {
 }
 FACE_THUMB_DIR = THUMB_DIR / "faces"
 
+# Reading text in photos. Latin-script languages (and Chinese/Japanese) come with the app; the
+# Greek model (~10 MB) is fetched once on first use. LUMEN_OCR_GREEK=0 skips it.
+OCR_DIR = MODEL_DIR / "ocr"
+OCR_GREEK = os.environ.get("LUMEN_OCR_GREEK", "1") != "0"
+
 
 def ensure_dirs():
     for d in (HOME, THUMB_DIR, MODEL_DIR, FACE_THUMB_DIR):

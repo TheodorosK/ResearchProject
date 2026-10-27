@@ -81,6 +81,73 @@ def test_text_in_photos_is_read_and_searchable(client):
     assert client.get("/api/search", params={"q": "awareness"}).json()["items"][0]["name"] == "plaque.jpg"
 
 
+def test_greek_text_is_found_without_accents_or_capitals(client):
+    from lumen import db, ocr, textnorm
+
+    pid = by_name(client)["plain_4.jpg"]["id"]
+    text = "ΚΑΛΗΜΕΡΑ Αθήνα\nΣουβλάκια 3,50€"
+    with db.tx() as c:
+        c.execute("INSERT INTO photo_text(rowid, text) VALUES(?, ?)", (pid, text))
+        c.execute("INSERT INTO photo_text_plain(rowid, plain) VALUES(?, ?)", (pid, textnorm.searchable(text)))
+    try:
+        for q in ("καλημερα", "Καλημέρα", "αθηνα", "σουβλακια"):
+            assert pid in ocr.matches(q), q
+        assert ocr.phrase_ids(["καλημερα αθηνα"]) == {pid}
+        assert client.get("/api/search", params={"q": "σουβλάκια"}).json()["items"][0]["id"] == pid
+    finally:
+        with db.tx() as c:
+            c.execute("DELETE FROM photo_text WHERE rowid=?", (pid,))
+            c.execute("DELETE FROM photo_text_plain WHERE rowid=?", (pid,))
+
+
+def test_each_line_keeps_the_more_confident_reading():
+    from lumen.ocr import best_reading
+
+    main = [("KAAHMEPA", 0.80), ("TAVERNA NIKOS", 0.97), ("EYXAPIΣTOYME", 0.60)]
+    greek = [("ΚΑΛΗΜΕΡΑ", 0.95), ("ΤΑVΕRΝΑ ΝΙΚΟS", 0.70), ("ΕΥΧΑΡΙΣΤΟΥΜΕ", 0.90)]
+    assert best_reading(main, greek) == [("ΚΑΛΗΜΕΡΑ", 0.95), ("TAVERNA NIKOS", 0.97), ("ΕΥΧΑΡΙΣΤΟΥΜΕ", 0.90)]
+    assert best_reading([("CAFE", 0.9)], [("CAFE", 0.99)]) == [("CAFE", 0.9)]  # no Greek letters: keep the main model
+
+
+def test_greek_reader_is_consulted_for_every_line(client, tmp_path):
+    from types import SimpleNamespace
+
+    from lumen import ocr
+
+    class FakeGreek:  # stands in for the downloaded Greek model: reads the shorter line as Greek
+        def recognize_txt(self, img):
+            short = min(range(len(img)), key=lambda k: img[k].shape[1] / img[k].shape[0])
+            return SimpleNamespace(txts=tuple("ΚΑΛΗΜΕΡΑ" if k == short else "" for k in range(len(img))),
+                                   scores=[1.0] * len(img))
+
+    sign(tmp_path / "greek.jpg", ["TAVERNA NIKOS", "KAAHMEPA"])
+    engine = ocr._get_engine()
+    engine.greek = FakeGreek()
+    try:
+        lines = ocr.read(Image.open(tmp_path / "greek.jpg")).split("\n")
+        assert "ΚΑΛΗΜΕΡΑ" in lines and any("TAVERNA" in line for line in lines)
+        assert ocr.engine_key() == ocr.ENGINE + "+el"
+    finally:
+        engine.greek = None
+
+
+def test_text_read_by_an_older_engine_is_read_again(client):
+    from lumen import db, ocr
+
+    pid = by_name(client)["menu.jpg"]["id"]
+    assert db.one("SELECT ocr_key FROM photos WHERE id=?", (pid,))["ocr_key"] == ocr.ENGINE
+    with db.tx() as c:
+        c.execute("UPDATE photos SET ocr_key=NULL WHERE id=?", (pid,))
+    ocr._rechecked["key"] = None
+    ocr._reread_with_better_readers()
+    assert db.one("SELECT ocr_v FROM photos WHERE id=?", (pid,))["ocr_v"] == 0
+    while ocr.run_pending():
+        pass
+    row = db.one("SELECT ocr_v, ocr_key FROM photos WHERE id=?", (pid,))
+    assert (row["ocr_v"], row["ocr_key"]) == (1, ocr.ENGINE)
+    assert "TAVERNA" in ocr.text_of(pid)
+
+
 def test_read_text_fixes_zero_and_o_lookalikes():
     from lumen.ocr import tidy
 

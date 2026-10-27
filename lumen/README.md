@@ -119,7 +119,10 @@ Keyboard: `/` search · `←` `→` browse · `Space` pause a slideshow · `Esc`
 
   If an accelerator fails, Lumen falls back to the CPU on its own.
 - The slower extras only run where they're useful:
-  - text recognition, on photos that look like they contain text (`LUMEN_OCR=all|off`);
+  - text recognition, on photos that look like they contain text (`LUMEN_OCR=all|off`). It reads
+    Latin-script languages, Chinese and Japanese out of the box, and Greek once a ~10 MB model has
+    downloaded on first use (`LUMEN_OCR_GREEK=0` skips it). Searches ignore case and accents, so
+    "καλημερα" finds "Καλημέρα";
   - the pet detector, on photos that look like they show a cat or a dog (`LUMEN_PETS=all|off`).
 - Libraries indexed by an older version get a quick catch-up pass rather than a full re-index.
 - **Formats:**
@@ -177,8 +180,9 @@ Bundled: [Leaflet](https://leafletjs.com) and Leaflet.markercluster (BSD-2 / MIT
 OpenStreetMap contributors, © CARTO.
 
 **Known limits.**
-- The bundled text recogniser reads Latin script (English, numbers) and Chinese, not Greek, and it
-  sometimes drops spaces. Searches allow for that.
+- Text recognition reads print well; handwriting and decorative lettering only partly. If the
+  Greek model can't be downloaded (offline), Lumen reads without it and tries again next start,
+  then re-reads photos that already have text.
 - Place names come from the nearest town, which can be a suburb. Searching for the city's name
   still works.
 - Pets are told apart by appearance, so two similar-looking dogs may share a group until you split them.

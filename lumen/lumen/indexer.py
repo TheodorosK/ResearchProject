@@ -596,6 +596,7 @@ def delete_photos(ids):
             face_ids += [r["id"] for r in c.execute(f"SELECT id FROM faces WHERE photo_id IN ({marks})", chunk)]
             c.execute(f"DELETE FROM photos WHERE id IN ({marks})", chunk)
             c.execute(f"DELETE FROM photo_text WHERE rowid IN ({marks})", chunk)
+            c.execute(f"DELETE FROM photo_text_plain WHERE rowid IN ({marks})", chunk)
         # People left without any face disappear.
         c.execute("DELETE FROM persons WHERE id NOT IN (SELECT DISTINCT person_id FROM faces "
                   "WHERE person_id IS NOT NULL)")
