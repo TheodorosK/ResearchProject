@@ -43,6 +43,26 @@ def pick_device():
     return ["CPUExecutionProvider"], "CPU"
 
 
+def register_models():
+    """Teach fastembed the SigLIP 2 exports it doesn't list (Large, So400m). They use the same
+    towers and output names as the built-in base model, so its classes handle them unchanged."""
+    from fastembed.common.model_description import DenseModelDescription, ModelSource
+    from fastembed.image import siglip_embedding as image_mod
+    from fastembed.text import siglip_embedding as text_mod
+
+    for spec in config.MODELS.values():
+        if "hf" not in spec:
+            continue
+        for mod, name, file_key, gb_key in ((image_mod, spec["image"], "vision_file", "vision_gb"),
+                                            (text_mod, spec["text"], "text_file", "text_gb")):
+            if any(m.model == name for m in mod.supported_siglip_models):
+                continue
+            mod.supported_siglip_models.append(DenseModelDescription(
+                model=name, dim=spec["dim"], license="apache-2.0", size_in_GB=spec[gb_key],
+                description="SigLIP 2 (onnx-community export)",
+                sources=ModelSource(hf=spec["hf"]), model_file=spec[file_key]))
+
+
 class FastEmbedder:
     def __init__(self, model_key: str):
         spec = config.MODELS[model_key]
@@ -62,6 +82,7 @@ class FastEmbedder:
                 return
             from fastembed import ImageEmbedding, TextEmbedding
 
+            register_models()
             self.loading = True
             self.state = "downloading / loading model (first run only)"
             providers, label = (["CPUExecutionProvider"], "CPU") if force_cpu else pick_device()

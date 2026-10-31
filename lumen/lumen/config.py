@@ -39,6 +39,30 @@ MODELS = {
         "image": "google/siglip2-base-patch16-224",
         "text": "google/siglip2-base-patch16-224",
     },
+    # The two below are not built into fastembed; embedder.register_models() adds them.
+    # "hf" is the onnx-community export; *_file pick the weights (int8 keeps the download small).
+    "siglip2-large": {
+        "label": "SigLIP 2 Large · sharper",
+        "description": "Finer detail and rarer subjects. Several times slower to index. ~0.9 GB download.",
+        "image": "google/siglip2-large-patch16-256",
+        "text": "google/siglip2-large-patch16-256",
+        "hf": "onnx-community/siglip2-large-patch16-256-ONNX",
+        "dim": 1024,
+        "vision_file": "onnx/vision_model_int8.onnx",
+        "text_file": "onnx/text_model_int8.onnx",
+        "vision_gb": 0.32, "text_gb": 0.57,
+    },
+    "siglip2-so400m": {
+        "label": "SigLIP 2 So400m · most accurate",
+        "description": "The largest SigLIP 2 that is practical here. Much slower to index. ~1.2 GB download.",
+        "image": "google/siglip2-so400m-patch16-256",
+        "text": "google/siglip2-so400m-patch16-256",
+        "hf": "onnx-community/siglip2-so400m-patch16-256-ONNX",
+        "dim": 1152,
+        "vision_file": "onnx/vision_model_int8.onnx",
+        "text_file": "onnx/text_model_int8.onnx",
+        "vision_gb": 0.43, "text_gb": 0.71,
+    },
     "clip": {
         "label": "CLIP ViT-B/32 · fast",
         "description": "Lighter and roughly 2x faster to index. English queries only. ~0.6 GB download.",
