@@ -17,6 +17,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: lumen
@@ -31,8 +32,9 @@ jobs:
           pip install -r requirements.txt pyinstaller pystray
       - name: Test
         run: |
-          pip install pytest httpx
-          python -m pytest -q tests
+          pip install pytest httpx pytest-timeout
+          # Name each test and stop any that hangs, so a stuck test shows up instead of using up the job.
+          python -m pytest -v --timeout=300 tests
       - name: Build
         working-directory: lumen/packaging
         run: pyinstaller --noconfirm lumen.spec
