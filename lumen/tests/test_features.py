@@ -8,6 +8,7 @@ import time
 
 import numpy as np
 import pytest
+import send2trash
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -163,13 +164,20 @@ def test_copy_collection_to_folder_never_overwrites(client, tmp_path):
     assert sorted(os.listdir(r["dest"])) == ["athens (1).jpg", "athens.jpg", "paris (1).jpg", "paris.jpg"]
 
 
-def test_trash_moves_original_and_forgets_it(client):
+def test_trash_moves_original_and_forgets_it(client, monkeypatch, tmp_path):
+    trash = os.path.join(os.environ["XDG_DATA_HOME"], "Trash", "files")
+    if not sys.platform.startswith("linux"):
+        # On macOS and Windows send2trash uses the real Trash / Recycle Bin of whoever runs the
+        # tests, so stand in for it there; on Linux the test's own XDG Trash is used for real.
+        trash = str(tmp_path / "Trash")
+        os.makedirs(trash)
+        monkeypatch.setattr(send2trash, "send2trash",
+                            lambda path: shutil.move(path, os.path.join(trash, os.path.basename(path))))
     ids = by_name(client)
     res = client.post("/api/photos/trash", json={"photo_ids": [ids["beach copy.jpg"]]}).json()
     assert res["trashed"] == 1
     assert not (client.root / "beach copy.jpg").exists()
     assert "beach copy.jpg" not in by_name(client)
-    trash = os.path.join(os.environ["XDG_DATA_HOME"], "Trash", "files")
     assert "beach copy.jpg" in os.listdir(trash)
 
 
