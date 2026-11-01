@@ -39,29 +39,20 @@ MODELS = {
         "image": "google/siglip2-base-patch16-224",
         "text": "google/siglip2-base-patch16-224",
     },
-    # The two below are not built into fastembed; embedder.register_models() adds them.
-    # "hf" is the onnx-community export; *_file pick the weights (int8 keeps the download small).
+    # Not built into fastembed; embedder.register_models() adds it. "hf" is the onnx-community
+    # export and *_file pick the weights. Keep these at fp16 or fp32: the int8 files lose several
+    # points of accuracy (Large) or break completely (So400m), see tools/compare_models.py.
     "siglip2-large": {
-        "label": "SigLIP 2 Large · sharper",
-        "description": "Finer detail and rarer subjects. Several times slower to index. ~0.9 GB download.",
+        "label": "SigLIP 2 Large · a little sharper, much slower",
+        "description": "About 2 points better at finding the right photo, but indexes roughly 4x slower than "
+                       "SigLIP 2 base. Only worth it if you don't mind a long first index. ~1.8 GB download.",
         "image": "google/siglip2-large-patch16-256",
         "text": "google/siglip2-large-patch16-256",
         "hf": "onnx-community/siglip2-large-patch16-256-ONNX",
         "dim": 1024,
-        "vision_file": "onnx/vision_model_int8.onnx",
-        "text_file": "onnx/text_model_int8.onnx",
-        "vision_gb": 0.32, "text_gb": 0.57,
-    },
-    "siglip2-so400m": {
-        "label": "SigLIP 2 So400m · most accurate",
-        "description": "The largest SigLIP 2 that is practical here. Much slower to index. ~1.2 GB download.",
-        "image": "google/siglip2-so400m-patch16-256",
-        "text": "google/siglip2-so400m-patch16-256",
-        "hf": "onnx-community/siglip2-so400m-patch16-256-ONNX",
-        "dim": 1152,
-        "vision_file": "onnx/vision_model_int8.onnx",
-        "text_file": "onnx/text_model_int8.onnx",
-        "vision_gb": 0.43, "text_gb": 0.71,
+        "vision_file": "onnx/vision_model_fp16.onnx",
+        "text_file": "onnx/text_model_fp16.onnx",
+        "vision_gb": 0.63, "text_gb": 1.13,
     },
     "clip": {
         "label": "CLIP ViT-B/32 · fast",

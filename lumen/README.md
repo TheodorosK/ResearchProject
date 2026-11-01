@@ -112,6 +112,12 @@ Keyboard: `/` search · `←` `→` browse · `Space` pause a slideshow · `Esc`
   are dropped. Folder watching catches changes while Lumen runs.
 - You can pause and resume. Progress, speed and time left are shown in the top bar.
 - On a modern laptop CPU, SigLIP 2 manages about 5–15 photos/s, and CLIP ViT-B/32 is about twice as fast.
+- **SigLIP 2 Large** is an optional model in *Settings*. On 300 Flickr photos with 1,500 captions
+  (`tools/compare_models.py`) it puts the right photo first 86.6% of the time against 84.3% for
+  base, but indexes roughly 4x slower on a CPU (about 3 vs 12 photos/s). The even larger So400m
+  scored 86.9% at about 2 photos/s, so it isn't offered. The int8 exports lose accuracy (Large,
+  82.7%) or break entirely (So400m, 6% on 1,000 photos), so only fp16 is used. Not measured on
+  Apple Silicon/Core ML.
 - **GPU acceleration** is used automatically when ONNX Runtime has one:
   - **Apple Silicon:** Core ML. It's included in the standard `onnxruntime` on macOS.
   - **NVIDIA:** run `pip uninstall onnxruntime && pip install onnxruntime-gpu`. Needs CUDA 12 and cuDNN 9.
