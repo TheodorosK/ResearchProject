@@ -53,14 +53,16 @@ def register_models():
     for spec in config.MODELS.values():
         if "hf" not in spec:
             continue
-        for mod, name, file_key, gb_key in ((image_mod, spec["image"], "vision_file", "vision_gb"),
-                                            (text_mod, spec["text"], "text_file", "text_gb")):
+        for mod, name, file_key, gb_key, extra_key in (
+                (image_mod, spec["image"], "vision_file", "vision_gb", "vision_extra"),
+                (text_mod, spec["text"], "text_file", "text_gb", "text_extra")):
             if any(m.model == name for m in mod.supported_siglip_models):
                 continue
             mod.supported_siglip_models.append(DenseModelDescription(
                 model=name, dim=spec["dim"], license="apache-2.0", size_in_GB=spec[gb_key],
                 description="SigLIP 2 (onnx-community export)",
-                sources=ModelSource(hf=spec["hf"]), model_file=spec[file_key]))
+                sources=ModelSource(hf=spec["hf"]), model_file=spec[file_key],
+                additional_files=list(spec.get(extra_key, []))))
 
 
 class FastEmbedder:

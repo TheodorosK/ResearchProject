@@ -52,6 +52,8 @@ def main():
     ap.add_argument("--limit", type=int, default=500)
     ap.add_argument("--vision-file")
     ap.add_argument("--text-file")
+    ap.add_argument("--vision-extra", nargs="*", default=[])
+    ap.add_argument("--text-extra", nargs="*", default=[])
     ap.add_argument("--cache", type=Path, default=Path("/tmp/lumen-compare/cache"))
     a = ap.parse_args()
 
@@ -67,6 +69,7 @@ def main():
     if a.vision_file or a.text_file:
         # a distinct fastembed name so variants of one export don't collide
         spec["image"] = spec["text"] = f"{spec['image']}#{tag}"
+    spec["vision_extra"], spec["text_extra"] = a.vision_extra, a.text_extra
     config.MODELS[tag] = spec
     pairs = load_pairs(a.images, a.csv, a.limit)
     print(f"{tag}: {len(pairs)} photos, {sum(len(c) for _, c in pairs)} captions")
