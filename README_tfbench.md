@@ -54,9 +54,13 @@ python tf_memory_stress_test.py --tests performance neuroevolution --max-gb 6
 Plug in the charger, close browsers/IDEs/VMs, then:
 
 ```bash
-python tf_memory_stress_test.py --tests performance neuroevolution --quick --max-gb 4
-python tf_memory_stress_test.py --tests memdiag --quick
+python tf_memory_stress_test.py --tests performance neuroevolution --quick --max-gb 4 --grappler none
+python tf_memory_stress_test.py --tests memdiag --quick --grappler none
 ```
+
+If a GPU job fails with `numerical validation FAILED` (see *Known issue* below) add `--grappler none` - as above - and keep it
+for every run you want to compare. A full run (`--tests performance neuroevolution memdiag --max-gb 6 --grappler none`) took ~6 min
+on an M1 Pro / 16 GB.
 
 `--quick` = small workloads (MLP only, 3 repeats x 30 steps; population 6 x 3 generations; 10 diagnostic cycles).
 Explicit flags always win over `--quick`. If those look sane, run the full versions above, then repeat the

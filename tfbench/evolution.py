@@ -400,6 +400,7 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
     pk = monitor.run_peaks
     rec.measure("peak_extra_system_gb_sampled", pk["max_extra_gb"], "GB", **ctx)
     rec.measure("min_available_gb_sampled", pk["min_avail_gb"], "GB", **ctx)
+    rec.measure("max_system_pct_sampled", pk["max_sys_pct"], "%", **ctx)
     rec.measure("memory_free_pct_before_macos", mp_before, "%", **ctx)
     rec.measure("memory_free_pct_after_macos", memory_pressure_free_pct(), "%", **ctx)
     growth = [g["extra_system_gb_after_cleanup"] for g in gen_records]

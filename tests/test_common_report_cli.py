@@ -326,6 +326,35 @@ class ReportTests(unittest.TestCase):
         md = report.render_markdown(self.build([ne("cpu", 0.60), ne("gpu", 0.10)]))
         self.assertIn("NOT consistent", md)
 
+    def test_early_trajectory_decides_consistency_not_tiny_final_losses(self):
+        cpu, gpu = fixture_job("cpu", 90.0), fixture_job("gpu", 9.0)
+        for j, fl in ((cpu, 1.7e-5), (gpu, 2.1e-5)):                 # final losses differ 20 % (float noise near zero)
+            j["measurements"].append({"name": "loss_final", "value": fl, "unit": "", "kind": "measured", "context": {}})
+        cpu["data"]["early_loss_trajectory"] = [2.30, 2.10, 1.90, 1.71]
+        gpu["data"]["early_loss_trajectory"] = [2.30, 2.10000002, 1.90000003, 1.71000004]
+        row = self.build([cpu, gpu])["derived"]["cpu_vs_gpu_performance"][0]
+        self.assertTrue(row["training_trajectories_consistent"])
+        self.assertGreater(row["final_loss_rel_diff_informational"], 0.1)
+        gpu["data"]["early_loss_trajectory"] = [2.30, 2.10, 1.90, 2.50]            # a real divergence
+        row = self.build([cpu, gpu])["derived"]["cpu_vs_gpu_performance"][0]
+        self.assertFalse(row["training_trajectories_consistent"])
+
+    def test_memdiag_series_table_rendered(self):
+        def md(policy):
+            ms = []
+            for c in range(4):
+                ms.append({"name": "cycle_rss_mb", "value": 500.0 + c, "unit": "MB", "kind": "measured",
+                           "context": {"cycle": c, "policy": policy}})
+                ms.append({"name": "cycle_extra_system_mb", "value": 100.0 + c, "unit": "MB", "kind": "measured",
+                           "context": {"cycle": c, "policy": policy}})
+            return {"job": f"memdiag@gpu:{policy}", "test": "memdiag", "device": "gpu", "workload": policy,
+                    "placement": "strict", "status": "completed", "reason": "", "notes": [], "measurements": ms,
+                    "data": {"classification": {"rss": {"verdict": "bounded"}, "system_extra": {"verdict": "bounded"}}}}
+        text = report.render_markdown(self.build([md("none"), md("gc"), md("clear")]))
+        self.assertIn("Per-cycle series, device=gpu", text)
+        self.assertIn("none RSS", text)
+        self.assertIn("clear sys", text)
+
     def test_first_divergent_step_is_reported(self):
         def ne(device, trace):
             m = lambda n, v: {"name": n, "value": v, "unit": "", "kind": "measured", "context": {"device": device}}

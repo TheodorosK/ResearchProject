@@ -5,7 +5,7 @@
 
 # TensorFlow benchmark report
 
-*Run `example_report` - started 2026-11-06T23:05:57+00:00 - finished 2026-11-06T23:06:39+00:00 - suite v2.0.0*
+*Run `example_report` - started 2026-11-06T23:40:38+00:00 - finished 2026-11-06T23:41:17+00:00 - suite v2.0.0*
 
 **Command:** `tf_memory_stress_test.py --tests performance neuroevolution memdiag --quick --ne-devices cpu --memdiag-devices cpu --out-dir docs/example_report`
 
@@ -39,13 +39,13 @@
 |---|---|---|---|---|---|---|---|---|
 | performance@cpu:mlp | completed | strict | False | graph (tf.function, jit_compile=False) | True | /job:localhost/replica:0/task:0/device:CPU:0 | {'CPU': 8} | tfbench.SimpleAdam (Keras-Adam update rule, float32 state) |
 | performance@gpu:mlp | unsupported | strict | n/a | n/a | n/a | n/a | None | n/a |
-| neuroevolution@cpu | completed | strict | False | graph (Keras model.fit) | True | /job:localhost/replica:0/task:0/device:CPU:0 | {'CPU': 4} | tfbench.SimpleAdam (Keras-Adam update rule, float32 state) |
+| neuroevolution@cpu | completed | strict | False | graph (tf.function training loop) | True | /job:localhost/replica:0/task:0/device:CPU:0 | {'CPU': 4} | tfbench.SimpleAdam (Keras-Adam update rule, float32 state) |
 
 ## 3. CPU and GPU performance (steady state)
 
 | Workload | Device | Status | Steps/s | Samples/s | ms/step | Median run (s) | CV | Min run (s) | Max run (s) |
 |---|---|---|---|---|---|---|---|---|---|
-| mlp | cpu | completed | 67.80 | 8,679 | 14.75 | 0.442 | 0.104 | 0.409 | 0.502 |
+| mlp | cpu | completed | 84.54 | 10,821 | 11.83 | 0.355 | 0.0251 | 0.34 | 0.355 |
 | mlp | gpu | unsupported | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 
 _Steps/s, samples/s, ms/step, median and CV are **calculated** from the measured per-repeat times._
@@ -54,18 +54,28 @@ _Steps/s, samples/s, ms/step, median and CV are **calculated** from the measured
 
 _no data_
 
+_The early trajectory compares the first ~10 training-step losses on both devices. Final losses are NOT compared as a pass/fail test: after hundreds of steps the models memorise the small data pool (loss ~1e-5) and float32 summation-order differences between CPU and GPU make relative differences of such tiny numbers large and meaningless (see `final_loss_rel_diff_informational` in report.json)._
+
+**Forward-pass diagnosis (before any weight update; errors are relative to a float64 host calculation from the same weights and batch - measured):**
+
+| Job | Placement | Weights checksum | Batch checksum | Host-truth loss | Eager fwd err | Graph fwd err | First train-step err |
+|---|---|---|---|---|---|---|---|
+| performance@cpu:mlp | strict | 80,315 | 80,412 | 2.43 | 4.15e-08 | 4.15e-08 | 4.15e-08 |
+
+_Same checksums on CPU and GPU = identical weights and data. Eager err small but graph err large = graph-mode op fusion on that device; graph fwd ok but first-step err large = the training step itself (variable update ordering etc.)._
+
 **Phase breakdown (measured, seconds) - never merged with steady-state time:**
 
 | Job | Data gen | Data transfer | Model build | Optimizer init | Trace | First execution | Warm-up total | Compile overhead (estimated) |
 |---|---|---|---|---|---|---|---|---|
-| performance@cpu:mlp | 0.0361 | 0.0612 | 0.282 | 0.0504 | 0.28 | 0.271 | 0.0783 | 0.256 |
+| performance@cpu:mlp | 0.0089 | 0.0246 | 0.173 | 0.0326 | 0.15 | 0.141 | 0.0636 | 0.129 |
 | performance@gpu:mlp | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 
 **Thermal / stability indicators:**
 
 | Job | pmset throttling indicated | Drift last-vs-first third (x) |
 |---|---|---|
-| performance@cpu:mlp | unavailable | 0.881 |
+| performance@cpu:mlp | unavailable | 0.957 |
 | performance@gpu:mlp | unavailable | n/a |
 
 _`None`/`n/a` means the telemetry was unavailable, which does **not** mean no throttling occurred._
@@ -74,8 +84,8 @@ _`None`/`n/a` means the telemetry was unavailable, which does **not** mean no th
 
 | Job | Peak RSS (GB) | Peak extra system memory (GB) | Min available (GB) | Max system use (%) |
 |---|---|---|---|---|
-| performance@cpu:mlp | 0.476 | 0.124 | 14.86 | 5.40 |
-| neuroevolution@cpu | 0.408 | 0.0343 | 14.94 | n/a |
+| performance@cpu:mlp | 0.495 | 0.154 | 14.83 | 5.60 |
+| neuroevolution@cpu | 0.409 | 0.0251 | 14.93 | 5.00 |
 
 _Peak extra memory = drop in system-available memory vs. the job's own baseline (captures unified/GPU memory that RSS misses). All **measured** (sampled ~0.5 s)._
 
@@ -94,7 +104,7 @@ _Peak extra memory = drop in system-available memory vs. the job's own baseline 
 
 | Job | Status | Evaluations | Failed | Individuals/s | Total (s) | Val R2 gain (gen0->last) | Best val R2 | Best test R2 (final only) | Best architecture |
 |---|---|---|---|---|---|---|---|---|---|
-| neuroevolution@cpu | completed | 16 | 0 | 3.18 | 5.03 | 0.188 | 0.717 | 0.696 | [128r-32r-32s] lr=1.73e-02 |
+| neuroevolution@cpu | completed | 16 | 0 | 3.79 | 4.23 | 0.188 | 0.717 | 0.696 | [128r-32r-32s] lr=1.73e-02 |
 
 ## 7. Time per generation
 
@@ -102,9 +112,9 @@ _Peak extra memory = drop in system-available memory vs. the job's own baseline 
 
 | Gen | Evaluated | Failed | Wall (s) | Ind/s | Mean fit time (s) | Best val R2 | Mean val R2 | CPU cores busy | System CPU % |
 |---|---|---|---|---|---|---|---|---|---|
-| 0 | 6 | 0 | 1.54 | 3.90 | 0.201 | 0.529 | 0.113 | 1.03 | 30.50 |
-| 1 | 5 | 0 | 1.67 | 2.99 | 0.254 | 0.589 | 0.23 | 1.05 | 28.60 |
-| 2 | 5 | 0 | 1.48 | 3.38 | 0.231 | 0.717 | 0.572 | 1.06 | 28.20 |
+| 0 | 6 | 0 | 1.30 | 4.62 | 0.164 | 0.529 | 0.103 | 1.06 | 28.10 |
+| 1 | 5 | 0 | 1.42 | 3.52 | 0.215 | 0.589 | 0.257 | 1.03 | 27.00 |
+| 2 | 5 | 0 | 1.17 | 4.26 | 0.183 | 0.717 | 0.572 | 1.07 | 27.60 |
 
 ## 8. Memory growth per generation / diagnostic
 
@@ -112,19 +122,34 @@ _Peak extra memory = drop in system-available memory vs. the job's own baseline 
 
 | Gen | RSS before cleanup (GB) | RSS after (GB) | Extra system after (GB) | Peak extra (GB) | Available after (GB) | Swap since start (MB) | Cleanup (s) |
 |---|---|---|---|---|---|---|---|
-| 0 | 0.394 | 0.394 | 0.02 | 0.021 | 14.95 | 0 | 0.105 |
-| 1 | 0.403 | 0.403 | 0.0254 | 0.0225 | 14.95 | 0 | 0.112 |
-| 2 | 0.409 | 0.409 | 0.0343 | 0.0285 | 14.94 | 0 | 0.112 |
+| 0 | 0.395 | 0.395 | 0.0251 | 0.0251 | 14.93 | 0 | 0.0977 |
+| 1 | 0.404 | 0.404 | 0.0224 | 0.0233 | 14.93 | 0 | 0.0896 |
+| 2 | 0.409 | 0.409 | 0.0264 | 0.0238 | 14.93 | 0 | 0.132 |
 
-Growth per generation (calculated): system 7.32 MB, RSS 7.84 MB. Rising RSS alone is not a leak: allocator caching also grows then plateaus.
+Growth per generation (calculated): system 0.691 MB, RSS 7.37 MB. Rising RSS alone is not a leak: allocator caching also grows then plateaus.
 
 **Memory-growth diagnostic (`memdiag`, each policy in its own process; verdicts are heuristic):**
 
 | Job | Status | RSS verdict | RSS MB/cycle | System verdict | System MB/cycle | Python MB/cycle |
 |---|---|---|---|---|---|---|
-| memdiag@cpu:none | completed | bounded | 0.517 | bounded | 0.0481 | 0.098 |
-| memdiag@cpu:gc | completed | bounded | 0.395 | bounded | -0.0562 | 0.0189 |
-| memdiag@cpu:clear | completed | bounded | 0.0067 | bounded | -0.0615 | 0.019 |
+| memdiag@cpu:none | completed | bounded | 0.597 | bounded | 0.0664 | 0.0975 |
+| memdiag@cpu:gc | completed | bounded | 0.375 | bounded | -0.86 | 0.02 |
+| memdiag@cpu:clear | completed | bounded | 0.00558 | bounded | -0.813 | 0.0175 |
+
+**Per-cycle series, device=cpu (measured, MB; RSS / extra system memory):**
+
+| Cycle | clear RSS | gc RSS | none RSS | clear sys | gc sys | none sys |
+|---|---|---|---|---|---|---|
+| 0 | 400.03 | 400.18 | 399.82 | 30.73 | 28.79 | 18.10 |
+| 1 | 401.38 | 401.51 | 403.01 | 34.71 | 35.68 | 18.84 |
+| 2 | 402.90 | 403.65 | 405.56 | 34.71 | 39.37 | 20.56 |
+| 3 | 402.98 | 404.04 | 407.40 | 34.71 | 39.37 | 20.45 |
+| 4 | 401.42 | 402.47 | 406.15 | 28.34 | 38.56 | 18.59 |
+| 5 | 402.99 | 404.55 | 408.75 | 28.34 | 38.56 | 19.99 |
+| 6 | 403.12 | 405.03 | 409.23 | 28.34 | 38.00 | 20.48 |
+| 7 | 403.21 | 405.50 | 410.33 | 28.34 | 37.13 | 21.47 |
+| 8 | 403.33 | 405.98 | 410.46 | 28.03 | 37.13 | 21.46 |
+| 9 | 401.68 | 404.88 | 409.57 | 27.34 | 32.78 | 18.66 |
 
 _`bounded`/`saturating` = consistent with allocator caching; `python_retention` = references still held; `continued_native_growth` = potential native leak, needs a longer run to confirm._
 

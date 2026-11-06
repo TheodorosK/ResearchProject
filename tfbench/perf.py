@@ -175,12 +175,16 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: st
 
         # --------------------------------------------------------------- warm-up
         t = pc()
+        warm_losses = []
         for i in range(args.perf_warmup):
             if monitor.aborted:
                 raise LimitExceeded(monitor.reason)
             loss = step_fn(xs[(i + 1) % P], ys[(i + 1) % P])
+            if i < 10:
+                warm_losses.append(loss)               # device scalars; read back AFTER the clock stops
         tfenv.sync(loss, probe_var) if args.perf_warmup else None
         warmup_s = pc() - t
+        rec.data["early_loss_trajectory"] = [loss_first] + [float(l.numpy()) for l in warm_losses]
 
         rec.measure("data_generation_s", data_gen_s, "s", **ctx)
         rec.measure("data_transfer_s", data_xfer_s, "s", **ctx)

@@ -121,9 +121,15 @@ def derive(jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
         rel = abs(lc - lg) / max(abs(lc), abs(lg), 1e-12) if lc is not None and lg is not None else None
         fc, fg = val(cpu, "loss_final"), val(gpu, "loss_final")
         frel = abs(fc - fg) / max(abs(fc), abs(fg), 1e-12) if fc is not None and fg is not None else None
+        tc_ = cpu.get("data", {}).get("early_loss_trajectory") or []
+        tg_ = gpu.get("data", {}).get("early_loss_trajectory") or []
+        early = max((abs(x - y) / max(abs(x), abs(y), 1e-12) for x, y in zip(tc_, tg_)), default=None)
         d["cpu_vs_gpu_performance"].append({
-            "final_loss_cpu": fc, "final_loss_gpu": fg, "final_loss_rel_diff": frel,
-            "training_trajectories_consistent": (frel is not None and frel < 0.05),
+            "final_loss_cpu": fc, "final_loss_gpu": fg,
+            "final_loss_rel_diff_informational": frel,
+            "early_trajectory_steps_compared": min(len(tc_), len(tg_)),
+            "early_trajectory_max_rel_diff": early,
+            "training_trajectories_consistent": (early is not None and early < 1e-2),
             "workload": wl, "kind": "calculated",
             "cpu_step_ms": c_ms, "gpu_step_ms": g_ms,
             "gpu_speedup_x": (c_ms / g_ms) if c_ms and g_ms else None,
@@ -238,7 +244,7 @@ def render_markdown(r: Dict[str, Any]) -> str:
         tfi = j.get("data", {}).get("tf", {})
         rows.append([j["job"], j.get("status"), j.get("placement"), tfi.get("soft_device_placement"),
                      j.get("data", {}).get("execution_mode",
-                                           "graph (Keras model.fit)" if j.get("test") == "neuroevolution" else "n/a"),
+                                           "graph (tf.function training loop)" if j.get("test") == "neuroevolution" else "n/a"),
                      ev.get("verified"), ev.get("probe_op_device"), str(ev.get("variable_device_counts")),
                      ev.get("optimizer_class")])
     A(_table(["Job", "Status", "Placement", "Soft placement", "Execution", "Placement verified", "Probe op device",
@@ -260,11 +266,15 @@ def render_markdown(r: Dict[str, Any]) -> str:
     A("_Steps/s, samples/s, ms/step, median and CV are **calculated** from the measured per-repeat times._\n")
     A("**CPU vs GPU (calculated):**\n")
     A(_table(["Workload", "CPU ms/step", "GPU ms/step", "GPU speed-up", "GPU placement", "First-step loss rel. diff",
-              "Comparable", "Final-loss rel. diff", "Trajectories agree"],
+              "Comparable", "Early-trajectory max rel. diff", "Early trajectory agrees (<1%)"],
              [[x["workload"], x["cpu_step_ms"], x["gpu_step_ms"], x["gpu_speedup_x"], x["gpu_placement_mode"],
-               x["first_step_loss_rel_diff"], x["workloads_comparable"], x["final_loss_rel_diff"],
+               x["first_step_loss_rel_diff"], x["workloads_comparable"], x["early_trajectory_max_rel_diff"],
                x["training_trajectories_consistent"]]
               for x in r["derived"]["cpu_vs_gpu_performance"]]))
+    A("_The early trajectory compares the first ~10 training-step losses on both devices. Final losses are NOT compared "
+      "as a pass/fail test: after hundreds of steps the models memorise the small data pool (loss ~1e-5) and float32 "
+      "summation-order differences between CPU and GPU make relative differences of such tiny numbers large and "
+      "meaningless (see `final_loss_rel_diff_informational` in report.json)._\n")
     A("**Forward-pass diagnosis (before any weight update; errors are relative to a float64 host calculation from the "
       "same weights and batch - measured):**\n")
     A(_table(["Job", "Placement", "Weights checksum", "Batch checksum", "Host-truth loss", "Eager fwd err",
@@ -381,6 +391,22 @@ def render_markdown(r: Dict[str, Any]) -> str:
                          (c.get("rss") or {}).get("python_slope_mb_per_cycle")])
         A(_table(["Job", "Status", "RSS verdict", "RSS MB/cycle", "System verdict", "System MB/cycle",
                   "Python MB/cycle"], rows))
+        for dev in sorted({j.get("device") for j in md}):
+            pol_jobs = sorted([j for j in md if j.get("device") == dev], key=lambda j: j.get("workload") or "")
+            series = {}
+            for j in pol_jobs:
+                for m in j.get("measurements", []):
+                    c = m.get("context", {}).get("cycle")
+                    if c is not None and m["name"] in ("cycle_rss_mb", "cycle_extra_system_mb"):
+                        series.setdefault(j["workload"], {}).setdefault(c, {})[m["name"]] = m["value"]
+            pols = [j["workload"] for j in pol_jobs]
+            n = max((len(v) for v in series.values()), default=0)
+            if n:
+                A(f"**Per-cycle series, device={dev} (measured, MB; RSS / extra system memory):**\n")
+                hdr = ["Cycle"] + [f"{p} RSS" for p in pols] + [f"{p} sys" for p in pols]
+                rows_ = [[c] + [series.get(p, {}).get(c, {}).get("cycle_rss_mb") for p in pols] +
+                         [series.get(p, {}).get(c, {}).get("cycle_extra_system_mb") for p in pols] for c in range(n)]
+                A(_table(hdr, rows_))
         A("_`bounded`/`saturating` = consistent with allocator caching; `python_retention` = references still held; "
           "`continued_native_growth` = potential native leak, needs a longer run to confirm._\n")
 
