@@ -84,7 +84,7 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: st
         "device": device, "workload": workload, "placement": placement,
         "batch": args.perf_batch, "steps_per_repeat": args.perf_steps, "warmup_steps": args.perf_warmup,
         "repeats": args.perf_repeats, "pool_batches": args.perf_pool, "seed": seed,
-        "mode": args.perf_mode, "dtype": "float32", "jit_compile": False,
+        "mode": args.perf_mode, "optimizer": args.optimizer, "dtype": "float32", "jit_compile": False,
         "width": args.perf_width, "depth": args.perf_depth,
     }
     power, lpm = power_source(), low_power_mode()
@@ -112,9 +112,9 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: st
 
         # --------------------------------------------------------------- model
         t = pc(); model = build_model(tf, workload, args, seed); model_build_s = pc() - t
-        t = pc(); opt, opt_name = tfenv.make_optimizer(tf, 1e-3); optimizer_init_s = pc() - t
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         tvars = model.trainable_variables
+        t = pc(); opt, opt_name = tfenv.make_optimizer(tf, 1e-3, tvars, args.optimizer); optimizer_init_s = pc() - t
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         probe_var = tvars[-1]                      # tiny (last bias) readback target
 
         def train_step(x, y):

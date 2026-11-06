@@ -70,6 +70,7 @@ class EvalResult:
     total_s: float = 0.0
     params: int = 0
     inherited_fraction: float = 0.0
+    loss_trace: Optional[List[float]] = None
     weights: Optional[List[np.ndarray]] = field(default=None, repr=False)
 
 
@@ -99,7 +100,7 @@ def train_steps(args, n_train: int) -> int:
 
 
 def evaluate(tf, device: str, genome: G.Genome, data: Dict[str, np.ndarray], args,
-             donor: Optional[EvalResult] = None, donor_depth: int = 0) -> EvalResult:
+             donor: Optional[EvalResult] = None, donor_depth: int = 0, trace_steps: int = 0) -> EvalResult:
     res = EvalResult(uid=genome.uid, params=G.count_params(genome, data["x_train"].shape[1], 1))
     seed = (args.seed * 1_000_003 + genome.uid) % (2 ** 31 - 1)
     t_all = pc()
@@ -122,8 +123,8 @@ def evaluate(tf, device: str, genome: G.Genome, data: Dict[str, np.ndarray], arg
             idx = np.concatenate([rng.permutation(n)[: nb * bs] for _ in range(args.ne_epochs)])
             xe = tf.constant(data["x_train"][idx].reshape(-1, bs, data["x_train"].shape[1]))
             ye = tf.constant(data["y_train"][idx].reshape(-1, bs))
-            opt, _ = tfenv.make_optimizer(tf, genome.learning_rate)
             tvars = model.trainable_variables
+            opt, _ = tfenv.make_optimizer(tf, genome.learning_rate, tvars, getattr(args, "optimizer", "simple"))
 
             @tf.function(jit_compile=False)
             def step(x, y):
@@ -133,9 +134,12 @@ def evaluate(tf, device: str, genome: G.Genome, data: Dict[str, np.ndarray], arg
                 return loss
 
             t = pc()
-            loss = None
+            loss, trace = None, []
             for i in range(xe.shape[0]):
                 loss = step(xe[i], ye[i])
+                if i < trace_steps:                       # diagnostic only (syncs each traced step)
+                    trace.append(float(loss.numpy()))
+            res.loss_trace = trace or None
             tfenv.sync(loss, tvars[-1])                      # completion barrier before stopping the clock
             res.train_s = pc() - t
 
@@ -189,6 +193,7 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
         "epochs": args.ne_epochs, "batch": args.ne_batch, "train_n": args.ne_train_n, "val_n": args.ne_val_n,
         "test_n": args.ne_test_n, "in_dim": args.ne_in_dim, "workers": workers, "cleanup_policy": policy,
         "inherit_weights": bool(args.ne_inherit_weights), "seed": args.seed,
+        "optimizer": getattr(args, "optimizer", "simple"),
         "search_space": {"layers": [space.min_layers, space.max_layers], "units": list(space.unit_choices),
                          "activations": list(space.activations), "lr": list(space.lr_range)},
     }
@@ -205,7 +210,7 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
     with tfenv.device_scope(tf, device):
         probe = build_keras(tf, G.Genome([G.LayerGene(8, "relu")], 1e-3), args.ne_in_dim, 0)
     ev = tfenv.placement_evidence(tf, device, probe.trainable_variables, {})
-    ev["optimizer_class"] = tfenv.make_optimizer(tf, 1e-3)[1]
+    ev["optimizer_class"] = tfenv.make_optimizer(tf, 1e-3, [], getattr(args, "optimizer", "simple"))[1]
     rec.data["device_evidence"] = ev
     del probe
     if not ev["verified"]:
@@ -216,9 +221,10 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
     ref_genome = G.Genome([G.LayerGene(128, "relu"), G.LayerGene(128, "relu"), G.LayerGene(64, "tanh")],
                           learning_rate=1e-3, uid=-1)
     t = pc()
-    ref = evaluate(tf, device, ref_genome, data, args)
+    ref = evaluate(tf, device, ref_genome, data, args, trace_steps=10)
     rec.data["reference_check"] = {"genome": ref_genome.describe(), "status": ref.status, "val_r2": ref.val_r2,
-                                   "train_r2": ref.train_r2, "total_s": pc() - t, "error": ref.error}
+                                   "train_r2": ref.train_r2, "total_s": pc() - t, "error": ref.error,
+                                   "loss_trace": ref.loss_trace, "optimizer": getattr(args, "optimizer", "simple")}
     rec.measure("reference_val_r2", ref.val_r2, "R2", **ctx)
     rec.measure("reference_train_r2", ref.train_r2, "R2", **ctx)
     rec.measure("reference_eval_cold_start_s", pc() - t, "s", **ctx)

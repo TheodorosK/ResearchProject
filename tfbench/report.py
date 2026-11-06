@@ -96,7 +96,11 @@ def derive(jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
         c_ms, g_ms = val(cpu, "steady_step_time_ms"), val(gpu, "steady_step_time_ms")
         lc, lg = val(cpu, "loss_first_step"), val(gpu, "loss_first_step")
         rel = abs(lc - lg) / max(abs(lc), abs(lg), 1e-12) if lc is not None and lg is not None else None
+        fc, fg = val(cpu, "loss_final"), val(gpu, "loss_final")
+        frel = abs(fc - fg) / max(abs(fc), abs(fg), 1e-12) if fc is not None and fg is not None else None
         d["cpu_vs_gpu_performance"].append({
+            "final_loss_cpu": fc, "final_loss_gpu": fg, "final_loss_rel_diff": frel,
+            "training_trajectories_consistent": (frel is not None and frel < 0.05),
             "workload": wl, "kind": "calculated",
             "cpu_step_ms": c_ms, "gpu_step_ms": g_ms,
             "gpu_speedup_x": (c_ms / g_ms) if c_ms and g_ms else None,
@@ -111,6 +115,10 @@ def derive(jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
     g = next((j for j in ne if j["device"] == "gpu"), None)
     if c and g:
         a, b = val(c, "overall_individuals_per_s"), val(g, "overall_individuals_per_s")
+        tc = (c.get("data", {}).get("reference_check") or {}).get("loss_trace") or []
+        tg = (g.get("data", {}).get("reference_check") or {}).get("loss_trace") or []
+        first_div = next((i for i, (x, y) in enumerate(zip(tc, tg))
+                          if abs(x - y) / max(abs(x), abs(y), 1e-12) > 1e-3), None)
         rc, rg = val(c, "reference_val_r2"), val(g, "reference_val_r2")
         diff = abs(rc - rg) if rc is not None and rg is not None else None
         d["cpu_vs_gpu_neuroevolution"] = {
@@ -118,6 +126,8 @@ def derive(jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
             "gpu_vs_cpu_throughput_x": (b / a) if a and b else None,
             "reference_val_r2_cpu": rc, "reference_val_r2_gpu": rg, "reference_val_r2_abs_diff": diff,
             "numerically_consistent": (diff < 0.05) if diff is not None else None,
+            "reference_loss_trace_cpu": tc, "reference_loss_trace_gpu": tg,
+            "first_divergent_step_rel_1e-3": first_div,
             "gpu_placement_mode": g.get("placement")}
     return d
 
@@ -227,9 +237,10 @@ def render_markdown(r: Dict[str, Any]) -> str:
     A("_Steps/s, samples/s, ms/step, median and CV are **calculated** from the measured per-repeat times._\n")
     A("**CPU vs GPU (calculated):**\n")
     A(_table(["Workload", "CPU ms/step", "GPU ms/step", "GPU speed-up", "GPU placement", "First-step loss rel. diff",
-              "Comparable"],
+              "Comparable", "Final-loss rel. diff", "Trajectories agree"],
              [[x["workload"], x["cpu_step_ms"], x["gpu_step_ms"], x["gpu_speedup_x"], x["gpu_placement_mode"],
-               x["first_step_loss_rel_diff"], x["workloads_comparable"]]
+               x["first_step_loss_rel_diff"], x["workloads_comparable"], x["final_loss_rel_diff"],
+               x["training_trajectories_consistent"]]
               for x in r["derived"]["cpu_vs_gpu_performance"]]))
     A("**Phase breakdown (measured, seconds) - never merged with steady-state time:**\n")
     A(_table(["Job", "Data gen", "Data transfer", "Model build", "Optimizer init", "Trace", "First execution",
@@ -283,6 +294,13 @@ def render_markdown(r: Dict[str, Any]) -> str:
         A(f"**GPU vs CPU neuroevolution throughput (calculated):** {_f(cmp_['gpu_vs_cpu_throughput_x'])}x "
           f"(GPU placement: {cmp_.get('gpu_placement_mode')})\n")
         ok = cmp_.get("numerically_consistent")
+        if cmp_.get("reference_loss_trace_cpu") and cmp_.get("reference_loss_trace_gpu"):
+            A("**Reference loss trace, first optimiser steps (measured; step 0 = forward pass at identical initial weights):**\n")
+            A(_table(["Step", "CPU loss", "GPU loss", "Rel. diff"],
+                     [[i, x, y, abs(x - y) / max(abs(x), abs(y), 1e-12)] for i, (x, y) in
+                      enumerate(zip(cmp_["reference_loss_trace_cpu"], cmp_["reference_loss_trace_gpu"]))]))
+            A(f"First step where CPU and GPU differ by > 0.1%: {cmp_.get('first_divergent_step_rel_1e-3')} "
+              "(0 = forward pass differs; later = gradient/optimiser differs; None = no divergence).\n")
         A(f"**Numerical agreement (fixed reference genome, calculated):** CPU val R2 {_f(cmp_['reference_val_r2_cpu'])}, "
           f"GPU val R2 {_f(cmp_['reference_val_r2_gpu'])}, |diff| {_f(cmp_['reference_val_r2_abs_diff'])} -> "
           + ("consistent" if ok else ("**NOT consistent - GPU fitness values must not be compared with CPU ones**"

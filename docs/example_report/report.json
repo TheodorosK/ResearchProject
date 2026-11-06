@@ -7,7 +7,7 @@
     "estimated": "analytical model or heuristic; NOT observed"
   },
   "run_id": "example_report",
-  "started_utc": "2026-11-06T22:56:20+00:00",
+  "started_utc": "2026-11-06T23:05:57+00:00",
   "command": "tf_memory_stress_test.py --tests performance neuroevolution memdiag --quick --ne-devices cpu --memdiag-devices cpu --out-dir docs/example_report",
   "hardware": {
     "platform": "Linux-6.18.44-fc-v300-x86_64-with-glibc2.39",
@@ -58,6 +58,7 @@
     "dry_run": false,
     "out_dir": "docs/example_report",
     "seed": 1234,
+    "optimizer": "simple",
     "placement": "auto",
     "max_gb": 6.0,
     "min_avail_gb": 2.0,
@@ -119,7 +120,7 @@
     "leak_epochs": 10,
     "leak_mb_per_epoch": 5.0
   },
-  "finished_utc": "2026-11-06T22:56:59+00:00",
+  "finished_utc": "2026-11-06T23:06:39+00:00",
   "thermal_after": {
     "available": false,
     "throttling_indicated": null,
@@ -131,11 +132,11 @@
       "job": "performance@cpu:mlp",
       "status": "completed",
       "reason": "",
-      "wall_s": 3.0554897785186768,
+      "wall_s": 4.321647882461548,
       "measurements": [
         {
           "name": "data_generation_s",
-          "value": 0.01062656099999515,
+          "value": 0.03613095599999383,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -146,7 +147,7 @@
         },
         {
           "name": "data_transfer_s",
-          "value": 0.025618790000009994,
+          "value": 0.061174609000005375,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -157,7 +158,7 @@
         },
         {
           "name": "model_build_s",
-          "value": 0.18107181999999966,
+          "value": 0.2817010340000081,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -168,7 +169,7 @@
         },
         {
           "name": "optimizer_init_s",
-          "value": 0.00010533600000428578,
+          "value": 0.050359959000005006,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -179,7 +180,7 @@
         },
         {
           "name": "trace_s",
-          "value": 0.2064861479999962,
+          "value": 0.28014220400000056,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -190,7 +191,7 @@
         },
         {
           "name": "first_execution_s",
-          "value": 0.13540834399999824,
+          "value": 0.2708251349999955,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -201,7 +202,7 @@
         },
         {
           "name": "warmup_total_s",
-          "value": 0.06554753099999289,
+          "value": 0.07828422000000046,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -223,7 +224,7 @@
         },
         {
           "name": "steady_run_s",
-          "value": 0.29976262899999995,
+          "value": 0.5021130670000105,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -235,7 +236,7 @@
         },
         {
           "name": "steady_run_samples_per_s",
-          "value": 12810.135849188862,
+          "value": 7647.679880037696,
           "unit": "samples/s",
           "kind": "calculated",
           "context": {
@@ -247,7 +248,7 @@
         },
         {
           "name": "steady_run_extra_system_gb",
-          "value": 0.091827392578125,
+          "value": 0.12404251098632812,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -259,7 +260,7 @@
         },
         {
           "name": "steady_run_s",
-          "value": 0.2904665389999934,
+          "value": 0.40933583500000736,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -271,7 +272,7 @@
         },
         {
           "name": "steady_run_samples_per_s",
-          "value": 13220.111387770166,
+          "value": 9381.050158972597,
           "unit": "samples/s",
           "kind": "calculated",
           "context": {
@@ -283,7 +284,7 @@
         },
         {
           "name": "steady_run_extra_system_gb",
-          "value": 0.09230422973632812,
+          "value": 0.1240386962890625,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -295,7 +296,7 @@
         },
         {
           "name": "steady_run_s",
-          "value": 0.29426826799999617,
+          "value": 0.4424654729999986,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -307,7 +308,7 @@
         },
         {
           "name": "steady_run_samples_per_s",
-          "value": 13049.317298459275,
+          "value": 8678.643271223136,
           "unit": "samples/s",
           "kind": "calculated",
           "context": {
@@ -319,7 +320,7 @@
         },
         {
           "name": "steady_run_extra_system_gb",
-          "value": 0.09230422973632812,
+          "value": 0.1240386962890625,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -331,7 +332,7 @@
         },
         {
           "name": "steady_run_s_median",
-          "value": 0.29426826799999617,
+          "value": 0.4424654729999986,
           "unit": "s",
           "kind": "calculated",
           "context": {
@@ -342,7 +343,7 @@
         },
         {
           "name": "steady_run_s_mean",
-          "value": 0.2948324786666632,
+          "value": 0.45130479166667214,
           "unit": "s",
           "kind": "calculated",
           "context": {
@@ -353,7 +354,7 @@
         },
         {
           "name": "steady_run_s_stdev",
-          "value": 0.004673657302299878,
+          "value": 0.04701599579147348,
           "unit": "s",
           "kind": "calculated",
           "context": {
@@ -364,7 +365,7 @@
         },
         {
           "name": "steady_run_s_cv",
-          "value": 0.01585190791542306,
+          "value": 0.10417792290182216,
           "unit": "ratio",
           "kind": "calculated",
           "context": {
@@ -375,7 +376,7 @@
         },
         {
           "name": "steady_run_s_min",
-          "value": 0.2904665389999934,
+          "value": 0.40933583500000736,
           "unit": "s",
           "kind": "calculated",
           "context": {
@@ -386,7 +387,7 @@
         },
         {
           "name": "steady_run_s_max",
-          "value": 0.29976262899999995,
+          "value": 0.5021130670000105,
           "unit": "s",
           "kind": "calculated",
           "context": {
@@ -397,7 +398,7 @@
         },
         {
           "name": "steady_total_timed_s",
-          "value": 0.8844974359999895,
+          "value": 1.3539143750000164,
           "unit": "s",
           "kind": "calculated",
           "context": {
@@ -408,7 +409,7 @@
         },
         {
           "name": "steady_steps_per_s",
-          "value": 101.94779139421308,
+          "value": 67.80190055643075,
           "unit": "steps/s",
           "kind": "calculated",
           "context": {
@@ -419,7 +420,7 @@
         },
         {
           "name": "steady_samples_per_s",
-          "value": 13049.317298459275,
+          "value": 8678.643271223136,
           "unit": "samples/s",
           "kind": "calculated",
           "context": {
@@ -430,7 +431,7 @@
         },
         {
           "name": "steady_samples_per_s_cv",
-          "value": 0.01580899452779622,
+          "value": 0.10174428708248408,
           "unit": "ratio",
           "kind": "calculated",
           "context": {
@@ -441,7 +442,7 @@
         },
         {
           "name": "steady_step_time_ms",
-          "value": 9.80894226666654,
+          "value": 14.748849099999955,
           "unit": "ms",
           "kind": "calculated",
           "context": {
@@ -452,7 +453,7 @@
         },
         {
           "name": "compile_overhead_estimate_s",
-          "value": 0.1255994017333317,
+          "value": 0.25607628589999554,
           "unit": "s",
           "kind": "estimated",
           "context": {
@@ -463,7 +464,7 @@
         },
         {
           "name": "loss_final",
-          "value": 1.778858495526947e-05,
+          "value": 1.7395595932612196e-05,
           "unit": "",
           "kind": "measured",
           "context": {
@@ -485,7 +486,7 @@
         },
         {
           "name": "achieved_gflops_estimate",
-          "value": 228.09867355457052,
+          "value": 151.70042793372988,
           "unit": "GFLOP/s",
           "kind": "estimated",
           "context": {
@@ -496,7 +497,7 @@
         },
         {
           "name": "peak_rss_gb",
-          "value": 0.44335174560546875,
+          "value": 0.4762420654296875,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -507,7 +508,7 @@
         },
         {
           "name": "peak_extra_system_gb_sampled",
-          "value": 0.09230422973632812,
+          "value": 0.1240386962890625,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -518,7 +519,7 @@
         },
         {
           "name": "min_available_gb_sampled",
-          "value": 14.915340423583984,
+          "value": 14.860363006591797,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -529,7 +530,7 @@
         },
         {
           "name": "max_system_pct_sampled",
-          "value": 5.1,
+          "value": 5.4,
           "unit": "%",
           "kind": "measured",
           "context": {
@@ -562,7 +563,7 @@
         },
         {
           "name": "extra_system_gb_end",
-          "value": 0.09230422973632812,
+          "value": 0.1240386962890625,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -606,7 +607,7 @@
         },
         {
           "name": "steady_drift_ratio_last_vs_first_third",
-          "value": 0.9816709607253818,
+          "value": 0.8812068477795448,
           "unit": "ratio",
           "kind": "calculated",
           "context": {
@@ -618,7 +619,7 @@
       ],
       "data": {
         "worker": {
-          "pid": 215,
+          "pid": 216,
           "placement": "strict",
           "budget_s": 1200.0
         },
@@ -649,6 +650,7 @@
           "pool_batches": 4,
           "seed": 1234,
           "mode": "graph",
+          "optimizer": "simple",
           "dtype": "float32",
           "jit_compile": false,
           "width": 1024,
@@ -676,7 +678,7 @@
           "eager_default": true,
           "verified": true,
           "problems": [],
-          "optimizer_class": "keras.src.optimizers.legacy.adam.Adam",
+          "optimizer_class": "tfbench.SimpleAdam (Keras-Adam update rule, float32 state)",
           "optimizer_variable_device_kinds": [
             "CPU"
           ]
@@ -719,13 +721,13 @@
         },
         "resource_monitor": {
           "run_peaks": {
-            "max_extra_gb": 0.09230422973632812,
-            "min_avail_gb": 14.915340423583984,
-            "max_sys_pct": 5.1,
+            "max_extra_gb": 0.1240386962890625,
+            "min_avail_gb": 14.860363006591797,
+            "max_sys_pct": 5.4,
             "max_swap_growth_mb": 0.0,
-            "max_rss_gb": 0.44376373291015625
+            "max_rss_gb": 0.4766120910644531
           },
-          "polls": 4,
+          "polls": 5,
           "limit_reason": null,
           "interval_s": 0.5
         }
@@ -736,27 +738,27 @@
       "workload": "mlp",
       "placement": "strict",
       "exit_code": 0,
-      "supervised_wall_s": 3.619494513999996
+      "supervised_wall_s": 5.039198643999995
     },
     {
       "job": "performance@gpu:mlp",
       "status": "unsupported",
       "reason": "no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU silently.",
-      "wall_s": 1.3291831016540527,
+      "wall_s": 1.8889410495758057,
       "measurements": [],
       "data": {
         "worker": {
-          "pid": 240,
+          "pid": 241,
           "placement": "strict",
-          "budget_s": 1196.0
+          "budget_s": 1195.0
         },
         "resource_monitor": {
           "run_peaks": {
             "max_extra_gb": 0.0,
-            "min_avail_gb": 14.993457794189453,
-            "max_sys_pct": 4.6,
+            "min_avail_gb": 14.973373413085938,
+            "max_sys_pct": 4.7,
             "max_swap_growth_mb": 0.0,
-            "max_rss_gb": 0.3544807434082031
+            "max_rss_gb": 0.354522705078125
           },
           "polls": 1,
           "limit_reason": null,
@@ -769,17 +771,17 @@
       "workload": "mlp",
       "placement": "strict",
       "exit_code": 1,
-      "supervised_wall_s": 1.867992115000007
+      "supervised_wall_s": 2.5068825350000026
     },
     {
       "job": "neuroevolution@cpu",
       "status": "completed",
       "reason": "",
-      "wall_s": 6.88744330406189,
+      "wall_s": 6.971731662750244,
       "measurements": [
         {
           "name": "reference_val_r2",
-          "value": 0.09886720919806846,
+          "value": 0.09886750687789236,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -789,7 +791,7 @@
         },
         {
           "name": "reference_train_r2",
-          "value": 0.31732332706451416,
+          "value": 0.3173225522041321,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -799,7 +801,7 @@
         },
         {
           "name": "reference_eval_cold_start_s",
-          "value": 0.3337447359999999,
+          "value": 0.33546630099999675,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -809,7 +811,7 @@
         },
         {
           "name": "gen_wall_s",
-          "value": 1.4744930119999964,
+          "value": 1.5383141039999941,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -820,7 +822,7 @@
         },
         {
           "name": "gen_individuals_per_s",
-          "value": 4.069195276728795,
+          "value": 3.9003737821804583,
           "unit": "ind/s",
           "kind": "calculated",
           "context": {
@@ -831,7 +833,7 @@
         },
         {
           "name": "gen_best_val_r2",
-          "value": 0.5287496494820073,
+          "value": 0.5287475954912223,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -842,7 +844,7 @@
         },
         {
           "name": "gen_mean_val_r2",
-          "value": 0.11335831760095466,
+          "value": 0.11335728068290134,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -853,7 +855,7 @@
         },
         {
           "name": "gen_peak_extra_system_gb",
-          "value": 0.02661895751953125,
+          "value": 0.020999908447265625,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -864,7 +866,7 @@
         },
         {
           "name": "gen_rss_gb_after_cleanup",
-          "value": 0.400665283203125,
+          "value": 0.3935661315917969,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -875,7 +877,7 @@
         },
         {
           "name": "gen_extra_system_gb_after_cleanup",
-          "value": 0.030223846435546875,
+          "value": 0.02001953125,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -897,7 +899,7 @@
         },
         {
           "name": "gen_process_cores_busy",
-          "value": 1.0441399201327288,
+          "value": 1.0268446869172845,
           "unit": "cores",
           "kind": "measured",
           "context": {
@@ -908,7 +910,7 @@
         },
         {
           "name": "gen_cleanup_s",
-          "value": 0.110238661000011,
+          "value": 0.10491317299999992,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -930,7 +932,7 @@
         },
         {
           "name": "gen_wall_s",
-          "value": 1.4763373669999993,
+          "value": 1.6719503160000073,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -941,7 +943,7 @@
         },
         {
           "name": "gen_individuals_per_s",
-          "value": 3.386759768981721,
+          "value": 2.9905194862261553,
           "unit": "ind/s",
           "kind": "calculated",
           "context": {
@@ -952,7 +954,7 @@
         },
         {
           "name": "gen_best_val_r2",
-          "value": 0.5888096200593336,
+          "value": 0.5888044701983798,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -963,7 +965,7 @@
         },
         {
           "name": "gen_mean_val_r2",
-          "value": 0.22971716249210408,
+          "value": 0.22973625567601003,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -974,7 +976,7 @@
         },
         {
           "name": "gen_peak_extra_system_gb",
-          "value": 0.0341339111328125,
+          "value": 0.022541046142578125,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -985,7 +987,7 @@
         },
         {
           "name": "gen_rss_gb_after_cleanup",
-          "value": 0.4124259948730469,
+          "value": 0.4034767150878906,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -996,7 +998,7 @@
         },
         {
           "name": "gen_extra_system_gb_after_cleanup",
-          "value": 0.04327392578125,
+          "value": 0.025424957275390625,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -1018,7 +1020,7 @@
         },
         {
           "name": "gen_process_cores_busy",
-          "value": 1.0563636275335253,
+          "value": 1.0523729973066827,
           "unit": "cores",
           "kind": "measured",
           "context": {
@@ -1029,7 +1031,7 @@
         },
         {
           "name": "gen_cleanup_s",
-          "value": 0.09261206299999003,
+          "value": 0.11163893799999869,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -1051,7 +1053,7 @@
         },
         {
           "name": "gen_wall_s",
-          "value": 1.4273446580000098,
+          "value": 1.4782253770000011,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -1062,7 +1064,7 @@
         },
         {
           "name": "gen_individuals_per_s",
-          "value": 3.503008171135052,
+          "value": 3.3824341523261485,
           "unit": "ind/s",
           "kind": "calculated",
           "context": {
@@ -1073,7 +1075,7 @@
         },
         {
           "name": "gen_best_val_r2",
-          "value": 0.7166340508806262,
+          "value": 0.7166007107403476,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -1084,7 +1086,7 @@
         },
         {
           "name": "gen_mean_val_r2",
-          "value": 0.5725606716133115,
+          "value": 0.5723647506604027,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -1095,7 +1097,7 @@
         },
         {
           "name": "gen_peak_extra_system_gb",
-          "value": 0.045917510986328125,
+          "value": 0.028522491455078125,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -1106,7 +1108,7 @@
         },
         {
           "name": "gen_rss_gb_after_cleanup",
-          "value": 0.41986083984375,
+          "value": 0.4088783264160156,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -1117,7 +1119,7 @@
         },
         {
           "name": "gen_extra_system_gb_after_cleanup",
-          "value": 0.049282073974609375,
+          "value": 0.034313201904296875,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -1139,7 +1141,7 @@
         },
         {
           "name": "gen_process_cores_busy",
-          "value": 1.0226074468213024,
+          "value": 1.055010065681961,
           "unit": "cores",
           "kind": "measured",
           "context": {
@@ -1150,7 +1152,7 @@
         },
         {
           "name": "gen_cleanup_s",
-          "value": 0.13519647199998985,
+          "value": 0.11160978200000216,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -1202,7 +1204,7 @@
         },
         {
           "name": "overall_individuals_per_s",
-          "value": 3.377981516191417,
+          "value": 3.1811370344066714,
           "unit": "ind/s",
           "kind": "calculated",
           "context": {
@@ -1212,7 +1214,7 @@
         },
         {
           "name": "total_evolution_s",
-          "value": 4.736556409000002,
+          "value": 5.02964815,
           "unit": "s",
           "kind": "measured",
           "context": {
@@ -1222,7 +1224,7 @@
         },
         {
           "name": "val_r2_improvement_first_to_last_generation",
-          "value": 0.18788440139861884,
+          "value": 0.1878531152491253,
           "unit": "R2",
           "kind": "calculated",
           "context": {
@@ -1232,7 +1234,7 @@
         },
         {
           "name": "peak_rss_gb",
-          "value": 0.41941070556640625,
+          "value": 0.40834808349609375,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -1242,7 +1244,7 @@
         },
         {
           "name": "peak_extra_system_gb_sampled",
-          "value": 0.049282073974609375,
+          "value": 0.034313201904296875,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -1252,7 +1254,7 @@
         },
         {
           "name": "min_available_gb_sampled",
-          "value": 14.940200805664062,
+          "value": 14.939075469970703,
           "unit": "GB",
           "kind": "measured",
           "context": {
@@ -1282,7 +1284,7 @@
         },
         {
           "name": "system_memory_growth_per_generation_mb",
-          "value": 9.7578125,
+          "value": 7.318359375,
           "unit": "MB/gen",
           "kind": "calculated",
           "context": {
@@ -1292,7 +1294,7 @@
         },
         {
           "name": "rss_growth_per_generation_mb",
-          "value": 9.828125,
+          "value": 7.83984375,
           "unit": "MB/gen",
           "kind": "calculated",
           "context": {
@@ -1302,7 +1304,7 @@
         },
         {
           "name": "best_individual_val_r2",
-          "value": 0.7166340508806262,
+          "value": 0.7166007107403476,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -1312,7 +1314,7 @@
         },
         {
           "name": "best_individual_train_r2",
-          "value": 0.7806023061275482,
+          "value": 0.7805542945861816,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -1322,7 +1324,7 @@
         },
         {
           "name": "best_individual_test_r2",
-          "value": 0.6964166972947674,
+          "value": 0.6962908620730686,
           "unit": "R2",
           "kind": "measured",
           "context": {
@@ -1333,7 +1335,7 @@
       ],
       "data": {
         "worker": {
-          "pid": 246,
+          "pid": 247,
           "placement": "strict",
           "budget_s": 1200.0
         },
@@ -1371,6 +1373,7 @@
           "cleanup_policy": "generation",
           "inherit_weights": false,
           "seed": 1234,
+          "optimizer": "simple",
           "search_space": {
             "layers": [
               1,
@@ -1407,15 +1410,28 @@
           "eager_default": true,
           "verified": true,
           "problems": [],
-          "optimizer_class": "keras.src.optimizers.legacy.adam.Adam"
+          "optimizer_class": "tfbench.SimpleAdam (Keras-Adam update rule, float32 state)"
         },
         "reference_check": {
           "genome": "[128r-128r-64t] lr=1.00e-03",
           "status": "ok",
-          "val_r2": 0.09886720919806846,
-          "train_r2": 0.31732332706451416,
-          "total_s": 0.3337235959999987,
-          "error": ""
+          "val_r2": 0.09886750687789236,
+          "train_r2": 0.3173225522041321,
+          "total_s": 0.3354469159999951,
+          "error": "",
+          "loss_trace": [
+            1.062786340713501,
+            1.10995614528656,
+            0.8640885353088379,
+            1.002190351486206,
+            0.9836432933807373,
+            0.766467273235321,
+            0.9144522547721863,
+            0.9539552927017212,
+            0.7504578828811646,
+            0.7914883494377136
+          ],
+          "optimizer": "simple"
         },
         "generations": [
           {
@@ -1425,36 +1441,36 @@
             "failed": 0,
             "elites_carried": 0,
             "errors": [],
-            "wall_s": 1.4744930119999964,
-            "individuals_per_s": 4.069195276728795,
+            "wall_s": 1.5383141039999941,
+            "individuals_per_s": 3.9003737821804583,
             "train_s": {
               "n": 6,
-              "median": 0.20009704300000664,
-              "mean": 0.19838154650000206,
-              "stdev": 0.03436619288945914,
-              "cv": 0.17323281069118385,
-              "min": 0.1458699399999972,
-              "max": 0.24043606400000783
+              "median": 0.208336807000002,
+              "mean": 0.20104127099999877,
+              "stdev": 0.05307886592037184,
+              "cv": 0.2640197490612371,
+              "min": 0.13243608899999515,
+              "max": 0.27635191599999587
             },
-            "build_s_mean": 0.03560274050000108,
-            "best_val_r2": 0.5287496494820073,
-            "mean_val_r2": 0.11335831760095466,
-            "best_train_r2": 0.7250450849533081,
-            "best_so_far_val_r2": 0.5287496494820073,
+            "build_s_mean": 0.03669161449999573,
+            "best_val_r2": 0.5287475954912223,
+            "mean_val_r2": 0.11335728068290134,
+            "best_train_r2": 0.7250452637672424,
+            "best_so_far_val_r2": 0.5287475954912223,
             "mean_params": 3067.6666666666665,
-            "process_cores_busy": 1.0441399201327288,
-            "system_cpu_pct": 29.2,
-            "rss_gb_before_cleanup": 0.400665283203125,
-            "rss_gb_after_cleanup": 0.400665283203125,
-            "extra_system_gb_before_cleanup": 0.030223846435546875,
-            "extra_system_gb_after_cleanup": 0.030223846435546875,
-            "available_gb_after_cleanup": 14.959259033203125,
-            "peak_extra_system_gb": 0.02661895751953125,
-            "peak_rss_gb": 0.39597320556640625,
-            "min_available_gb": 14.96286392211914,
+            "process_cores_busy": 1.0268446869172845,
+            "system_cpu_pct": 30.5,
+            "rss_gb_before_cleanup": 0.3935661315917969,
+            "rss_gb_after_cleanup": 0.3935661315917969,
+            "extra_system_gb_before_cleanup": 0.019298553466796875,
+            "extra_system_gb_after_cleanup": 0.02001953125,
+            "available_gb_after_cleanup": 14.953369140625,
+            "peak_extra_system_gb": 0.020999908447265625,
+            "peak_rss_gb": 0.3935546875,
+            "min_available_gb": 14.952388763427734,
             "swap_growth_mb": 0.0,
             "swap_growth_since_start_mb": 0.0,
-            "cleanup_s": 0.110238661000011
+            "cleanup_s": 0.10491317299999992
           },
           {
             "generation": 1,
@@ -1463,36 +1479,36 @@
             "failed": 0,
             "elites_carried": 1,
             "errors": [],
-            "wall_s": 1.4763373669999993,
-            "individuals_per_s": 3.386759768981721,
+            "wall_s": 1.6719503160000073,
+            "individuals_per_s": 2.9905194862261553,
             "train_s": {
               "n": 5,
-              "median": 0.2392123980000065,
-              "mean": 0.23645878000000095,
-              "stdev": 0.022333565992605713,
-              "cv": 0.09445014472545965,
-              "min": 0.2101382660000013,
-              "max": 0.26692976500000043
+              "median": 0.25285060000000215,
+              "mean": 0.2543782132000018,
+              "stdev": 0.043343893942508455,
+              "cv": 0.17039153391815767,
+              "min": 0.2045626700000014,
+              "max": 0.30181056099999637
             },
-            "build_s_mean": 0.0464869756000013,
-            "best_val_r2": 0.5888096200593336,
-            "mean_val_r2": 0.22971716249210408,
-            "best_train_r2": 0.7412692904472351,
-            "best_so_far_val_r2": 0.5888096200593336,
+            "build_s_mean": 0.056775302600001964,
+            "best_val_r2": 0.5888044701983798,
+            "mean_val_r2": 0.22973625567601003,
+            "best_train_r2": 0.7412672638893127,
+            "best_so_far_val_r2": 0.5888044701983798,
             "mean_params": 6597.8,
-            "process_cores_busy": 1.0563636275335253,
-            "system_cpu_pct": 27.6,
-            "rss_gb_before_cleanup": 0.41242218017578125,
-            "rss_gb_after_cleanup": 0.4124259948730469,
-            "extra_system_gb_before_cleanup": 0.04327392578125,
-            "extra_system_gb_after_cleanup": 0.04327392578125,
-            "available_gb_after_cleanup": 14.946208953857422,
-            "peak_extra_system_gb": 0.0341339111328125,
-            "peak_rss_gb": 0.40625762939453125,
-            "min_available_gb": 14.95534896850586,
+            "process_cores_busy": 1.0523729973066827,
+            "system_cpu_pct": 28.6,
+            "rss_gb_before_cleanup": 0.4034767150878906,
+            "rss_gb_after_cleanup": 0.4034767150878906,
+            "extra_system_gb_before_cleanup": 0.025424957275390625,
+            "extra_system_gb_after_cleanup": 0.025424957275390625,
+            "available_gb_after_cleanup": 14.94796371459961,
+            "peak_extra_system_gb": 0.022541046142578125,
+            "peak_rss_gb": 0.4016609191894531,
+            "min_available_gb": 14.950847625732422,
             "swap_growth_mb": 0.0,
             "swap_growth_since_start_mb": 0.0,
-            "cleanup_s": 0.09261206299999003
+            "cleanup_s": 0.11163893799999869
           },
           {
             "generation": 2,
@@ -1501,36 +1517,36 @@
             "failed": 0,
             "elites_carried": 1,
             "errors": [],
-            "wall_s": 1.4273446580000098,
-            "individuals_per_s": 3.503008171135052,
+            "wall_s": 1.4782253770000011,
+            "individuals_per_s": 3.3824341523261485,
             "train_s": {
               "n": 5,
-              "median": 0.2203953779999921,
-              "mean": 0.22616059419999884,
-              "stdev": 0.02910107489550845,
-              "cv": 0.12867438290232702,
-              "min": 0.18616946600000972,
-              "max": 0.26256485599999735
+              "median": 0.22461429700000224,
+              "mean": 0.2314123491999993,
+              "stdev": 0.029746879568730185,
+              "cv": 0.12854490986140626,
+              "min": 0.19666806499999723,
+              "max": 0.26881466200001114
             },
-            "build_s_mean": 0.04234972179999943,
-            "best_val_r2": 0.7166340508806262,
-            "mean_val_r2": 0.5725606716133115,
-            "best_train_r2": 0.83608178794384,
-            "best_so_far_val_r2": 0.7166340508806262,
+            "build_s_mean": 0.04523064220000208,
+            "best_val_r2": 0.7166007107403476,
+            "mean_val_r2": 0.5723647506604027,
+            "best_train_r2": 0.8349128514528275,
+            "best_so_far_val_r2": 0.7166007107403476,
             "mean_params": 9441.0,
-            "process_cores_busy": 1.0226074468213024,
-            "system_cpu_pct": 28.3,
-            "rss_gb_before_cleanup": 0.41986083984375,
-            "rss_gb_after_cleanup": 0.41986083984375,
-            "extra_system_gb_before_cleanup": 0.049282073974609375,
-            "extra_system_gb_after_cleanup": 0.049282073974609375,
-            "available_gb_after_cleanup": 14.940200805664062,
-            "peak_extra_system_gb": 0.045917510986328125,
-            "peak_rss_gb": 0.4133720397949219,
-            "min_available_gb": 14.943565368652344,
+            "process_cores_busy": 1.055010065681961,
+            "system_cpu_pct": 28.2,
+            "rss_gb_before_cleanup": 0.4088783264160156,
+            "rss_gb_after_cleanup": 0.4088783264160156,
+            "extra_system_gb_before_cleanup": 0.034313201904296875,
+            "extra_system_gb_after_cleanup": 0.034313201904296875,
+            "available_gb_after_cleanup": 14.939075469970703,
+            "peak_extra_system_gb": 0.028522491455078125,
+            "peak_rss_gb": 0.40625762939453125,
+            "min_available_gb": 14.944866180419922,
             "swap_growth_mb": 0.0,
             "swap_growth_since_start_mb": 0.0,
-            "cleanup_s": 0.13519647199998985
+            "cleanup_s": 0.11160978200000216
           }
         ],
         "best_individual": {
@@ -1538,9 +1554,9 @@
           "uid": 15,
           "generation": 2,
           "params": 9441,
-          "val_r2": 0.7166340508806262,
-          "train_r2": 0.7806023061275482,
-          "test_r2": 0.6964166972947674,
+          "val_r2": 0.7166007107403476,
+          "train_r2": 0.7805542945861816,
+          "test_r2": 0.6962908620730686,
           "test_set_used_for_selection": false
         },
         "evaluation_failures": {
@@ -1548,13 +1564,13 @@
         },
         "resource_monitor": {
           "run_peaks": {
-            "max_extra_gb": 0.049282073974609375,
-            "min_avail_gb": 14.940200805664062,
+            "max_extra_gb": 0.034313201904296875,
+            "min_avail_gb": 14.939075469970703,
             "max_sys_pct": 4.9,
             "max_swap_growth_mb": 0.0,
-            "max_rss_gb": 0.41986083984375
+            "max_rss_gb": 0.4088783264160156
           },
-          "polls": 11,
+          "polls": 12,
           "limit_reason": null,
           "interval_s": 0.5
         }
@@ -1570,17 +1586,17 @@
       "workload": null,
       "placement": "strict",
       "exit_code": 0,
-      "supervised_wall_s": 7.6249267950000075
+      "supervised_wall_s": 7.673591879999989
     },
     {
       "job": "memdiag@cpu:none",
       "status": "completed",
       "reason": "",
-      "wall_s": 7.79995322227478,
+      "wall_s": 8.197667837142944,
       "measurements": [
         {
           "name": "cycle_rss_mb",
-          "value": 399.0390625,
+          "value": 399.9140625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1592,7 +1608,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 25.875,
+          "value": 25.04296875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1604,7 +1620,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 1.812164306640625,
+          "value": 1.7301607131958008,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1616,7 +1632,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 268384,
+          "value": 267584,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -1628,7 +1644,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 403.63671875,
+          "value": 403.03515625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1640,7 +1656,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 30.53125,
+          "value": 25.21875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1652,7 +1668,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 2.2935943603515625,
+          "value": 2.1249542236328125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1664,7 +1680,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 271105,
+          "value": 269871,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -1676,7 +1692,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 407.33984375,
+          "value": 405.62109375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1688,7 +1704,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 32.76171875,
+          "value": 25.21875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1700,7 +1716,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 2.6871871948242188,
+          "value": 2.5356273651123047,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1712,7 +1728,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 273284,
+          "value": 272158,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -1724,7 +1740,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 410.53515625,
+          "value": 407.83984375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1736,7 +1752,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 33.74609375,
+          "value": 26.94140625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1748,7 +1764,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 3.170945167541504,
+          "value": 2.2270050048828125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1760,7 +1776,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 276005,
+          "value": 269993,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -1772,7 +1788,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 413.2265625,
+          "value": 406.35546875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1784,7 +1800,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 35.453125,
+          "value": 24.34765625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1796,7 +1812,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 3.5629491806030273,
+          "value": 2.631734848022461,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1808,7 +1824,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 278183,
+          "value": 272280,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -1820,7 +1836,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 417.17578125,
+          "value": 408.81640625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1832,7 +1848,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 39.39453125,
+          "value": 24.80078125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1844,7 +1860,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.041668891906738,
+          "value": 2.3504343032836914,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1856,7 +1872,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 280904,
+          "value": 270265,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -1868,7 +1884,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 419.8828125,
+          "value": 408.94140625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1880,7 +1896,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 42.6015625,
+          "value": 23.40625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1892,7 +1908,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.1576948165893555,
+          "value": 2.7711610794067383,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1904,7 +1920,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 281570,
+          "value": 272650,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -1916,7 +1932,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 423.0390625,
+          "value": 409.96484375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1928,7 +1944,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 45.5546875,
+          "value": 25.12890625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1940,7 +1956,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.641022682189941,
+          "value": 2.4945030212402344,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1952,7 +1968,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 284292,
+          "value": 270646,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -1964,7 +1980,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 427.02734375,
+          "value": 410.1953125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1976,7 +1992,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 49.48046875,
+          "value": 25.07421875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -1988,7 +2004,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 5.034268379211426,
+          "value": 2.90010929107666,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2000,7 +2016,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 286471,
+          "value": 272933,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2012,7 +2028,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 430.5,
+          "value": 409.72265625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2024,7 +2040,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 53.41796875,
+          "value": 26.796875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2036,7 +2052,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 5.519013404846191,
+          "value": 2.9145050048828125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2048,7 +2064,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 289192,
+          "value": 272834,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2060,7 +2076,7 @@
         },
         {
           "name": "growth_verdict_rss",
-          "value": "continued_native_growth",
+          "value": "bounded",
           "unit": "",
           "kind": "calculated",
           "context": {
@@ -2071,7 +2087,7 @@
         },
         {
           "name": "growth_slope_rss_mb_per_cycle",
-          "value": 3.334263392857143,
+          "value": 0.5170200892857143,
           "unit": "MB/cycle",
           "kind": "calculated",
           "context": {
@@ -2082,7 +2098,7 @@
         },
         {
           "name": "growth_verdict_system_extra",
-          "value": "continued_native_growth",
+          "value": "bounded",
           "unit": "",
           "kind": "calculated",
           "context": {
@@ -2093,7 +2109,7 @@
         },
         {
           "name": "growth_slope_system_extra_mb_per_cycle",
-          "value": 3.3296595982142856,
+          "value": 0.048130580357142856,
           "unit": "MB/cycle",
           "kind": "calculated",
           "context": {
@@ -2104,7 +2120,7 @@
         },
         {
           "name": "gc_objects_slope_per_cycle",
-          "value": 2125.8928571428573,
+          "value": 364.64285714285717,
           "unit": "objects/cycle",
           "kind": "calculated",
           "context": {
@@ -2116,7 +2132,7 @@
       ],
       "data": {
         "worker": {
-          "pid": 265,
+          "pid": 267,
           "placement": "strict",
           "budget_s": 1200.0
         },
@@ -2149,34 +2165,34 @@
             "warmup_cycles": 3,
             "threshold_mb_per_cycle": 1.0,
             "n_used": 7,
-            "slope_mb_per_cycle": 3.334263392857143,
-            "first_half_slope": 3.3203125,
-            "second_half_slope": 3.583984375,
-            "python_slope_mb_per_cycle": 0.3780784606933594,
-            "total_growth_mb": 19.96484375,
-            "verdict": "continued_native_growth",
-            "reason": "growth continues at a similar rate with flat Python memory: potential native leak or unbounded cache; repeat with more cycles before concluding"
+            "slope_mb_per_cycle": 0.5170200892857143,
+            "first_half_slope": 0.48828125,
+            "second_half_slope": 0.257421875,
+            "python_slope_mb_per_cycle": 0.09797562871660505,
+            "total_growth_mb": 1.8828125,
+            "verdict": "bounded",
+            "reason": "no sustained growth after warm-up (consistent with allocator caching)"
           },
           "system_extra": {
             "warmup_cycles": 3,
             "threshold_mb_per_cycle": 1.0,
             "n_used": 7,
-            "slope_mb_per_cycle": 3.3296595982142856,
-            "first_half_slope": 2.82421875,
-            "second_half_slope": 3.6375,
-            "python_slope_mb_per_cycle": 0.3780784606933594,
-            "total_growth_mb": 19.671875,
-            "verdict": "continued_native_growth",
-            "reason": "growth continues at a similar rate with flat Python memory: potential native leak or unbounded cache; repeat with more cycles before concluding"
+            "slope_mb_per_cycle": 0.048130580357142856,
+            "first_half_slope": -1.0703125,
+            "second_half_slope": 1.01171875,
+            "python_slope_mb_per_cycle": 0.09797562871660505,
+            "total_growth_mb": -0.14453125,
+            "verdict": "bounded",
+            "reason": "no sustained growth after warm-up (consistent with allocator caching)"
           }
         },
         "resource_monitor": {
           "run_peaks": {
-            "max_extra_gb": 0.051685333251953125,
-            "min_avail_gb": 14.942813873291016,
-            "max_sys_pct": 4.9,
+            "max_extra_gb": 0.026309967041015625,
+            "min_avail_gb": 14.953929901123047,
+            "max_sys_pct": 4.8,
             "max_swap_growth_mb": 0.0,
-            "max_rss_gb": 0.4200630187988281
+            "max_rss_gb": 0.4003639221191406
           },
           "polls": 13,
           "limit_reason": null,
@@ -2192,17 +2208,17 @@
       "workload": "none",
       "placement": "strict",
       "exit_code": 0,
-      "supervised_wall_s": 8.477944272000002
+      "supervised_wall_s": 8.775904104999995
     },
     {
       "job": "memdiag@cpu:gc",
       "status": "completed",
       "reason": "",
-      "wall_s": 8.095175743103027,
+      "wall_s": 8.353115797042847,
       "measurements": [
         {
           "name": "cycle_rss_mb",
-          "value": 399.40234375,
+          "value": 399.4453125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2214,7 +2230,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 18.80078125,
+          "value": 24.421875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2226,7 +2242,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 1.6843805313110352,
+          "value": 1.240804672241211,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2238,7 +2254,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 267516,
+          "value": 264874,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2250,7 +2266,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 403.21484375,
+          "value": 400.68359375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2262,7 +2278,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 22.48828125,
+          "value": 32.296875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2274,7 +2290,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 2.0794248580932617,
+          "value": 1.2441396713256836,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2286,7 +2302,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 269804,
+          "value": 264879,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2298,7 +2314,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 406.7734375,
+          "value": 403.15234375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2310,7 +2326,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 24.2109375,
+          "value": 32.78515625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2322,7 +2338,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 2.4794998168945312,
+          "value": 1.2646150588989258,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2334,7 +2350,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 272091,
+          "value": 264886,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2346,7 +2362,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 410.578125,
+          "value": 403.5625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2358,7 +2374,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 25.1875,
+          "value": 32.78515625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2370,7 +2386,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 2.8758583068847656,
+          "value": 1.2833356857299805,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2382,7 +2398,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 274379,
+          "value": 264893,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2394,7 +2410,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 413.234375,
+          "value": 402.0703125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2406,7 +2422,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 28.14453125,
+          "value": 31.30859375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2418,7 +2434,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 3.2785234451293945,
+          "value": 1.3007307052612305,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2430,7 +2446,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 276667,
+          "value": 264901,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2442,7 +2458,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 416.79296875,
+          "value": 404.26953125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2454,7 +2470,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 30.8515625,
+          "value": 31.56640625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2466,7 +2482,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 3.6742630004882812,
+          "value": 1.318140983581543,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2478,7 +2494,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 278955,
+          "value": 264908,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2490,7 +2506,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 419.609375,
+          "value": 404.8984375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2502,7 +2518,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 32.57421875,
+          "value": 32.55078125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2514,7 +2530,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.069472312927246,
+          "value": 1.3346223831176758,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2526,7 +2542,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 281243,
+          "value": 264914,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2538,7 +2554,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 423.2421875,
+          "value": 405.70703125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2550,7 +2566,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 36.01953125,
+          "value": 32.55078125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2562,7 +2578,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.469853401184082,
+          "value": 1.3550291061401367,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2574,7 +2590,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 283531,
+          "value": 264921,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2586,7 +2602,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 426.921875,
+          "value": 405.70703125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2598,7 +2614,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 38.71484375,
+          "value": 32.7890625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2610,7 +2626,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.866635322570801,
+          "value": 1.3764629364013672,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2622,7 +2638,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 285819,
+          "value": 264928,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2634,7 +2650,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 430.15234375,
+          "value": 404.34765625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2646,7 +2662,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 41.921875,
+          "value": 30.9453125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2658,7 +2674,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 5.268292427062988,
+          "value": 1.3965463638305664,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2670,7 +2686,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 288108,
+          "value": 264936,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2682,7 +2698,7 @@
         },
         {
           "name": "growth_verdict_rss",
-          "value": "continued_native_growth",
+          "value": "bounded",
           "unit": "",
           "kind": "calculated",
           "context": {
@@ -2693,7 +2709,7 @@
         },
         {
           "name": "growth_slope_rss_mb_per_cycle",
-          "value": 3.3052455357142856,
+          "value": 0.39522879464285715,
           "unit": "MB/cycle",
           "kind": "calculated",
           "context": {
@@ -2704,7 +2720,7 @@
         },
         {
           "name": "growth_verdict_system_extra",
-          "value": "continued_native_growth",
+          "value": "bounded",
           "unit": "",
           "kind": "calculated",
           "context": {
@@ -2715,7 +2731,7 @@
         },
         {
           "name": "growth_slope_system_extra_mb_per_cycle",
-          "value": 2.7325613839285716,
+          "value": -0.05622209821428571,
           "unit": "MB/cycle",
           "kind": "calculated",
           "context": {
@@ -2726,7 +2742,7 @@
         },
         {
           "name": "gc_objects_slope_per_cycle",
-          "value": 2288.1071428571427,
+          "value": 7.0,
           "unit": "objects/cycle",
           "kind": "calculated",
           "context": {
@@ -2738,9 +2754,9 @@
       ],
       "data": {
         "worker": {
-          "pid": 282,
+          "pid": 283,
           "placement": "strict",
-          "budget_s": 1192.0
+          "budget_s": 1191.0
         },
         "tf": {
           "version": "2.15.1",
@@ -2771,34 +2787,34 @@
             "warmup_cycles": 3,
             "threshold_mb_per_cycle": 1.0,
             "n_used": 7,
-            "slope_mb_per_cycle": 3.3052455357142856,
-            "first_half_slope": 3.107421875,
-            "second_half_slope": 3.530859375,
-            "python_slope_mb_per_cycle": 0.3981827327183315,
-            "total_growth_mb": 19.57421875,
-            "verdict": "continued_native_growth",
-            "reason": "growth continues at a similar rate with flat Python memory: potential native leak or unbounded cache; repeat with more cycles before concluding"
+            "slope_mb_per_cycle": 0.39522879464285715,
+            "first_half_slope": 0.353515625,
+            "second_half_slope": -0.165234375,
+            "python_slope_mb_per_cycle": 0.018856593540736606,
+            "total_growth_mb": 0.78515625,
+            "verdict": "bounded",
+            "reason": "no sustained growth after warm-up (consistent with allocator caching)"
           },
           "system_extra": {
             "warmup_cycles": 3,
             "threshold_mb_per_cycle": 1.0,
             "n_used": 7,
-            "slope_mb_per_cycle": 2.7325613839285716,
-            "first_half_slope": 2.83203125,
-            "second_half_slope": 3.073828125,
-            "python_slope_mb_per_cycle": 0.3981827327183315,
-            "total_growth_mb": 16.734375,
-            "verdict": "continued_native_growth",
-            "reason": "growth continues at a similar rate with flat Python memory: potential native leak or unbounded cache; repeat with more cycles before concluding"
+            "slope_mb_per_cycle": -0.05622209821428571,
+            "first_half_slope": -0.609375,
+            "second_half_slope": -0.4578125,
+            "python_slope_mb_per_cycle": 0.018856593540736606,
+            "total_growth_mb": -1.83984375,
+            "verdict": "bounded",
+            "reason": "no sustained growth after warm-up (consistent with allocator caching)"
           }
         },
         "resource_monitor": {
           "run_peaks": {
-            "max_extra_gb": 0.0409393310546875,
-            "min_avail_gb": 14.948097229003906,
-            "max_sys_pct": 4.8,
+            "max_extra_gb": 0.03202056884765625,
+            "min_avail_gb": 14.963226318359375,
+            "max_sys_pct": 4.7,
             "max_swap_growth_mb": 0.0,
-            "max_rss_gb": 0.4200706481933594
+            "max_rss_gb": 0.3961982727050781
           },
           "polls": 14,
           "limit_reason": null,
@@ -2814,17 +2830,17 @@
       "workload": "gc",
       "placement": "strict",
       "exit_code": 0,
-      "supervised_wall_s": 8.723873311000006
+      "supervised_wall_s": 8.92676550200001
     },
     {
       "job": "memdiag@cpu:clear",
       "status": "completed",
       "reason": "",
-      "wall_s": 7.873968601226807,
+      "wall_s": 8.093276023864746,
       "measurements": [
         {
           "name": "cycle_rss_mb",
-          "value": 398.9921875,
+          "value": 399.55859375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2836,7 +2852,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 28.74609375,
+          "value": 29.80859375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2848,7 +2864,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 1.692582130432129,
+          "value": 1.2400636672973633,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2860,7 +2876,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 267566,
+          "value": 264880,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2872,7 +2888,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 402.09375,
+          "value": 402.09765625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2884,7 +2900,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 32.9765625,
+          "value": 36.0625,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2896,7 +2912,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 2.0876054763793945,
+          "value": 1.2440786361694336,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -2908,7 +2924,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 269896,
+          "value": 264886,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -2920,155 +2936,11 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 404.765625,
+          "value": 402.69921875,
           "unit": "MB",
           "kind": "measured",
           "context": {
             "cycle": 2,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_extra_system_mb",
-          "value": 32.875,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 2,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_python_traced_mb",
-          "value": 2.497356414794922,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 2,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_gc_objects",
-          "value": 272227,
-          "unit": "count",
-          "kind": "measured",
-          "context": {
-            "cycle": 2,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_rss_mb",
-          "value": 406.89453125,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 3,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_extra_system_mb",
-          "value": 32.875,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 3,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_python_traced_mb",
-          "value": 2.9016780853271484,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 3,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_gc_objects",
-          "value": 274558,
-          "unit": "count",
-          "kind": "measured",
-          "context": {
-            "cycle": 3,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_rss_mb",
-          "value": 408.578125,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 4,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_extra_system_mb",
-          "value": 33.11328125,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 4,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_python_traced_mb",
-          "value": 3.3059959411621094,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 4,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_gc_objects",
-          "value": 276889,
-          "unit": "count",
-          "kind": "measured",
-          "context": {
-            "cycle": 4,
-            "device": "cpu",
-            "placement": "strict",
-            "policy": "clear"
-          }
-        },
-        {
-          "name": "cycle_rss_mb",
-          "value": 411.14453125,
-          "unit": "MB",
-          "kind": "measured",
-          "context": {
-            "cycle": 5,
             "device": "cpu",
             "placement": "strict",
             "policy": "clear"
@@ -3080,6 +2952,150 @@
           "unit": "MB",
           "kind": "measured",
           "context": {
+            "cycle": 2,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_python_traced_mb",
+          "value": 1.2656745910644531,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
+            "cycle": 2,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_gc_objects",
+          "value": 264893,
+          "unit": "count",
+          "kind": "measured",
+          "context": {
+            "cycle": 2,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_rss_mb",
+          "value": 403.01171875,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
+            "cycle": 3,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_extra_system_mb",
+          "value": 36.80859375,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
+            "cycle": 3,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_python_traced_mb",
+          "value": 1.2813587188720703,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
+            "cycle": 3,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_gc_objects",
+          "value": 264900,
+          "unit": "count",
+          "kind": "measured",
+          "context": {
+            "cycle": 3,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_rss_mb",
+          "value": 400.984375,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
+            "cycle": 4,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_extra_system_mb",
+          "value": 34.9765625,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
+            "cycle": 4,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_python_traced_mb",
+          "value": 1.298654556274414,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
+            "cycle": 4,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_gc_objects",
+          "value": 264907,
+          "unit": "count",
+          "kind": "measured",
+          "context": {
+            "cycle": 4,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_rss_mb",
+          "value": 403.01171875,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
+            "cycle": 5,
+            "device": "cpu",
+            "placement": "strict",
+            "policy": "clear"
+          }
+        },
+        {
+          "name": "cycle_extra_system_mb",
+          "value": 35.58984375,
+          "unit": "MB",
+          "kind": "measured",
+          "context": {
             "cycle": 5,
             "device": "cpu",
             "placement": "strict",
@@ -3088,7 +3104,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 3.7095603942871094,
+          "value": 1.3143939971923828,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3100,7 +3116,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 279220,
+          "value": 264915,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -3112,7 +3128,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 413.4453125,
+          "value": 403.0546875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3124,7 +3140,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 38.53125,
+          "value": 35.58984375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3136,7 +3152,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.115217208862305,
+          "value": 1.3331575393676758,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3148,7 +3164,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 281551,
+          "value": 264921,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -3160,7 +3176,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 415.70703125,
+          "value": 403.11328125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3172,7 +3188,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 45.91015625,
+          "value": 35.58984375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3184,7 +3200,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.5242815017700195,
+          "value": 1.3535375595092773,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3196,7 +3212,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 283883,
+          "value": 264928,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -3208,7 +3224,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 418.38671875,
+          "value": 403.171875,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3220,7 +3236,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 47.6015625,
+          "value": 35.5859375,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3232,7 +3248,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 4.927324295043945,
+          "value": 1.3727693557739258,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3244,7 +3260,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 286213,
+          "value": 264935,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -3256,7 +3272,7 @@
         },
         {
           "name": "cycle_rss_mb",
-          "value": 420.97265625,
+          "value": 401.58203125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3268,7 +3284,7 @@
         },
         {
           "name": "cycle_extra_system_mb",
-          "value": 49.56640625,
+          "value": 35.828125,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3280,7 +3296,7 @@
         },
         {
           "name": "cycle_python_traced_mb",
-          "value": 5.328818321228027,
+          "value": 1.3959884643554688,
           "unit": "MB",
           "kind": "measured",
           "context": {
@@ -3292,7 +3308,7 @@
         },
         {
           "name": "cycle_gc_objects",
-          "value": 288544,
+          "value": 264943,
           "unit": "count",
           "kind": "measured",
           "context": {
@@ -3304,7 +3320,7 @@
         },
         {
           "name": "growth_verdict_rss",
-          "value": "continued_native_growth",
+          "value": "bounded",
           "unit": "",
           "kind": "calculated",
           "context": {
@@ -3315,7 +3331,7 @@
         },
         {
           "name": "growth_slope_rss_mb_per_cycle",
-          "value": 2.3719308035714284,
+          "value": 0.006696428571428571,
           "unit": "MB/cycle",
           "kind": "calculated",
           "context": {
@@ -3326,7 +3342,7 @@
         },
         {
           "name": "growth_verdict_system_extra",
-          "value": "continued_native_growth",
+          "value": "bounded",
           "unit": "",
           "kind": "calculated",
           "context": {
@@ -3337,7 +3353,7 @@
         },
         {
           "name": "growth_slope_system_extra_mb_per_cycle",
-          "value": 3.1482979910714284,
+          "value": -0.0615234375,
           "unit": "MB/cycle",
           "kind": "calculated",
           "context": {
@@ -3348,7 +3364,7 @@
         },
         {
           "name": "gc_objects_slope_per_cycle",
-          "value": 2331.035714285714,
+          "value": 7.071428571428571,
           "unit": "objects/cycle",
           "kind": "calculated",
           "context": {
@@ -3360,9 +3376,9 @@
       ],
       "data": {
         "worker": {
-          "pid": 298,
+          "pid": 299,
           "placement": "strict",
-          "budget_s": 1183.0
+          "budget_s": 1182.0
         },
         "tf": {
           "version": "2.15.1",
@@ -3393,36 +3409,36 @@
             "warmup_cycles": 3,
             "threshold_mb_per_cycle": 1.0,
             "n_used": 7,
-            "slope_mb_per_cycle": 2.3719308035714284,
-            "first_half_slope": 2.125,
-            "second_half_slope": 2.526171875,
-            "python_slope_mb_per_cycle": 0.40495709010532926,
-            "total_growth_mb": 14.078125,
-            "verdict": "continued_native_growth",
-            "reason": "growth continues at a similar rate with flat Python memory: potential native leak or unbounded cache; repeat with more cycles before concluding"
+            "slope_mb_per_cycle": 0.006696428571428571,
+            "first_half_slope": 0.0,
+            "second_half_slope": -0.4359375,
+            "python_slope_mb_per_cycle": 0.018973657063075473,
+            "total_growth_mb": -1.4296875,
+            "verdict": "bounded",
+            "reason": "no sustained growth after warm-up (consistent with allocator caching)"
           },
           "system_extra": {
             "warmup_cycles": 3,
             "threshold_mb_per_cycle": 1.0,
             "n_used": 7,
-            "slope_mb_per_cycle": 3.1482979910714284,
-            "first_half_slope": 1.966796875,
-            "second_half_slope": 3.4796875,
-            "python_slope_mb_per_cycle": 0.40495709010532926,
-            "total_growth_mb": 16.69140625,
-            "verdict": "continued_native_growth",
-            "reason": "growth continues at a similar rate with flat Python memory: potential native leak or unbounded cache; repeat with more cycles before concluding"
+            "slope_mb_per_cycle": -0.0615234375,
+            "first_half_slope": -0.609375,
+            "second_half_slope": 0.07109375,
+            "python_slope_mb_per_cycle": 0.018973657063075473,
+            "total_growth_mb": -0.98046875,
+            "verdict": "bounded",
+            "reason": "no sustained growth after warm-up (consistent with allocator caching)"
           }
         },
         "resource_monitor": {
           "run_peaks": {
-            "max_extra_gb": 0.048404693603515625,
-            "min_avail_gb": 14.953895568847656,
+            "max_extra_gb": 0.035945892333984375,
+            "min_avail_gb": 14.955680847167969,
             "max_sys_pct": 4.8,
             "max_swap_growth_mb": 0.0,
-            "max_rss_gb": 0.4107170104980469
+            "max_rss_gb": 0.393707275390625
           },
-          "polls": 13,
+          "polls": 14,
           "limit_reason": null,
           "interval_s": 0.5
         }
@@ -3436,7 +3452,7 @@
       "workload": "clear",
       "placement": "strict",
       "exit_code": 0,
-      "supervised_wall_s": 8.510030297000014
+      "supervised_wall_s": 8.626116803000002
     }
   ],
   "derived": {

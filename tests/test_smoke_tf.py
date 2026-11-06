@@ -48,6 +48,31 @@ class EvaluateTests(unittest.TestCase):
         self.assertAlmostEqual(r1.val_r2, r2.val_r2, places=4)
         self.assertEqual(len(r1.weights), 2 * (2 + 1))
 
+    def test_simple_adam_matches_keras_legacy_adam(self):
+        from tfbench import tfenv
+        tf = self.tf
+        rng = np.random.default_rng(0)
+        x, y = tf.constant(rng.normal(size=(32, 5)).astype("float32")), tf.constant(rng.normal(size=(32, 1)).astype("float32"))
+        outs = []
+        for kind in ("simple", "keras"):
+            w = [rng.normal(size=s_).astype("float32") * 0 + 0.1 for s_ in ((5, 4), (4,), (4, 1), (1,))]
+            m = tf.keras.Sequential([tf.keras.layers.Input((5,)), tf.keras.layers.Dense(4, activation="tanh"),
+                                     tf.keras.layers.Dense(1)])
+            m.set_weights(w)
+            opt, _ = tfenv.make_optimizer(tf, 1e-2, m.trainable_variables, kind)
+            for _ in range(6):
+                with tf.GradientTape() as tape:
+                    loss = tf.reduce_mean(tf.square(y - m(x, training=True)))
+                opt.apply_gradients(zip(tape.gradient(loss, m.trainable_variables), m.trainable_variables))
+            outs.append(m.get_weights())
+        for a, b in zip(*outs):
+            np.testing.assert_allclose(a, b, rtol=1e-4, atol=1e-6)
+
+    def test_loss_trace_recorded(self):
+        r = evolution.evaluate(self.tf, "cpu", self.genome(), self.data, self.args, trace_steps=4)
+        self.assertEqual(len(r.loss_trace), 4)
+        self.assertLess(r.loss_trace[-1], r.loss_trace[0] * 1.5)
+
     def test_failed_evaluation_is_recorded_not_raised(self):
         g = self.genome()
         g.learning_rate = 1e30                      # diverges -> non-finite fitness

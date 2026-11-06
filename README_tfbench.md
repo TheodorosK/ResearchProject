@@ -156,8 +156,9 @@ The first-step losses of CPU and GPU are compared as a sanity check that the wor
 * Use the tensorflow-metal release Apple documents for your TensorFlow version; the report records both versions.
 * No public API for GPU utilisation or GPU memory (`get_memory_info` is unsupported): GPU memory only shows up as
   a drop in system-available (unified) memory. `powermetrics` would need `sudo` and is not used.
-* Keras >= 2.11 optimizers are documented to be slow on Apple Silicon, so the legacy Adam class is used when present
-  (the same class for CPU and GPU) and recorded in the report.
+* The default optimizer is `SimpleAdam` (Keras-Adam update rule, float32 state only) because Keras optimizers keep an int64
+  step counter that tensorflow-metal cannot place on the GPU - that forces soft placement. `--optimizer keras` selects the Keras
+  legacy Adam instead (expect `placement=soft` on Metal). The same optimizer is used on CPU and GPU and is recorded in the report.
 * XLA (`jit_compile`) is not used; float64 and some ops lack Metal kernels -> reported as unsupported in `strict` mode.
 * GPU reductions are not bit-reproducible; seeds fix data, initialisation and the GA lineage, not every last bit.
 

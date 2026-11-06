@@ -91,6 +91,9 @@ def build_parser(total_gb: float) -> argparse.ArgumentParser:
     g.add_argument("--dry-run", action="store_true", help="validate configuration, estimate workload, train nothing")
     g.add_argument("--out-dir", default=None, help="report directory (default: bench_results/<UTC timestamp>)")
     g.add_argument("--seed", type=int, default=1234)
+    g.add_argument("--optimizer", choices=["simple", "keras"], default="simple",
+                   help="simple: float32-only Adam with Keras' update rule (runs under strict GPU placement). "
+                        "keras: Keras legacy Adam (its int64 step counter forces soft placement on tensorflow-metal)")
     g.add_argument("--placement", choices=["auto", "strict", "soft"], default="auto",
                    help="GPU op placement. strict: unsupported GPU ops raise. soft: TF may run them on CPU. "
                         "auto: strict first; if strict fails on an unsupported op, retry once in soft mode and "

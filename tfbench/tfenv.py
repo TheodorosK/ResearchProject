@@ -51,9 +51,42 @@ def is_placement_error(exc: BaseException) -> bool:
     return any(tok in msg for tok in _PLACEMENT_TOKENS)
 
 
-def make_optimizer(tf, lr: float) -> Tuple[Any, str]:
-    """Adam.  On Apple Silicon the Keras 2.11+ optimizers are documented to run slowly, so the
-    legacy class is used when it exists (same class on CPU and GPU runs)."""
+class SimpleAdam:
+    """Adam with the SAME update rule as Keras' legacy Adam (epsilon outside the sqrt, bias-corrected step size),
+    but with only float32 state (no int64 step counter).
+
+    Why: Keras' optimizers keep an int64 ``iterations`` variable, which tensorflow-metal cannot place on the GPU,
+    forcing soft placement. This class lets the whole training step run under STRICT placement. It is used
+    identically on CPU and GPU, so comparisons stay fair; use ``--optimizer keras`` for the Keras class.
+    """
+
+    def __init__(self, tf, lr: float, params, beta_1: float = 0.9, beta_2: float = 0.999, epsilon: float = 1e-7):
+        self.tf, self.lr, self.b1, self.b2, self.eps = tf, float(lr), beta_1, beta_2, epsilon
+        self.m = [tf.Variable(tf.zeros_like(p), trainable=False) for p in params]
+        self.v = [tf.Variable(tf.zeros_like(p), trainable=False) for p in params]
+        self.t = tf.Variable(0.0, trainable=False)
+
+    def variables(self):
+        return [*self.m, *self.v, self.t]
+
+    def apply_gradients(self, grads_and_vars):
+        tf = self.tf
+        self.t.assign_add(1.0)
+        t = self.t.read_value()
+        lr_t = self.lr * tf.sqrt(1.0 - tf.pow(self.b2, t)) / (1.0 - tf.pow(self.b1, t))
+        for (g, p), m, v in zip(grads_and_vars, self.m, self.v):
+            m_new = self.b1 * m + (1.0 - self.b1) * g
+            v_new = self.b2 * v + (1.0 - self.b2) * tf.square(g)
+            m.assign(m_new)
+            v.assign(v_new)
+            p.assign_sub(lr_t * m_new / (tf.sqrt(v_new) + self.eps))
+
+
+def make_optimizer(tf, lr: float, params=(), kind: str = "simple") -> Tuple[Any, str]:
+    """kind 'simple': SimpleAdam (strict-placement friendly, float32 state only).
+    kind 'keras': Keras legacy Adam when it exists (documented as faster than the 2.11+ class on Apple Silicon)."""
+    if kind == "simple":
+        return SimpleAdam(tf, lr, list(params)), "tfbench.SimpleAdam (Keras-Adam update rule, float32 state)"
     legacy = getattr(getattr(tf.keras.optimizers, "legacy", None), "Adam", None)
     cls = legacy or tf.keras.optimizers.Adam
     return cls(learning_rate=lr), f"{cls.__module__}.{cls.__name__}"

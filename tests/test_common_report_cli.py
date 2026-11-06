@@ -300,6 +300,19 @@ class ReportTests(unittest.TestCase):
         md = report.render_markdown(self.build([ne("cpu", 0.60), ne("gpu", 0.10)]))
         self.assertIn("NOT consistent", md)
 
+    def test_first_divergent_step_is_reported(self):
+        def ne(device, trace):
+            m = lambda n, v: {"name": n, "value": v, "unit": "", "kind": "measured", "context": {"device": device}}
+            return {"job": f"neuroevolution@{device}", "test": "neuroevolution", "device": device, "workload": None,
+                    "placement": "strict", "status": "completed", "reason": "", "notes": [],
+                    "data": {"reference_check": {"loss_trace": trace}},
+                    "measurements": [m("overall_individuals_per_s", 5.0), m("reference_val_r2", 0.5)]}
+        same = self.build([ne("cpu", [1.0, 0.9, 0.8]), ne("gpu", [1.0, 0.9, 0.8])])["derived"]["cpu_vs_gpu_neuroevolution"]
+        self.assertIsNone(same["first_divergent_step_rel_1e-3"])
+        div = self.build([ne("cpu", [1.0, 0.9, 0.8]), ne("gpu", [1.0, 0.9, 1.5])])
+        self.assertEqual(div["derived"]["cpu_vs_gpu_neuroevolution"]["first_divergent_step_rel_1e-3"], 2)
+        self.assertIn("First step where CPU and GPU differ", report.render_markdown(div))
+
     def test_kind_legend_present(self):
         r = self.build([])
         self.assertEqual(set(r["kind_legend"]), {"measured", "calculated", "estimated"})
