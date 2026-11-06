@@ -64,6 +64,7 @@ BASE_AVAIL = [avail_gb()]
 
 def set_baseline():
     BASE_AVAIL[0] = avail_gb()
+    SWAP0[0] = swap_gb()
 
 
 def used_gb():
@@ -71,11 +72,23 @@ def used_gb():
     return BASE_AVAIL[0] - avail_gb()
 
 
+def swap_gb():
+    return psutil.swap_memory().used / GB
+
+
+SWAP0 = [swap_gb()]
+
+
+def swap_growth_gb():
+    return swap_gb() - SWAP0[0]
+
+
 def status(tag=""):
     g = gpu_mem_gb()
     gpu = f" | GPU cur/peak {g[0]:.2f}/{g[1]:.2f} GB" if g and g[1] > 0 else ""
     print(f"  [{tag:<14}] used +{used_gb():5.2f} GB | RSS {rss_gb():5.2f} GB "
-          f"| system {sys_used_pct():4.1f}% | avail {avail_gb():5.1f} GB{gpu}", flush=True)
+          f"| system {sys_used_pct():4.1f}% | avail {avail_gb():5.1f} GB "
+          f"| swap +{swap_growth_gb():4.2f} GB{gpu}", flush=True)
 
 
 def over_limit(args):
@@ -141,29 +154,59 @@ def synthetic_ds(batch, in_dim, classes, steps):
     return tf.data.Dataset.from_generator(gen, output_signature=sig).prefetch(2)
 
 
+class Guard(tf.keras.callbacks.Callback):
+    """Stop mid-round on memory/swap limits (macOS swaps instead of raising OOM)."""
+
+    def __init__(self, args):
+        super().__init__()
+        self.args, self.reason = args, None
+
+    def on_train_batch_end(self, batch, logs=None):
+        if over_limit(self.args):
+            self.reason = "memory limit"
+        elif swap_growth_gb() >= self.args.max_swap_gb:
+            self.reason = f"swap grew {swap_growth_gb():.1f} GB"
+        if self.reason:
+            self.model.stop_training = True
+
+
 def test_train(args):
     print("\n=== TEST: training with doubling batch size ===")
     set_baseline()
-    batch = args.start_batch
-    while not over_limit(args):
+    batch, best_sps, last_ok, peak_used, reason = args.start_batch, 0.0, None, 0.0, None
+    while batch <= args.max_batch:
         print(f"  batch={batch} width={args.width} depth={args.depth}")
+        guard = Guard(args)
         try:
             model = build_model(args.width, args.depth, args.in_dim, args.classes)
             t = time.time()
             model.fit(synthetic_ds(batch, args.in_dim, args.classes, args.steps),
-                      epochs=1, steps_per_epoch=args.steps, verbose=0)
-            print(f"    ok in {time.time() - t:.1f}s")
+                      epochs=1, steps_per_epoch=args.steps, verbose=0, callbacks=[guard])
+            dt = time.time() - t
+            peak_used = max(peak_used, used_gb())
+            if guard.reason:
+                reason = f"{guard.reason} at batch {batch}"
+                status(f"batch {batch}")
+                break
+            sps = batch * args.steps / dt
+            print(f"    ok in {dt:.1f}s ({sps:,.0f} samples/s)")
             status(f"batch {batch}")
+            last_ok = batch
+            if best_sps and sps < best_sps / args.slowdown:
+                reason = (f"throughput fell to {sps / best_sps:.0%} of best at batch {batch} "
+                          "(likely swapping)")
+                break
+            best_sps = max(best_sps, sps)
         except Exception as e:  # noqa: BLE001
             if is_oom(e):
-                print(f"    OOM at batch {batch}: {type(e).__name__}")
+                reason = f"OOM at batch {batch}: {type(e).__name__}"
                 break
             raise
         finally:
             cleanup()
         batch *= 2
-    else:
-        print("  Stopped at memory limit.")
+    print(f"  Largest batch completed: {last_ok} | peak used +{peak_used:.2f} GB | "
+          f"stopped: {reason or 'reached --max-batch'}")
     status("after train")
 
 
@@ -206,6 +249,11 @@ def main():
     p.add_argument("--cpu", action="store_true", help="hide GPU (Metal) and run on CPU")
     p.add_argument("--step-mb", type=int, default=256, help="alloc test chunk size")
     p.add_argument("--start-batch", type=int, default=256)
+    p.add_argument("--max-batch", type=int, default=65536, help="largest batch the train ramp tries")
+    p.add_argument("--max-swap-gb", type=float, default=1.0,
+                   help="stop when swap usage grows by this much")
+    p.add_argument("--slowdown", type=float, default=2.5,
+                   help="stop when samples/s falls below best/this (swap thrashing)")
     p.add_argument("--steps", type=int, default=20, help="steps per epoch")
     p.add_argument("--width", type=int, default=2048)
     p.add_argument("--depth", type=int, default=6)
