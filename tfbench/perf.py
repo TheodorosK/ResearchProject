@@ -50,25 +50,29 @@ def make_data(workload: str, args, seed: int):
 
 
 def build_model(tf, workload: str, args, seed: int):
-    K, I = tf.keras.layers, tf.keras.initializers
+    """Layers are created with the 'zeros' initializer (a GPU-supported op) and then loaded with
+    host-generated Glorot weights, so initial weights are identical on every device."""
+    from .workloads import glorot_init
+    K = tf.keras.layers
+    z = "zeros"
     if workload == "mlp":
         layers = [K.Input((args.perf_in_dim,))]
-        for i in range(args.perf_depth):
-            layers.append(K.Dense(args.perf_width, activation="relu",
-                                  kernel_initializer=I.GlorotUniform(seed=seed + i)))
-        layers.append(K.Dense(args.perf_classes, kernel_initializer=I.GlorotUniform(seed=seed + 99)))
+        layers += [K.Dense(args.perf_width, activation="relu", kernel_initializer=z) for _ in range(args.perf_depth)]
+        layers.append(K.Dense(args.perf_classes, kernel_initializer=z))
     else:
         layers = [
             K.Input(CONV_IMG),
-            K.Conv2D(32, 3, padding="same", activation="relu", kernel_initializer=I.GlorotUniform(seed=seed)),
+            K.Conv2D(32, 3, padding="same", activation="relu", kernel_initializer=z),
             K.MaxPool2D(2),
-            K.Conv2D(64, 3, padding="same", activation="relu", kernel_initializer=I.GlorotUniform(seed=seed + 1)),
+            K.Conv2D(64, 3, padding="same", activation="relu", kernel_initializer=z),
             K.MaxPool2D(2),
             K.Flatten(),
-            K.Dense(128, activation="relu", kernel_initializer=I.GlorotUniform(seed=seed + 2)),
-            K.Dense(CONV_CLASSES, kernel_initializer=I.GlorotUniform(seed=seed + 3)),
+            K.Dense(128, activation="relu", kernel_initializer=z),
+            K.Dense(CONV_CLASSES, kernel_initializer=z),
         ]
-    return tf.keras.Sequential(layers)
+    model = tf.keras.Sequential(layers)
+    model.set_weights(glorot_init([w.shape for w in model.get_weights()], seed))
+    return model
 
 
 def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: str, placement: str) -> None:

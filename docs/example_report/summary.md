@@ -5,7 +5,7 @@
 
 # TensorFlow benchmark report
 
-*Run `example_report` - started 2026-11-06T22:35:18+00:00 - finished 2026-11-06T22:35:58+00:00 - suite v2.0.0*
+*Run `example_report` - started 2026-11-06T22:56:20+00:00 - finished 2026-11-06T22:56:59+00:00 - suite v2.0.0*
 
 **Command:** `tf_memory_stress_test.py --tests performance neuroevolution memdiag --quick --ne-devices cpu --memdiag-devices cpu --out-dir docs/example_report`
 
@@ -45,7 +45,7 @@
 
 | Workload | Device | Status | Steps/s | Samples/s | ms/step | Median run (s) | CV | Min run (s) | Max run (s) |
 |---|---|---|---|---|---|---|---|---|---|
-| mlp | cpu | completed | 106.13 | 13,584 | 9.42 | 0.283 | 0.0505 | 0.262 | 0.289 |
+| mlp | cpu | completed | 101.95 | 13,049 | 9.81 | 0.294 | 0.0159 | 0.29 | 0.3 |
 | mlp | gpu | unsupported | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 
 _Steps/s, samples/s, ms/step, median and CV are **calculated** from the measured per-repeat times._
@@ -58,14 +58,14 @@ _no data_
 
 | Job | Data gen | Data transfer | Model build | Optimizer init | Trace | First execution | Warm-up total | Compile overhead (estimated) |
 |---|---|---|---|---|---|---|---|---|
-| performance@cpu:mlp | 0.00745 | 0.0201 | 0.0686 | 8.13e-05 | 0.199 | 0.0785 | 0.0597 | 0.0691 |
+| performance@cpu:mlp | 0.0106 | 0.0256 | 0.181 | 0.000105 | 0.206 | 0.135 | 0.0655 | 0.126 |
 | performance@gpu:mlp | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 
 **Thermal / stability indicators:**
 
 | Job | pmset throttling indicated | Drift last-vs-first third (x) |
 |---|---|---|
-| performance@cpu:mlp | unavailable | 0.929 |
+| performance@cpu:mlp | unavailable | 0.982 |
 | performance@gpu:mlp | unavailable | n/a |
 
 _`None`/`n/a` means the telemetry was unavailable, which does **not** mean no throttling occurred._
@@ -74,8 +74,8 @@ _`None`/`n/a` means the telemetry was unavailable, which does **not** mean no th
 
 | Job | Peak RSS (GB) | Peak extra system memory (GB) | Min available (GB) | Max system use (%) |
 |---|---|---|---|---|
-| performance@cpu:mlp | 0.478 | 0.0765 | 14.85 | 5.40 |
-| neuroevolution@cpu | 0.453 | 0.0347 | 14.86 | n/a |
+| performance@cpu:mlp | 0.443 | 0.0923 | 14.92 | 5.10 |
+| neuroevolution@cpu | 0.419 | 0.0493 | 14.94 | n/a |
 
 _Peak extra memory = drop in system-available memory vs. the job's own baseline (captures unified/GPU memory that RSS misses). All **measured** (sampled ~0.5 s)._
 
@@ -94,7 +94,7 @@ _Peak extra memory = drop in system-available memory vs. the job's own baseline 
 
 | Job | Status | Evaluations | Failed | Individuals/s | Total (s) | Val R2 gain (gen0->last) | Best val R2 | Best test R2 (final only) | Best architecture |
 |---|---|---|---|---|---|---|---|---|---|
-| neuroevolution@cpu | completed | 16 | 0 | 3.45 | 4.64 | 0.274 | 0.719 | 0.723 | [128r-32r-32s] lr=1.73e-02 |
+| neuroevolution@cpu | completed | 16 | 0 | 3.38 | 4.74 | 0.188 | 0.717 | 0.696 | [128r-32r-32s] lr=1.73e-02 |
 
 ## 7. Time per generation
 
@@ -102,9 +102,9 @@ _Peak extra memory = drop in system-available memory vs. the job's own baseline 
 
 | Gen | Evaluated | Failed | Wall (s) | Ind/s | Mean fit time (s) | Best val R2 | Mean val R2 | CPU cores busy | System CPU % |
 |---|---|---|---|---|---|---|---|---|---|
-| 0 | 6 | 0 | 1.49 | 4.03 | 0.204 | 0.445 | 0.0973 | 1.12 | 29.10 |
-| 1 | 5 | 0 | 1.38 | 3.62 | 0.224 | 0.705 | 0.339 | 1.06 | 27.10 |
-| 2 | 5 | 0 | 1.42 | 3.53 | 0.228 | 0.719 | 0.623 | 1.07 | 27.30 |
+| 0 | 6 | 0 | 1.47 | 4.07 | 0.198 | 0.529 | 0.113 | 1.04 | 29.20 |
+| 1 | 5 | 0 | 1.48 | 3.39 | 0.236 | 0.589 | 0.23 | 1.06 | 27.60 |
+| 2 | 5 | 0 | 1.43 | 3.50 | 0.226 | 0.717 | 0.573 | 1.02 | 28.30 |
 
 ## 8. Memory growth per generation / diagnostic
 
@@ -112,19 +112,19 @@ _Peak extra memory = drop in system-available memory vs. the job's own baseline 
 
 | Gen | RSS before cleanup (GB) | RSS after (GB) | Extra system after (GB) | Peak extra (GB) | Available after (GB) | Swap since start (MB) | Cleanup (s) |
 |---|---|---|---|---|---|---|---|
-| 0 | 0.433 | 0.433 | 0.0235 | 0.0235 | 14.87 | 0 | 0.105 |
-| 1 | 0.445 | 0.445 | 0.0292 | 0.029 | 14.87 | 0 | 0.113 |
-| 2 | 0.453 | 0.453 | 0.0349 | 0.0347 | 14.86 | 0 | 0.116 |
+| 0 | 0.401 | 0.401 | 0.0302 | 0.0266 | 14.96 | 0 | 0.11 |
+| 1 | 0.412 | 0.412 | 0.0433 | 0.0341 | 14.95 | 0 | 0.0926 |
+| 2 | 0.42 | 0.42 | 0.0493 | 0.0459 | 14.94 | 0 | 0.135 |
 
-Growth per generation (calculated): system 5.79 MB, RSS 10.56 MB. Rising RSS alone is not a leak: allocator caching also grows then plateaus.
+Growth per generation (calculated): system 9.76 MB, RSS 9.83 MB. Rising RSS alone is not a leak: allocator caching also grows then plateaus.
 
 **Memory-growth diagnostic (`memdiag`, each policy in its own process; verdicts are heuristic):**
 
 | Job | Status | RSS verdict | RSS MB/cycle | System verdict | System MB/cycle | Python MB/cycle |
 |---|---|---|---|---|---|---|
-| memdiag@cpu:none | completed | continued_native_growth | 3.33 | continued_native_growth | 1.92 | 0.374 |
-| memdiag@cpu:gc | completed | continued_native_growth | 3.38 | continued_native_growth | 3.10 | 0.399 |
-| memdiag@cpu:clear | completed | continued_native_growth | 2.37 | continued_native_growth | 2.06 | 0.404 |
+| memdiag@cpu:none | completed | continued_native_growth | 3.33 | continued_native_growth | 3.33 | 0.378 |
+| memdiag@cpu:gc | completed | continued_native_growth | 3.31 | continued_native_growth | 2.73 | 0.398 |
+| memdiag@cpu:clear | completed | continued_native_growth | 2.37 | continued_native_growth | 3.15 | 0.405 |
 
 _`bounded`/`saturating` = consistent with allocator caching; `python_retention` = references still held; `continued_native_growth` = potential native leak, needs a longer run to confirm._
 
@@ -137,6 +137,7 @@ _`bounded`/`saturating` = consistent with allocator caching; `python_retention` 
 ## 10. Measurement limitations and notes
 
 - Training time per individual includes per-model graph tracing/compilation (realistic for neuroevolution, where every individual is a new model).
+- A fixed reference genome is evaluated once before generation 0 (not counted in the evaluation totals). It absorbs one-time start-up cost (runtime/Metal initialisation, first compilation) and its val R2 is compared across devices to detect numerical disagreement.
 - Per-generation growth is a coarse indicator only; use the `memdiag` test to distinguish retained memory, allocator caching and leaks.
 - Test R2 was computed once, after evolution, for the best-by-validation individual only.
 - Classification is heuristic: a leak is suspected only when growth continues at a similar rate across the whole post-warm-up window; rising RSS alone is not evidence of a leak.

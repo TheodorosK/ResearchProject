@@ -85,3 +85,25 @@ def perf_workload(name: str, in_dim: int, width: int, depth: int, classes: int) 
         return PerfWorkload("convnet", convnet_params(), 3 * convnet_fwd_flops_per_sample(),
                             h * w * c, convnet_activation_floats_per_sample())
     raise ValueError(f"unknown workload {name!r}")
+
+
+def glorot_init(shapes, seed: int):
+    """Device-independent Glorot-uniform initial weights (biases zero), as float32 numpy arrays.
+
+    Generated on the host so CPU and GPU runs start from IDENTICAL weights and no random-number op
+    ever has to run on the GPU (tensorflow-metal lacks a GPU kernel for StatelessRandomGetKeyCounter).
+    ``shapes`` are the shapes of ``model.get_weights()`` (kernel, bias, kernel, bias, ...).
+    """
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    out = []
+    for shp in shapes:
+        shp = tuple(shp)
+        if len(shp) == 1:
+            out.append(np.zeros(shp, np.float32))
+            continue
+        receptive = int(np.prod(shp[:-2])) if len(shp) > 2 else 1
+        fan_in, fan_out = receptive * shp[-2], receptive * shp[-1]
+        limit = (6.0 / (fan_in + fan_out)) ** 0.5
+        out.append(rng.uniform(-limit, limit, shp).astype(np.float32))
+    return out

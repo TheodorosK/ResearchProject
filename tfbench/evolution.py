@@ -81,13 +81,16 @@ class Individual:
 
 
 def build_keras(tf, genome: G.Genome, in_dim: int, seed: int):
-    K, I = tf.keras.layers, tf.keras.initializers
+    """Zeros-initialised layers + host-generated Glorot weights (identical on CPU and GPU; avoids the
+    random-number op that tensorflow-metal cannot run on the GPU)."""
+    from .workloads import glorot_init
+    K = tf.keras.layers
     layers = [K.Input((in_dim,))]
-    for i, l in enumerate(genome.layers):
-        layers.append(K.Dense(l.units, activation=l.activation,
-                              kernel_initializer=I.GlorotUniform(seed=seed + i)))
-    layers.append(K.Dense(1, kernel_initializer=I.GlorotUniform(seed=seed + 997)))
-    return tf.keras.Sequential(layers)
+    layers += [K.Dense(l.units, activation=l.activation, kernel_initializer="zeros") for l in genome.layers]
+    layers.append(K.Dense(1, kernel_initializer="zeros"))
+    model = tf.keras.Sequential(layers)
+    model.set_weights(glorot_init([w.shape for w in model.get_weights()], seed))
+    return model
 
 
 def train_steps(args, n_train: int) -> int:
@@ -208,6 +211,21 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
     if not ev["verified"]:
         rec.set_status("failed", "device placement could not be verified: " + "; ".join(ev["problems"]))
         return
+
+    # ---- fixed reference genome: same genome/seed/data on every device => comparable fitness -------
+    ref_genome = G.Genome([G.LayerGene(128, "relu"), G.LayerGene(128, "relu"), G.LayerGene(64, "tanh")],
+                          learning_rate=1e-3, uid=-1)
+    t = pc()
+    ref = evaluate(tf, device, ref_genome, data, args)
+    rec.data["reference_check"] = {"genome": ref_genome.describe(), "status": ref.status, "val_r2": ref.val_r2,
+                                   "train_r2": ref.train_r2, "total_s": pc() - t, "error": ref.error}
+    rec.measure("reference_val_r2", ref.val_r2, "R2", **ctx)
+    rec.measure("reference_train_r2", ref.train_r2, "R2", **ctx)
+    rec.measure("reference_eval_cold_start_s", pc() - t, "s", **ctx)
+    rec.note("A fixed reference genome is evaluated once before generation 0 (not counted in the evaluation "
+             "totals). It absorbs one-time start-up cost (runtime/Metal initialisation, first compilation) and its "
+             "val R2 is compared across devices to detect numerical disagreement.")
+    _cleanup(tf, True)
 
     uid = [0]
 

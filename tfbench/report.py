@@ -111,8 +111,14 @@ def derive(jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
     g = next((j for j in ne if j["device"] == "gpu"), None)
     if c and g:
         a, b = val(c, "overall_individuals_per_s"), val(g, "overall_individuals_per_s")
-        d["cpu_vs_gpu_neuroevolution"] = {"kind": "calculated", "cpu_ind_per_s": a, "gpu_ind_per_s": b,
-                                          "gpu_vs_cpu_throughput_x": (b / a) if a and b else None}
+        rc, rg = val(c, "reference_val_r2"), val(g, "reference_val_r2")
+        diff = abs(rc - rg) if rc is not None and rg is not None else None
+        d["cpu_vs_gpu_neuroevolution"] = {
+            "kind": "calculated", "cpu_ind_per_s": a, "gpu_ind_per_s": b,
+            "gpu_vs_cpu_throughput_x": (b / a) if a and b else None,
+            "reference_val_r2_cpu": rc, "reference_val_r2_gpu": rg, "reference_val_r2_abs_diff": diff,
+            "numerically_consistent": (diff < 0.05) if diff is not None else None,
+            "gpu_placement_mode": g.get("placement")}
     return d
 
 
@@ -274,7 +280,13 @@ def render_markdown(r: Dict[str, Any]) -> str:
               "Best val R2", "Best test R2 (final only)", "Best architecture"], rows))
     cmp_ = r["derived"].get("cpu_vs_gpu_neuroevolution")
     if cmp_:
-        A(f"**GPU vs CPU neuroevolution throughput (calculated):** {_f(cmp_['gpu_vs_cpu_throughput_x'])}x\n")
+        A(f"**GPU vs CPU neuroevolution throughput (calculated):** {_f(cmp_['gpu_vs_cpu_throughput_x'])}x "
+          f"(GPU placement: {cmp_.get('gpu_placement_mode')})\n")
+        ok = cmp_.get("numerically_consistent")
+        A(f"**Numerical agreement (fixed reference genome, calculated):** CPU val R2 {_f(cmp_['reference_val_r2_cpu'])}, "
+          f"GPU val R2 {_f(cmp_['reference_val_r2_gpu'])}, |diff| {_f(cmp_['reference_val_r2_abs_diff'])} -> "
+          + ("consistent" if ok else ("**NOT consistent - GPU fitness values must not be compared with CPU ones**"
+                                       if ok is False else "unknown")) + "\n")
     for j in _jobs(jobs, "neuroevolution"):
         pp = j.get("data", {}).get("parallel_probe")
         if pp:

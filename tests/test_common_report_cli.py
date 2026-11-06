@@ -89,6 +89,22 @@ class WorkloadTests(unittest.TestCase):
             workloads.perf_workload("nope", 1, 1, 1, 1)
 
 
+class GlorotInitTests(unittest.TestCase):
+    def test_deterministic_bounded_and_shaped(self):
+        import numpy as np
+        shapes = [(10, 20), (20,), (3, 3, 4, 8), (8,)]
+        a, b = workloads.glorot_init(shapes, 5), workloads.glorot_init(shapes, 5)
+        c = workloads.glorot_init(shapes, 6)
+        for x, y in zip(a, b):
+            np.testing.assert_array_equal(x, y)
+        self.assertFalse(np.array_equal(a[0], c[0]))
+        self.assertEqual([x.shape for x in a], shapes)
+        self.assertTrue((a[1] == 0).all() and (a[3] == 0).all())                 # biases zero
+        self.assertTrue(np.abs(a[0]).max() <= (6 / 30) ** 0.5 + 1e-6)             # dense limit
+        self.assertTrue(np.abs(a[2]).max() <= (6 / (36 + 72)) ** 0.5 + 1e-6)      # conv fans use receptive field
+        self.assertEqual(a[0].dtype, np.float32)
+
+
 class PlacementErrorTests(unittest.TestCase):
     def test_detection(self):
         self.assertTrue(tfenv.is_placement_error(RuntimeError(
@@ -270,6 +286,19 @@ class ReportTests(unittest.TestCase):
         self.assertIn("No performance claim is made about other Apple Silicon", md)
         self.assertNotIn("M2", md)
         self.assertNotIn("M3", md)
+
+    def test_neuroevolution_numerical_agreement_flag(self):
+        def ne(device, r2):
+            m = lambda n, v: {"name": n, "value": v, "unit": "", "kind": "measured", "context": {"device": device}}
+            return {"job": f"neuroevolution@{device}", "test": "neuroevolution", "device": device, "workload": None,
+                    "placement": "strict", "status": "completed", "reason": "", "notes": [], "data": {},
+                    "measurements": [m("overall_individuals_per_s", 5.0), m("reference_val_r2", r2)]}
+        ok = self.build([ne("cpu", 0.60), ne("gpu", 0.62)])["derived"]["cpu_vs_gpu_neuroevolution"]
+        bad = self.build([ne("cpu", 0.60), ne("gpu", 0.10)])["derived"]["cpu_vs_gpu_neuroevolution"]
+        self.assertTrue(ok["numerically_consistent"])
+        self.assertFalse(bad["numerically_consistent"])
+        md = report.render_markdown(self.build([ne("cpu", 0.60), ne("gpu", 0.10)]))
+        self.assertIn("NOT consistent", md)
 
     def test_kind_legend_present(self):
         r = self.build([])
