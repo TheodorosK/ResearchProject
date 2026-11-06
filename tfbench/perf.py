@@ -128,6 +128,22 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: st
         rec.data["execution_mode"] = ("eager (python-level op dispatch)" if mode == "eager"
                                       else "graph (tf.function, jit_compile=False)")
 
+        # ------------------------------------- forward-pass diagnosis (before ANY update)
+        from .workloads import host_forward, host_xent, weights_checksum
+        w0 = model.get_weights()                       # read back from the device
+        x0, y0 = xs[0].numpy(), ys[0].numpy()
+        diag = {"init_weights_checksum": weights_checksum(w0),
+                "batch0_checksum": float(np.abs(x0.astype(np.float64)).sum()), "batch0_label_sum": int(y0.sum()),
+                "eager_forward_loss": float(loss_fn(ys[0], model(xs[0], training=False)).numpy())}
+        graph_fwd = tf.function(lambda x, y: loss_fn(y, model(x, training=False)), jit_compile=False)
+        diag["graph_forward_loss"] = float(graph_fwd(xs[0], ys[0]).numpy())
+        if workload == "mlp":
+            lg = host_forward(w0, x0, ["relu"] * args.perf_depth)
+            diag["host_truth_loss"] = host_xent(lg, y0) if lg is not None else None
+        rec.data["forward_diagnosis"] = diag
+        for k, v in diag.items():
+            rec.measure(f"diag_{k}", v, "", **ctx)
+
         # --------------------------------------------------- trace / first step
         trace_s = None
         if mode == "graph":

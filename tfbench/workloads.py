@@ -107,3 +107,46 @@ def glorot_init(shapes, seed: int):
         limit = (6.0 / (fan_in + fan_out)) ** 0.5
         out.append(rng.uniform(-limit, limit, shp).astype(np.float32))
     return out
+
+
+# ---- float64 host reference (ground truth for the forward-pass diagnosis) ------------------------
+_HOST_ACT = {
+    "relu": lambda v: __import__("numpy").maximum(v, 0.0),
+    "tanh": lambda v: __import__("numpy").tanh(v),
+    "sigmoid": lambda v: 1.0 / (1.0 + __import__("numpy").exp(-v)),
+    "swish": lambda v: v / (1.0 + __import__("numpy").exp(-v)),
+    "elu": lambda v: __import__("numpy").where(v > 0, v, __import__("numpy").expm1(v)),
+}
+
+
+def host_forward(weights, x, activations):
+    """float64 forward of a Dense stack. ``weights`` = [k0, b0, k1, b1, ...]; ``activations`` has one name per hidden
+    layer (the last layer is linear). Returns None if an activation has no host implementation."""
+    import numpy as np
+    h = np.asarray(x, np.float64)
+    n = len(weights) // 2
+    for i in range(n):
+        h = h @ np.asarray(weights[2 * i], np.float64) + np.asarray(weights[2 * i + 1], np.float64)
+        if i < n - 1:
+            f = _HOST_ACT.get(activations[i])
+            if f is None:
+                return None
+            h = f(h)
+    return h
+
+
+def host_xent(logits, y):
+    import numpy as np
+    z = logits - logits.max(1, keepdims=True)
+    logp = z - np.log(np.exp(z).sum(1, keepdims=True))
+    return float(-logp[np.arange(len(y)), y].mean())
+
+
+def host_mse(pred, y):
+    import numpy as np
+    return float(np.mean((np.asarray(y, np.float64) - pred.reshape(-1)) ** 2))
+
+
+def weights_checksum(weights) -> float:
+    import numpy as np
+    return float(sum(np.abs(np.asarray(w, np.float64)).sum() for w in weights))

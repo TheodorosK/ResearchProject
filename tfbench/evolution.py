@@ -71,6 +71,7 @@ class EvalResult:
     params: int = 0
     inherited_fraction: float = 0.0
     loss_trace: Optional[List[float]] = None
+    diag: Optional[Dict[str, Any]] = None
     weights: Optional[List[np.ndarray]] = field(default=None, repr=False)
 
 
@@ -133,6 +134,18 @@ def evaluate(tf, device: str, genome: G.Genome, data: Dict[str, np.ndarray], arg
                 opt.apply_gradients(zip(tape.gradient(loss, tvars), tvars))
                 return loss
 
+            if trace_steps:                                  # forward-pass diagnosis before ANY update
+                from .workloads import host_forward, host_mse, weights_checksum
+                w0 = model.get_weights()
+                x0, y0 = xe[0].numpy(), ye[0].numpy()
+                mse = lambda x, y: tf.reduce_mean(tf.square(y - tf.squeeze(model(x, training=False), -1)))
+                host = host_forward(w0, x0, [l.activation for l in genome.layers])
+                res.diag = {
+                    "init_weights_checksum": weights_checksum(w0),
+                    "batch0_checksum": float(np.abs(x0.astype(np.float64)).sum()),
+                    "eager_forward_loss": float(mse(xe[0], ye[0]).numpy()),
+                    "graph_forward_loss": float(tf.function(mse, jit_compile=False)(xe[0], ye[0]).numpy()),
+                    "host_truth_loss": host_mse(host, y0) if host is not None else None}
             t = pc()
             loss, trace = None, []
             for i in range(xe.shape[0]):
@@ -225,7 +238,7 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
     ref = evaluate(tf, device, ref_genome, data, args, trace_steps=10)
     rec.data["reference_check"] = {"genome": ref_genome.describe(), "status": ref.status, "val_r2": ref.val_r2,
                                    "train_r2": ref.train_r2, "total_s": pc() - t, "error": ref.error,
-                                   "loss_trace": ref.loss_trace, "optimizer": getattr(args, "optimizer", "simple")}
+                                   "loss_trace": ref.loss_trace, "diag": ref.diag, "optimizer": getattr(args, "optimizer", "simple")}
     rec.measure("reference_val_r2", ref.val_r2, "R2", **ctx)
     rec.measure("reference_train_r2", ref.train_r2, "R2", **ctx)
     rec.measure("reference_eval_cold_start_s", pc() - t, "s", **ctx)

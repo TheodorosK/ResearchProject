@@ -84,6 +84,29 @@ def _jobs(jobs: List[Dict[str, Any]], test: str) -> List[Dict[str, Any]]:
 
 
 # ------------------------------------------------------------------- derived
+def _rel(x, ref):
+    return abs(x - ref) / max(abs(ref), 1e-12) if x is not None and ref is not None else None
+
+
+def forward_diagnosis_rows(jobs: List[Dict[str, Any]]) -> List[List[Any]]:
+    """Per job: float64 host truth vs eager / graph forward / first training-step loss (relative errors)."""
+    rows = []
+    for j in jobs:
+        d = j.get("data", {}).get("forward_diagnosis")
+        first = val(j, "loss_first_step")
+        if d is None and j.get("test") == "neuroevolution":
+            rc = j.get("data", {}).get("reference_check") or {}
+            d = rc.get("diag")
+            tr = rc.get("loss_trace") or []
+            first = tr[0] if tr else None
+        if not d:
+            continue
+        t = d.get("host_truth_loss")
+        rows.append([j["job"], j.get("placement"), d.get("init_weights_checksum"), d.get("batch0_checksum"), t,
+                     _rel(d.get("eager_forward_loss"), t), _rel(d.get("graph_forward_loss"), t), _rel(first, t)])
+    return rows
+
+
 def derive(jobs: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Cross-job metrics. All are 'calculated' and only produced when BOTH sides completed."""
     d: Dict[str, Any] = {"cpu_vs_gpu_performance": [], "cpu_vs_gpu_neuroevolution": None}
@@ -242,6 +265,13 @@ def render_markdown(r: Dict[str, Any]) -> str:
                x["first_step_loss_rel_diff"], x["workloads_comparable"], x["final_loss_rel_diff"],
                x["training_trajectories_consistent"]]
               for x in r["derived"]["cpu_vs_gpu_performance"]]))
+    A("**Forward-pass diagnosis (before any weight update; errors are relative to a float64 host calculation from the "
+      "same weights and batch - measured):**\n")
+    A(_table(["Job", "Placement", "Weights checksum", "Batch checksum", "Host-truth loss", "Eager fwd err",
+              "Graph fwd err", "First train-step err"], forward_diagnosis_rows(_jobs(jobs, "performance"))))
+    A("_Same checksums on CPU and GPU = identical weights and data. Eager err small but graph err large = graph-mode op "
+      "fusion on that device; graph fwd ok but first-step err large = the training step itself (variable update ordering "
+      "etc.)._\n")
     A("**Phase breakdown (measured, seconds) - never merged with steady-state time:**\n")
     A(_table(["Job", "Data gen", "Data transfer", "Model build", "Optimizer init", "Trace", "First execution",
               "Warm-up total", "Compile overhead (estimated)"],
@@ -293,6 +323,10 @@ def render_markdown(r: Dict[str, Any]) -> str:
     if cmp_:
         A(f"**GPU vs CPU neuroevolution throughput (calculated):** {_f(cmp_['gpu_vs_cpu_throughput_x'])}x "
           f"(GPU placement: {cmp_.get('gpu_placement_mode')})\n")
+        A("**Reference-genome forward-pass diagnosis (measured):**\n")
+        A(_table(["Job", "Placement", "Weights checksum", "Batch checksum", "Host-truth loss", "Eager fwd err",
+                  "Graph fwd err", "First train-step err"],
+                 forward_diagnosis_rows(_jobs(jobs, "neuroevolution"))))
         ok = cmp_.get("numerically_consistent")
         if cmp_.get("reference_loss_trace_cpu") and cmp_.get("reference_loss_trace_gpu"):
             A("**Reference loss trace, first optimiser steps (measured; step 0 = forward pass at identical initial weights):**\n")
