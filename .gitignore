@@ -6,3 +6,6 @@
 
 # Generated at deploy time by news-dashboard/scripts/generate-briefing.mjs
 news-dashboard/briefing.json
+
+# Benchmark output
+bench_results/
