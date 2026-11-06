@@ -127,6 +127,10 @@ class CliTests(unittest.TestCase):
                          (2.0, 80.0, 512.0, 1200.0))
         self.assertEqual(a.tests, ["alloc", "train", "leak"])        # backwards-compatible default
 
+    def test_default_activation_space_excludes_elu_but_is_overridable(self):
+        self.assertNotIn("elu", args_for().ne_activations)
+        self.assertIn("elu", args_for("--ne-activations", "relu", "elu").ne_activations)
+
     def test_quick_defaults_but_explicit_flags_win(self):
         a = args_for("--quick", "--ne-pop", "9")
         self.assertEqual(a.ne_pop, 9)

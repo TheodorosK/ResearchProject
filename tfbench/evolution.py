@@ -178,7 +178,8 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
     rec.data["tf"] = tfenv.tf_info(tf)
     ctx = dict(device=device, placement=placement)
     units = tuple(u for u in (8, 16, 32, 64, 128, 256, 512) if u <= args.ne_max_units)
-    space = G.SearchSpace(max_layers=args.ne_max_layers, unit_choices=units)
+    space = G.SearchSpace(max_layers=args.ne_max_layers, unit_choices=units,
+                          activations=tuple(args.ne_activations))
     data = make_dataset(args.ne_train_n, args.ne_val_n, args.ne_test_n, args.ne_in_dim, args.seed)
     rng = random.Random(args.seed)
     workers = max(1, args.ne_workers)

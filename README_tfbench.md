@@ -156,9 +156,12 @@ The first-step losses of CPU and GPU are compared as a sanity check that the wor
 * Use the tensorflow-metal release Apple documents for your TensorFlow version; the report records both versions.
 * No public API for GPU utilisation or GPU memory (`get_memory_info` is unsupported): GPU memory only shows up as
   a drop in system-available (unified) memory. `powermetrics` would need `sudo` and is not used.
-* The default optimizer is `SimpleAdam` (Keras-Adam update rule, float32 state only) because Keras optimizers keep an int64
+* The default optimizer is `SimpleAdam` (Keras-Adam update rule, float32 state only; ~30 % slower than Keras' fused Adam on CPU in my tests, so absolute samples/s depend on the optimizer) because Keras optimizers keep an int64
   step counter that tensorflow-metal cannot place on the GPU - that forces soft placement. `--optimizer keras` selects the Keras
   legacy Adam instead (expect `placement=soft` on Metal). The same optimizer is used on CPU and GPU and is recorded in the report.
+* `Elu` has no GPU kernel in tensorflow-metal (observed: `Could not satisfy device specification ... [Op:Elu]`), so the default
+  neuroevolution activation space is `relu tanh sigmoid swish` for both devices (`--ne-activations` overrides; adding `elu` forces `placement=soft`).
+* `tools/metal_numerics_check.py` compares individual ops on CPU, GPU and a float64 NumPy reference - run it if CPU and GPU results disagree.
 * XLA (`jit_compile`) is not used; float64 and some ops lack Metal kernels -> reported as unsupported in `strict` mode.
 * GPU reductions are not bit-reproducible; seeds fix data, initialisation and the GA lineage, not every last bit.
 

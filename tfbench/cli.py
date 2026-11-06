@@ -136,6 +136,10 @@ def build_parser(total_gb: float) -> argparse.ArgumentParser:
     n.add_argument("--ne-test-n", type=int, default=1024)
     n.add_argument("--ne-in-dim", type=int, default=32)
     n.add_argument("--ne-max-layers", type=int, default=4)
+    n.add_argument("--ne-activations", nargs="+", default=["relu", "tanh", "sigmoid", "swish"],
+                   choices=["relu", "tanh", "sigmoid", "swish", "elu", "gelu", "selu", "softplus"],
+                   help="activation search space (default excludes elu: tensorflow-metal has no GPU kernel for it, "
+                        "which would force soft placement; the same space is used on CPU and GPU)")
     n.add_argument("--ne-max-units", type=int, default=256, choices=[8, 16, 32, 64, 128, 256, 512])
     n.add_argument("--ne-workers", type=int, default=1, help="parallel evaluation threads (1 = sequential)")
     n.add_argument("--ne-inherit-weights", action="store_true")
