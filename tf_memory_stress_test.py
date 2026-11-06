@@ -16,8 +16,11 @@ Tests:
     train  - train a dense net on synthetic data, doubling batch size each round.
     leak   - repeat identical training epochs and flag steady RSS growth.
 
-Safety: ramps stop when process RSS or system memory use crosses a threshold,
-so the Mac is not pushed into heavy swap. Lower --max-gb on small machines.
+Memory is measured as the DROP in system available memory since each test began
+(not process RSS): with tensorflow-metal, tensors live in unified/GPU memory that
+RSS does not count. Each test runs in its own subprocess so memory is clean.
+Safety: ramps stop when the drop reaches --max-gb or free memory falls below
+--min-avail-gb. Close other apps first for a meaningful result.
 """
 import argparse
 import gc
@@ -52,15 +55,31 @@ def gpu_mem_gb():
         return None
 
 
+def avail_gb():
+    return psutil.virtual_memory().available / GB
+
+
+BASE_AVAIL = [avail_gb()]
+
+
+def set_baseline():
+    BASE_AVAIL[0] = avail_gb()
+
+
+def used_gb():
+    """System memory consumed since the baseline (captures GPU/unified memory)."""
+    return BASE_AVAIL[0] - avail_gb()
+
+
 def status(tag=""):
     g = gpu_mem_gb()
-    gpu = f" | GPU cur/peak {g[0]:.2f}/{g[1]:.2f} GB" if g else ""
-    print(f"  [{tag:<14}] RSS {rss_gb():6.2f} GB | system {sys_used_pct():4.1f}% "
-          f"| avail {psutil.virtual_memory().available / GB:5.1f} GB{gpu}", flush=True)
+    gpu = f" | GPU cur/peak {g[0]:.2f}/{g[1]:.2f} GB" if g and g[1] > 0 else ""
+    print(f"  [{tag:<14}] used +{used_gb():5.2f} GB | RSS {rss_gb():5.2f} GB "
+          f"| system {sys_used_pct():4.1f}% | avail {avail_gb():5.1f} GB{gpu}", flush=True)
 
 
 def over_limit(args):
-    return rss_gb() >= args.max_gb or sys_used_pct() >= args.max_sys_pct
+    return used_gb() >= args.max_gb or avail_gb() < args.min_avail_gb
 
 
 def is_oom(exc):
@@ -76,6 +95,7 @@ def cleanup():
 # --------------------------------------------------------------------------- tests
 def test_alloc(args):
     print("\n=== TEST: tensor allocation ramp ===")
+    set_baseline()
     held, step_mb, total_mb = [], args.step_mb, 0
     try:
         while not over_limit(args):
@@ -122,6 +142,7 @@ def synthetic_ds(batch, in_dim, classes, steps):
 
 def test_train(args):
     print("\n=== TEST: training with doubling batch size ===")
+    set_baseline()
     batch = args.start_batch
     while not over_limit(args):
         print(f"  batch={batch} width={args.width} depth={args.depth}")
@@ -147,23 +168,28 @@ def test_train(args):
 
 def test_leak(args):
     print("\n=== TEST: leak detection (repeated identical epochs) ===")
+    set_baseline()
     model = build_model(args.width, args.depth, args.in_dim, args.classes)
     ds = synthetic_ds(args.start_batch, args.in_dim, args.classes, args.steps)
-    samples = []
+    samples, sys_samples = [], []
     for i in range(args.leak_epochs):
         model.fit(ds, epochs=1, steps_per_epoch=args.steps, verbose=0)
         gc.collect()
         samples.append(rss_gb())
+        sys_samples.append(used_gb())
         status(f"epoch {i + 1}")
         if over_limit(args):
             print("  Memory limit hit; aborting.")
             break
     if len(samples) >= 6:
         half = len(samples) // 2
-        slope = np.polyfit(np.arange(len(samples) - half), samples[half:], 1)[0]
-        mb = slope * 1024
-        verdict = "POSSIBLE LEAK" if mb > args.leak_mb_per_epoch else "stable"
-        print(f"  RSS slope over 2nd half: {mb:+.1f} MB/epoch -> {verdict}")
+        x = np.arange(len(samples) - half)
+        rss_mb = np.polyfit(x, samples[half:], 1)[0] * 1024
+        sys_mb = np.polyfit(x, sys_samples[half:], 1)[0] * 1024
+        verdict = "POSSIBLE LEAK" if max(rss_mb, sys_mb) > args.leak_mb_per_epoch else "stable"
+        print(f"  Slope over 2nd half: RSS {rss_mb:+.1f} MB/epoch, system {sys_mb:+.1f} MB/epoch "
+              f"-> {verdict}")
+        print("  (system slope is noisy if other apps are running)")
     cleanup()
 
 
@@ -173,9 +199,9 @@ def main():
     p.add_argument("--tests", nargs="+", choices=["alloc", "train", "leak"],
                    default=["alloc", "train", "leak"])
     p.add_argument("--max-gb", type=float, default=min(8.0, psutil.virtual_memory().total / GB * 0.5),
-                   help="stop ramps when process RSS exceeds this (default: min(8, 50%% RAM))")
-    p.add_argument("--max-sys-pct", type=float, default=85.0,
-                   help="stop ramps when system memory use exceeds this percent")
+                   help="stop ramps when this much extra system memory is used (default: min(8, 50%% RAM))")
+    p.add_argument("--min-avail-gb", type=float, default=1.5,
+                   help="stop ramps when available system memory falls below this")
     p.add_argument("--cpu", action="store_true", help="hide GPU (Metal) and run on CPU")
     p.add_argument("--step-mb", type=int, default=256, help="alloc test chunk size")
     p.add_argument("--start-batch", type=int, default=256)
@@ -188,6 +214,22 @@ def main():
     p.add_argument("--leak-mb-per-epoch", type=float, default=5.0)
     args = p.parse_args()
 
+    if len(args.tests) > 1:  # run each test in a fresh process
+        import subprocess
+        import sys
+        rest, skip = [], False
+        for a in sys.argv[1:]:
+            if a == "--tests":
+                skip = True
+                continue
+            if skip and not a.startswith("--"):
+                continue
+            skip = False
+            rest.append(a)
+        for name in args.tests:
+            subprocess.run([sys.executable, os.path.abspath(__file__), "--tests", name, *rest])
+        return
+
     if args.cpu:
         tf.config.set_visible_devices([], "GPU")
 
@@ -195,7 +237,7 @@ def main():
           f"({platform.machine()})")
     print(f"Devices: {[d.name for d in tf.config.list_physical_devices()]}")
     print(f"RAM total {psutil.virtual_memory().total / GB:.1f} GB | "
-          f"limits: RSS {args.max_gb:.1f} GB, system {args.max_sys_pct:.0f}%")
+          f"limits: +{args.max_gb:.1f} GB used, >= {args.min_avail_gb:.1f} GB free")
     status("start")
 
     for name in args.tests:
