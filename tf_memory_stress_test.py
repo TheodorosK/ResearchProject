@@ -98,7 +98,8 @@ def test_alloc(args):
     set_baseline()
     held, step_mb, total_mb = [], args.step_mb, 0
     try:
-        while not over_limit(args):
+        # Metal commits memory lazily, so also cap by bytes we allocate ourselves.
+        while not over_limit(args) and total_mb / 1024 < args.max_gb:
             n = step_mb * 1024 * 1024 // 4  # float32 elements
             held.append(tf.random.uniform((n,), dtype=tf.float32))
             _ = float(tf.reduce_sum(held[-1]))  # force materialisation
