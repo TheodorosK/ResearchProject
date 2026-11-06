@@ -70,7 +70,7 @@ def plan_jobs(args) -> List[Tuple[str, List[Job]]]:
         elif t == "neuroevolution":
             plan.append((t, [Job(t, d) for d in args.ne_devices]))
         elif t == "memdiag":
-            plan.append((t, [Job(t, d, p) for d in args.memdiag_devices for p in ("none", "gc", "clear")]))
+            plan.append((t, [Job(t, d, p) for d in args.memdiag_devices for p in args.memdiag_policies]))
     return plan
 
 
@@ -149,8 +149,13 @@ def build_parser(total_gb: float) -> argparse.ArgumentParser:
     n.add_argument("--ne-max-units", type=int, default=256, choices=[8, 16, 32, 64, 128, 256, 512])
     n.add_argument("--ne-workers", type=int, default=1, help="parallel evaluation threads (1 = sequential)")
     n.add_argument("--ne-inherit-weights", action="store_true")
-    n.add_argument("--ne-cleanup", choices=["each", "generation", "never"], default="generation")
+    n.add_argument("--ne-cleanup", choices=["each", "generation", "gc", "never"], default="generation",
+                   help="each/generation: clear_session()+gc.collect() per individual / per generation; gc: gc.collect() "
+                        "only per generation; never: no cleanup. On tensorflow-metal clear_session() grew system memory by "
+                        "~100 MB per call in the author's memdiag run")
     n.add_argument("--memdiag-devices", nargs="+", choices=["cpu", "gpu"], default=["gpu"])
+    n.add_argument("--memdiag-policies", nargs="+", choices=["none", "gc", "clear"], default=["none", "gc", "clear"],
+                   help="cleanup policies to compare (each runs in its own process)")
     n.add_argument("--memdiag-cycles", type=int, default=15)
     n.add_argument("--memdiag-threshold-mb", type=float, default=1.0)
 
@@ -251,7 +256,7 @@ def estimate_plan(args) -> Dict[str, Any]:
             "worst_case_params": worst, "worst_case_model_and_optimizer_gb": worst * 16 / GB,
             "dataset_gb": data_gb, "workers": args.ne_workers, "kind": "estimated"}
     if "memdiag" in args.tests:
-        plan["memdiag"] = {"jobs": 3 * len(args.memdiag_devices), "cycles_per_job": args.memdiag_cycles,
+        plan["memdiag"] = {"jobs": len(args.memdiag_policies) * len(args.memdiag_devices), "cycles_per_job": args.memdiag_cycles,
                            "kind": "estimated"}
     return plan
 
