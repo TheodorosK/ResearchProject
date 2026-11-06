@@ -450,6 +450,7 @@ def run_memdiag(args, rec: Recorder, monitor: ResourceMonitor, device: str, plac
     rec.data["config"] = {"policy": policy, "cycles": cycles, "genome": genome.describe(), "device": device,
                           "seed": args.seed, "warmup_cycles": 3}
     rss, sysx, py, ngc = [], [], [], []
+    aborted: Optional[LimitExceeded] = None
     tracemalloc.start()
     try:
         for c in range(cycles):
@@ -472,6 +473,8 @@ def run_memdiag(args, rec: Recorder, monitor: ResourceMonitor, device: str, plac
             rec.measure("cycle_python_traced_mb", py[-1], "MB", cycle=c, **ctx)
             rec.measure("cycle_gc_objects", ngc[-1], "count", cycle=c, **ctx)
             rec.checkpoint()
+    except LimitExceeded as e:             # keep the analysis of the cycles that DID run, then re-raise below
+        aborted = e
     finally:
         tracemalloc.stop()
     c_rss = classify_memory_growth(rss, py, warmup=3, slope_threshold_mb=args.memdiag_threshold_mb)
@@ -487,7 +490,13 @@ def run_memdiag(args, rec: Recorder, monitor: ResourceMonitor, device: str, plac
         from .common import linear_slope
         obj_slope = linear_slope(ngc[3:])
         rec.measure("gc_objects_slope_per_cycle", obj_slope, "objects/cycle", kind="calculated", **ctx)
+    if aborted is not None:
+        rec.note(f"[{policy}] ABORTED by a resource limit after {len(rss)} of {cycles} cycles ({aborted.reason}); the "
+                 "classification above uses only the completed cycles. Hitting a limit under this policy is itself a "
+                 "finding: this policy consumed memory fastest.")
     rec.note("Classification is heuristic: a leak is suspected only when growth continues at a similar rate "
              "across the whole post-warm-up window; rising RSS alone is not evidence of a leak.")
     rec.note("RSS excludes Metal/unified-memory buffers, so `system_extra` (drop in available memory) is "
              "reported alongside it; that series is noisy while other applications run.")
+    if aborted is not None:
+        raise aborted
