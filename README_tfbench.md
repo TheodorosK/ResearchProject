@@ -161,6 +161,12 @@ The first-step losses of CPU and GPU are compared as a sanity check that the wor
   legacy Adam instead (expect `placement=soft` on Metal). The same optimizer is used on CPU and GPU and is recorded in the report.
 * `Elu` has no GPU kernel in tensorflow-metal (observed: `Could not satisfy device specification ... [Op:Elu]`), so the default
   neuroevolution activation space is `relu tanh sigmoid swish` for both devices (`--ne-activations` overrides; adding `elu` forces `placement=soft`).
+* **Numerical validation gate:** before any timing, `performance` (MLP) and `neuroevolution` compare the eager AND
+  `tf.function` forward-pass loss with a float64 host calculation from the same weights and batch. A job that disagrees by
+  more than 1e-3 is marked `failed` and reports no timings/fitness (`--skip-numeric-gate` disables this - not recommended).
+  Observed on this suite's author's M1 Pro: eager forward exact, graph-mode forward of Keras Dense layers wrong on the GPU.
+  `--grappler no-remapper|none` applies a graph-optimizer workaround to every job; the numerics tool prints a matrix showing
+  which setting restores correct results.
 * `tools/metal_numerics_check.py` compares individual ops on CPU, GPU and a float64 NumPy reference - run it if CPU and GPU results disagree.
 * XLA (`jit_compile`) is not used; float64 and some ops lack Metal kernels -> reported as unsupported in `strict` mode.
 * GPU reductions are not bit-reproducible; seeds fix data, initialisation and the GA lineage, not every last bit.

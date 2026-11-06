@@ -76,7 +76,7 @@ def build_model(tf, workload: str, args, seed: int):
 
 
 def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: str, placement: str) -> None:
-    tf = tfenv.configure(device, placement)
+    tf = tfenv.configure(device, placement, args.grappler)
     seed = args.seed
     ctx = dict(device=device, workload=workload, placement=placement)
     rec.data["tf"] = tfenv.tf_info(tf)
@@ -84,7 +84,7 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: st
         "device": device, "workload": workload, "placement": placement,
         "batch": args.perf_batch, "steps_per_repeat": args.perf_steps, "warmup_steps": args.perf_warmup,
         "repeats": args.perf_repeats, "pool_batches": args.perf_pool, "seed": seed,
-        "mode": args.perf_mode, "optimizer": args.optimizer, "dtype": "float32", "jit_compile": False,
+        "mode": args.perf_mode, "optimizer": args.optimizer, "grappler": args.grappler, "dtype": "float32", "jit_compile": False,
         "width": args.perf_width, "depth": args.perf_depth,
     }
     power, lpm = power_source(), low_power_mode()
@@ -143,6 +143,16 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: st
         rec.data["forward_diagnosis"] = diag
         for k, v in diag.items():
             rec.measure(f"diag_{k}", v, "", **ctx)
+        from .workloads import numeric_gate
+        gate = None if args.skip_numeric_gate else numeric_gate(diag)
+        if workload != "mlp":
+            rec.note(f"[{device}/{workload}] no float64 host reference exists for this workload: forward-pass numerics "
+                     "were NOT validated; rely on the CPU/GPU first-step-loss comparison.")
+        if gate:
+            rec.set_status("failed", gate)
+            rec.note("This is a numerical-correctness failure of the device/graph execution, not a benchmark failure. "
+                     "See tools/metal_numerics_check.py and the --grappler option.")
+            return
 
         # --------------------------------------------------- trace / first step
         trace_s = None

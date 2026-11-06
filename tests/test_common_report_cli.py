@@ -105,6 +105,22 @@ class GlorotInitTests(unittest.TestCase):
         self.assertEqual(a[0].dtype, np.float32)
 
 
+class NumericGateTests(unittest.TestCase):
+    def test_gate(self):
+        ok = {"host_truth_loss": 2.0, "eager_forward_loss": 2.0000001, "graph_forward_loss": 1.9999999}
+        self.assertIsNone(workloads.numeric_gate(ok))
+        bad = dict(ok, graph_forward_loss=1.4)
+        msg = workloads.numeric_gate(bad)
+        self.assertIn("graph mode", msg)
+        self.assertNotIn("eager mode", msg)
+        self.assertIn("FAILED", msg)
+        self.assertIn("eager mode", workloads.numeric_gate(dict(ok, eager_forward_loss=3.0)))
+        self.assertIsNone(workloads.numeric_gate({"host_truth_loss": None, "graph_forward_loss": 9}))   # no truth: skipped
+        self.assertIsNone(workloads.numeric_gate(None))
+        self.assertIn("n/a", workloads.numeric_gate(dict(ok, graph_forward_loss=float("nan"))))
+        self.assertIsNone(workloads.numeric_gate(dict(ok, graph_forward_loss=2.01), tol=0.01))
+
+
 class PlacementErrorTests(unittest.TestCase):
     def test_detection(self):
         self.assertTrue(tfenv.is_placement_error(RuntimeError(
@@ -126,6 +142,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual((lim.min_avail_gb, lim.max_sys_pct, lim.max_swap_mb, lim.max_runtime_s),
                          (2.0, 80.0, 512.0, 1200.0))
         self.assertEqual(a.tests, ["alloc", "train", "leak"])        # backwards-compatible default
+
+    def test_grappler_and_gate_flags(self):
+        a = args_for()
+        self.assertEqual((a.grappler, a.skip_numeric_gate), ("default", False))
+        a = args_for("--grappler", "no-remapper", "--skip-numeric-gate")
+        self.assertEqual((a.grappler, a.skip_numeric_gate), ("no-remapper", True))
 
     def test_default_activation_space_excludes_elu_but_is_overridable(self):
         self.assertNotIn("elu", args_for().ne_activations)

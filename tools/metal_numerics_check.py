@@ -96,6 +96,11 @@ def main():
                        small_a.astype(np.float64) @ small_b.astype(np.float64)),
         f"matmul {B}x{I}@{I}x{H}": ({"x": x, "w": w1}, lambda x, w: tf.matmul(x, w), x64 @ w164),
         "dense+bias+relu (fusable)": ({"x": x, "w": w1, "b": b1}, lambda x, w, b: tf.nn.relu(tf.matmul(x, w) + b), h1),
+        "matmul+bias_add": ({"x": x, "w": w1, "b": b1}, lambda x, w, b: tf.nn.bias_add(tf.matmul(x, w), b), z1),
+        "matmul+bias_add+relu": ({"x": x, "w": w1, "b": b1},
+                                 lambda x, w, b: tf.nn.relu(tf.nn.bias_add(tf.matmul(x, w), b)), h1),
+        "matmul+bias_add+tanh": ({"x": x, "w": w1, "b": b1},
+                                 lambda x, w, b: tf.tanh(tf.nn.bias_add(tf.matmul(x, w), b)), np.tanh(z1)),
         "tanh": ({"v": act_in * 0.5}, lambda v: tf.tanh(v), np.tanh(act_in.astype(np.float64) * 0.5)),
         "sigmoid": ({"v": act_in}, lambda v: tf.sigmoid(v), 1 / (1 + np.exp(-act_in.astype(np.float64)))),
         "swish (silu)": ({"v": act_in}, lambda v: tf.nn.silu(v),
@@ -151,6 +156,26 @@ def main():
                     row += f"{'-':>13}"
                     verdict = "GPU: no kernel/error"
             print(row + "   " + verdict)
+    if gpus:
+        print("\n=== graph mode, GPU only, by Grappler (graph optimizer) configuration ===")
+        names = ["matmul+bias_add", "matmul+bias_add+relu", "keras Dense stack forward", "keras SCCE loss"]
+        defaults = {"remapper": True, "disable_meta_optimizer": False}
+        configs = [("default", {}), ("remapper OFF", {"remapper": False}),
+                   ("all graph optimizers OFF", {"disable_meta_optimizer": True})]
+        print(f"{'configuration':<28}" + "".join(f"{n[:22]:>24}" for n in names))
+        for label, opts in configs:
+            tf.config.optimizer.set_experimental_options({**defaults, **opts})
+            row = f"{label:<28}"
+            for n in names:
+                inputs, fn, ref = cases[n]
+                try:
+                    row += f"{err(run_case(fn, inputs, '/GPU:0', True), ref):>24.2e}"
+                except Exception as e:  # noqa: BLE001
+                    row += f"{'ERR:' + type(e).__name__:>24}"
+            print(row)
+        tf.config.optimizer.set_experimental_options(defaults)
+        print("If an error is ~1e-1 in 'default' but ~1e-6 with the remapper (or all optimizers) OFF, that graph "
+              "optimization is what breaks the GPU result; run the suite with --grappler no-remapper | none.")
     print("\nErrors ~1e-6 are normal float32 rounding. SUSPECT = that op/mode computes something different on the GPU.")
     print(f"{len(suspects)} suspect case(s): {suspects}")
     return 1 if suspects else 0

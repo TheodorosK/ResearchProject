@@ -187,7 +187,7 @@ def _cleanup(tf, clear: bool) -> float:
 
 # ------------------------------------------------------------------ evolution
 def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: str) -> None:
-    tf = tfenv.configure(device, placement)
+    tf = tfenv.configure(device, placement, args.grappler)
     rec.data["tf"] = tfenv.tf_info(tf)
     ctx = dict(device=device, placement=placement)
     units = tuple(u for u in (8, 16, 32, 64, 128, 256, 512) if u <= args.ne_max_units)
@@ -207,7 +207,7 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
         "epochs": args.ne_epochs, "batch": args.ne_batch, "train_n": args.ne_train_n, "val_n": args.ne_val_n,
         "test_n": args.ne_test_n, "in_dim": args.ne_in_dim, "workers": workers, "cleanup_policy": policy,
         "inherit_weights": bool(args.ne_inherit_weights), "seed": args.seed,
-        "optimizer": getattr(args, "optimizer", "simple"),
+        "optimizer": getattr(args, "optimizer", "simple"), "grappler": args.grappler,
         "search_space": {"layers": [space.min_layers, space.max_layers], "units": list(space.unit_choices),
                          "activations": list(space.activations), "lr": list(space.lr_range)},
     }
@@ -246,6 +246,13 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, placement: s
              "totals). It absorbs one-time start-up cost (runtime/Metal initialisation, first compilation) and its "
              "val R2 is compared across devices to detect numerical disagreement.")
     _cleanup(tf, True)
+    from .workloads import numeric_gate
+    gate = None if args.skip_numeric_gate else numeric_gate(ref.diag)
+    if gate:
+        rec.set_status("failed", gate)
+        rec.note("This is a numerical-correctness failure of the device/graph execution, not a benchmark failure. "
+                 "See tools/metal_numerics_check.py and the --grappler option.")
+        return
 
     uid = [0]
 
@@ -432,7 +439,7 @@ def run_memdiag(args, rec: Recorder, monitor: ResourceMonitor, device: str, plac
             gc    (gc.collect() after each cycle)
             clear (tf.keras.backend.clear_session() + gc.collect() after each cycle)
     """
-    tf = tfenv.configure(device, placement)
+    tf = tfenv.configure(device, placement, args.grappler)
     ctx = dict(device=device, placement=placement, policy=policy)
     rec.data["tf"] = tfenv.tf_info(tf)
     genome = G.Genome([G.LayerGene(128, "relu"), G.LayerGene(128, "relu"), G.LayerGene(64, "tanh")],

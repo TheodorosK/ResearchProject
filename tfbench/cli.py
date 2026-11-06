@@ -94,6 +94,12 @@ def build_parser(total_gb: float) -> argparse.ArgumentParser:
     g.add_argument("--optimizer", choices=["simple", "keras"], default="simple",
                    help="simple: float32-only Adam with Keras' update rule (runs under strict GPU placement). "
                         "keras: Keras legacy Adam (its int64 step counter forces soft placement on tensorflow-metal)")
+    g.add_argument("--grappler", choices=["default", "no-remapper", "none"], default="default",
+                   help="TensorFlow graph-optimizer setting applied to ALL jobs (CPU and GPU alike). no-remapper "
+                        "disables MatMul+BiasAdd+activation fusion, none disables graph rewriting; use if the numerics "
+                        "check shows wrong graph-mode results on the GPU")
+    g.add_argument("--skip-numeric-gate", action="store_true",
+                   help="do NOT refuse to report jobs whose forward pass disagrees with float64 truth (not recommended)")
     g.add_argument("--placement", choices=["auto", "strict", "soft"], default="auto",
                    help="GPU op placement. strict: unsupported GPU ops raise. soft: TF may run them on CPU. "
                         "auto: strict first; if strict fails on an unsupported op, retry once in soft mode and "

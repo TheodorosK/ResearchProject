@@ -15,7 +15,7 @@ def import_tf():
     return tf
 
 
-def configure(device: str, placement: str):
+def configure(device: str, placement: str, grappler: str = "default"):
     """Must run before TensorFlow initialises its runtime.
 
     device    'cpu' hides every GPU; 'gpu' requires one (else DeviceUnavailable)
@@ -29,6 +29,10 @@ def configure(device: str, placement: str):
     if device == "cpu":
         tf.config.set_visible_devices([], "GPU")
     tf.config.set_soft_device_placement(placement == "soft")
+    if grappler == "no-remapper":                 # no MatMul+BiasAdd+activation fusion
+        tf.config.optimizer.set_experimental_options({"remapper": False})
+    elif grappler == "none":                      # no graph rewriting at all
+        tf.config.optimizer.set_experimental_options({"disable_meta_optimizer": True})
     gpus = tf.config.list_physical_devices("GPU")
     if device == "gpu" and not gpus:
         raise DeviceUnavailable(
@@ -149,6 +153,8 @@ def tf_info(tf) -> Dict[str, Any]:
         "intra_op_threads": tf.config.threading.get_intra_op_parallelism_threads(),
         "inter_op_threads": tf.config.threading.get_inter_op_parallelism_threads(),
         "eager_by_default": bool(tf.executing_eagerly()),
+        "grappler_options": {k: v for k, v in tf.config.optimizer.get_experimental_options().items()
+                             if k in ("remapper", "disable_meta_optimizer", "layout_optimizer", "constant_folding")},
     }
     try:
         bi = tf.sysconfig.get_build_info()

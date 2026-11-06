@@ -150,3 +150,24 @@ def host_mse(pred, y):
 def weights_checksum(weights) -> float:
     import numpy as np
     return float(sum(np.abs(np.asarray(w, np.float64)).sum() for w in weights))
+
+
+def numeric_gate(diag, tol: float = 1e-3):
+    """Return an error message if a forward-pass loss disagrees with float64 host truth by more than ``tol``
+    (relative), else None. Skipped (None) when no host truth exists for the workload."""
+    if not diag or diag.get("host_truth_loss") is None:
+        return None
+    t = diag["host_truth_loss"]
+    bad = []
+    for key in ("eager_forward_loss", "graph_forward_loss"):
+        v = diag.get(key)
+        if v is None or v != v:
+            bad.append(f"{key}=n/a")
+            continue
+        rel = abs(v - t) / max(abs(t), 1e-12)
+        if rel > tol:
+            bad.append(f"{key.replace('_forward_loss', '')} mode rel. error {rel:.3g}")
+    if not bad:
+        return None
+    return ("numerical validation FAILED: forward-pass loss disagrees with the float64 host calculation ("
+            + "; ".join(bad) + f"; tolerance {tol:g}). Timings and fitness from this job would be meaningless.")
