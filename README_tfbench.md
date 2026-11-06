@@ -167,6 +167,11 @@ The first-step losses of CPU and GPU are compared as a sanity check that the wor
   Observed on this suite's author's M1 Pro: eager forward exact, graph-mode forward of Keras Dense layers wrong on the GPU.
   `--grappler no-remapper|none` applies a graph-optimizer workaround to every job; the numerics tool prints a matrix showing
   which setting restores correct results.
+* **Known issue (observed, macOS 27.0.1 / TF 2.15.1 / M1 Pro; plugin version is in the report):** in `tf.function` graph mode
+  the fused `MatMul + BiasAdd + ReLU` computes wrong values on the GPU (100 % error in the isolated op; eager mode and
+  `BiasAdd` alone or with `tanh` are exact). `--grappler no-remapper` does NOT fix it (so it is not TensorFlow's remapper);
+  `--grappler none` (all graph rewriting off) does. Use `--grappler none` for all jobs on such a setup; absolute throughput then
+  reflects un-optimised graphs on both devices. Keras `fit()` runs in graph mode, so check your own models too.
 * `tools/metal_numerics_check.py` compares individual ops on CPU, GPU and a float64 NumPy reference - run it if CPU and GPU results disagree.
 * XLA (`jit_compile`) is not used; float64 and some ops lack Metal kernels -> reported as unsupported in `strict` mode.
 * GPU reductions are not bit-reproducible; seeds fix data, initialisation and the GA lineage, not every last bit.

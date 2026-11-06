@@ -41,6 +41,7 @@ def main():
     a = ap.parse_args()
 
     import tensorflow as tf
+    tf.get_logger().setLevel("ERROR")          # silence harmless retracing warnings (one tf.function per case)
     tf.config.set_soft_device_placement(False)
     gpus = tf.config.list_physical_devices("GPU")
     devices = ["/CPU:0"] + (["/GPU:0"] if gpus else [])
@@ -175,7 +176,7 @@ def main():
             print(row)
         tf.config.optimizer.set_experimental_options(defaults)
         print("If an error is ~1e-1 in 'default' but ~1e-6 with the remapper (or all optimizers) OFF, that graph "
-              "optimization is what breaks the GPU result; run the suite with --grappler no-remapper | none.")
+              "optimization is what breaks the GPU result; run the suite with --grappler no-remapper | none (only 'none' disables the Metal plugin's own rewrites).")
     print("\nErrors ~1e-6 are normal float32 rounding. SUSPECT = that op/mode computes something different on the GPU.")
     print(f"{len(suspects)} suspect case(s): {suspects}")
     return 1 if suspects else 0

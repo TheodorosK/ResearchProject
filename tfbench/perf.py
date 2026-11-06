@@ -151,7 +151,7 @@ def run(args, rec: Recorder, monitor: ResourceMonitor, device: str, workload: st
         if gate:
             rec.set_status("failed", gate)
             rec.note("This is a numerical-correctness failure of the device/graph execution, not a benchmark failure. "
-                     "See tools/metal_numerics_check.py and the --grappler option.")
+                     "Run tools/metal_numerics_check.py; on tensorflow-metal, `--grappler none` (disable all graph rewriting, applied to CPU and GPU jobs alike) is the known workaround.")
             return
 
         # --------------------------------------------------- trace / first step
