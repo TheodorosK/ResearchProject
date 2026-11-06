@@ -186,8 +186,10 @@ class CliTests(unittest.TestCase):
     def test_memdiag_policy_selection_and_gc_cleanup_choice(self):
         a = args_for("--tests", "memdiag", "--memdiag-policies", "none", "gc", "--memdiag-devices", "gpu")
         self.assertEqual([j.name for j in cli.plan_jobs(a)[0][1]], ["memdiag@gpu:none", "memdiag@gpu:gc"])
-        self.assertEqual(len(cli.plan_jobs(args_for("--tests", "memdiag"))[0][1]), 3)
-        self.assertEqual(args_for("--ne-cleanup", "gc").ne_cleanup, "gc")
+        self.assertEqual([j.variant for j in cli.plan_jobs(args_for("--tests", "memdiag"))[0][1]], ["none", "gc"])   # clear is opt-in
+        self.assertEqual(len(cli.plan_jobs(args_for("--tests", "memdiag", "--memdiag-policies", "none", "gc", "clear"))[0][1]), 3)
+        self.assertEqual(args_for().ne_cleanup, "gc")                                  # default avoids clear_session()
+        self.assertEqual(args_for("--ne-cleanup", "generation").ne_cleanup, "generation")
         self.assertEqual(cli.estimate_plan(a)["memdiag"]["jobs"], 2)
 
     def test_dry_run_trains_nothing_and_reports(self):

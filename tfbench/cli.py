@@ -149,13 +149,14 @@ def build_parser(total_gb: float) -> argparse.ArgumentParser:
     n.add_argument("--ne-max-units", type=int, default=256, choices=[8, 16, 32, 64, 128, 256, 512])
     n.add_argument("--ne-workers", type=int, default=1, help="parallel evaluation threads (1 = sequential)")
     n.add_argument("--ne-inherit-weights", action="store_true")
-    n.add_argument("--ne-cleanup", choices=["each", "generation", "gc", "never"], default="generation",
+    n.add_argument("--ne-cleanup", choices=["each", "generation", "gc", "never"], default="gc",
                    help="each/generation: clear_session()+gc.collect() per individual / per generation; gc: gc.collect() "
                         "only per generation; never: no cleanup. On tensorflow-metal clear_session() grew system memory by "
                         "~100 MB per call in the author's memdiag run")
     n.add_argument("--memdiag-devices", nargs="+", choices=["cpu", "gpu"], default=["gpu"])
-    n.add_argument("--memdiag-policies", nargs="+", choices=["none", "gc", "clear"], default=["none", "gc", "clear"],
-                   help="cleanup policies to compare (each runs in its own process)")
+    n.add_argument("--memdiag-policies", nargs="+", choices=["none", "gc", "clear"], default=["none", "gc"],
+                   help="cleanup policies to compare (each in its own process). 'clear' is opt-in: on tensorflow-metal it "
+                        "reached the 80%% system-memory cap in ~17 cycles on the author's M1 Pro")
     n.add_argument("--memdiag-cycles", type=int, default=15)
     n.add_argument("--memdiag-threshold-mb", type=float, default=1.0)
 

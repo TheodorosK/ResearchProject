@@ -140,7 +140,9 @@ The first-step losses of CPU and GPU are compared as a sanity check that the wor
   same individuals measures the speed-up instead of assuming it. All models share one Metal GPU, so a speed-up is not expected.
 * **Cleanup policy** (`--ne-cleanup each|generation|gc|never`): cleanup time and its effect on memory are recorded. Observed on tensorflow-metal
   (author's M1 Pro): `clear_session()` grew *system* memory by ~100-160 MB per call (and RSS swung by ~600 MB), vs ~8 MB/cycle without it -
-  compare `--ne-cleanup gc` / `never` with the default before trusting long GPU runs. `memdiag --memdiag-policies none gc` skips `clear`.
+  full-config GPU runs (3 policies, 1 run each): system growth 84 / 21 / 29 MB per generation and RSS 270 / 135 / 156 MB for generation / gc / never, identical
+  throughput (0.56-0.57 ind/s). The default is therefore `--ne-cleanup gc`; `memdiag` compares `none gc` by default (`--memdiag-policies none gc clear`
+  adds `clear`, which can reach the memory cap within ~17 cycles on Metal).
 * **`memdiag`:** builds/trains/discards the same model N times under policies `none`, `gc`, `clear`, each in a
   separate process, tracking RSS, system-available memory, `tracemalloc` (Python-level) and GC object counts.
   Verdicts: `bounded` / `saturating` (allocator-cache-like), `python_retention` (references held),
