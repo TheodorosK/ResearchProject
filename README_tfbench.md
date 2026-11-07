@@ -193,6 +193,14 @@ represent every model; FLOP and pre-run memory numbers are estimates.
 
 ## Comparing machines later
 
+```bash
+python tools/compare_reports.py bench_results/RUN_A/report.json bench_results/RUN_B/report.json [more...]
+```
+
+`tools/compare_reports.py` lines up the measured metrics (value and ratio to the first report), flags runs that are not
+like-for-like (software versions, `--grappler`, optimizer, seed, workload size, cleanup policy) and marks ratios as not meaningful
+in that case. Changes within +-5 % are reported as 'similar'. It never predicts anything for hardware you have not benchmarked.
+
 Run the identical commands (same seed, TensorFlow and tensorflow-metal versions, plugged in, same `--quick`/full
 settings) on each machine and compare `report.json` files field by field (`derived.cpu_vs_gpu_performance`,
 `overall_individuals_per_s`, time per generation, peak memory, swap). Expect larger unified memory to matter only where
