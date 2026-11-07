@@ -186,10 +186,17 @@ The first-step losses of CPU and GPU are compared as a sanity check that the wor
 
 ## Limitations
 
+Compile / first-execution time can differ a lot between sessions (observed GPU convnet 1.34 s -> 0.36 s, possibly a warm Metal shader cache), so
+`first_execution_s` and per-model start-up costs are session-sensitive; steady-state throughput was stable to ~6 %.
+
 See section 10 of every `summary.md` (generated from `tfbench/report.py::LIMITATIONS`). In short: one machine and one
 session; coarse OS memory counters; RSS excludes GPU buffers; no per-op placement API; thermal telemetry is partial and
 its absence proves nothing; blocked Metal calls can only be stopped by the supervisor; small synthetic workloads do not
 represent every model; FLOP and pre-run memory numbers are estimates.
+
+## Baseline results
+
+`docs/baseline_m1_pro_16gb.md` records the two-day baseline of the author's M1 Pro / 16 GB (settings, results, spread, caveats).
 
 ## Comparing machines later
 

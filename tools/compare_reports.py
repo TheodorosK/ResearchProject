@@ -21,6 +21,12 @@ SETTING_KEYS = ["quick", "seed", "placement", "grappler", "optimizer", "perf_mod
                 "ne_elite", "ne_epochs", "ne_batch", "ne_train_n", "ne_val_n", "ne_test_n", "ne_in_dim",
                 "ne_max_layers", "ne_max_units", "ne_activations", "ne_workers", "ne_cleanup", "ne_inherit_weights",
                 "memdiag_cycles", "memdiag_policies", "memdiag_devices"]
+# Metrics that were observed to swing far more than throughput between two sessions on the same machine (one repeat, M1 Pro):
+# compile time x3.7 (cold vs warm shader cache?), per-generation memory growth up to x5, peak memory up to 26 %, CV +-30 %.
+# They get a wide band so noise is not reported as "better"/"worse". PROVISIONAL: widen/narrow with your own repeats.
+VOLATILE = {"steady_run_s_cv", "first_execution_s", "peak_extra_system_gb_sampled", "system_memory_growth_per_generation_mb",
+            "rss_growth_per_generation_mb", "memdiag_slope_system"}
+VOLATILE_BAND = 1.0
 SOFTWARE_KEYS = ["tensorflow", "tensorflow-metal", "keras", "python", "numpy"]
 HARDWARE_KEYS = ["chip", "ram_total_gb", "macos_version", "performance_cores", "efficiency_cores", "gpu_cores"]
 
@@ -78,6 +84,8 @@ def comparability(reports):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("reports", nargs="+", help="report.json files; the first is the reference")
+    ap.add_argument("--volatile-band", type=float, default=VOLATILE_BAND,
+                    help="relative band for volatile metrics (marked *): compile time, memory growth/peaks, CV")
     ap.add_argument("--similar", type=float, default=SIMILAR,
                     help=f"relative band reported as 'similar' (default {SIMILAR:.0%}; set it from your own repeat-to-repeat spread)")
     a = ap.parse_args(argv)
@@ -126,13 +134,14 @@ def main(argv=None):
                 vals.append(metric(job, m) if job else None)
             if all(v is None for v in vals):
                 continue
-            line = f"  {m:<56}"
+            band = a.volatile_band if m in VOLATILE else a.similar
+            line = f"  {m + (' *' if m in VOLATILE else ''):<56}"
             ratios = []
             for i, v in enumerate(vals):
                 ratio = (v / vals[0]) if (i and v is not None and vals[0]) else None
                 ratios.append(ratio)
                 line += f"{fmt(v):>16}" + (f"{fmt(ratio):>10}" if i else "")
-            line += "   " + ", ".join(verdict(x, hib, a.similar) for x in ratios[1:] if x is not None)
+            line += "   " + ", ".join(verdict(x, hib, band) for x in ratios[1:] if x is not None)
             rows.append(line)
         if rows:
             print(name)
@@ -146,7 +155,9 @@ def main(argv=None):
         if ne:
             parts.append(f"neuroevolution GPU/CPU throughput {fmt(ne.get('gpu_vs_cpu_throughput_x'))}x")
         print(f"[{i}] " + ("; ".join(parts) or "n/a"))
-    print(f"\n'similar' means within +-{a.similar:.0%}; run-to-run CV was 0.3-3 % in-session, session-to-session spread is "
+    print(f"\n* volatile metric (band +-{a.volatile_band:.0%}): compile time, memory growth/peaks and CV varied far more than "
+          "throughput between two sessions of the same machine.")
+    print(f"'similar' means within +-{a.similar:.0%} for the other metrics; run-to-run CV was 0.3-3 % in-session, session-to-session spread is "
           "what comparing two days of the SAME machine measures.")
     return 0
 

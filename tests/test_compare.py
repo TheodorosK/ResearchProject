@@ -70,6 +70,12 @@ class CompareTests(unittest.TestCase):
                 compare.main([*ps, "--similar", "0.02"])
         self.assertIn("worse", buf.getvalue())
 
+    def test_volatile_metrics_get_a_wide_band(self):
+        self.assertEqual(compare.verdict(0.5, False, compare.VOLATILE_BAND), "similar")     # e.g. memory peak halved: noise
+        self.assertEqual(compare.verdict(0.5, False, compare.SIMILAR), "better")
+        self.assertIn("first_execution_s", compare.VOLATILE)
+        self.assertNotIn("steady_samples_per_s", compare.VOLATILE)
+
     def test_needs_two_reports(self):
         with self.assertRaises(SystemExit):
             compare.main(["only_one.json"])
