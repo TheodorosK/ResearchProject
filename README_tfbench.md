@@ -9,7 +9,23 @@ It measures; it does not predict. **It makes no claim about hardware you have no
 | `performance` | How fast is *controlled* training on CPU vs the Metal GPU? (phases timed separately, device placement verified) |
 | `neuroevolution` | How does a realistic GA + Keras workload behave: throughput, time/generation, memory per generation? |
 | `memdiag` | Does memory growth across build/train/discard cycles look like caching, retained references, or a native leak? |
+| `scaling` | Where (if anywhere) does the GPU beat the CPU for neuroevolution? Adaptive, statistically confirmed, ~5-30 min. |
 | `alloc`, `train`, `leak` | Original stress tests, CLI unchanged. |
+
+## Scaling benchmark (CPU/GPU crossover for neuroevolution)
+
+`--tests scaling` runs an **adaptive** experiment (pilot -> expansion -> confirmation with independent repetitions and confidence intervals) over network
+complexity (small/medium/large), population size (4-32), training steps (1-50) and execution strategy (CPU sequential, GPU sequential, CPU
+multiprocessing, batched), with a full timing decomposition. It answers whether - and where - the GPU wins, without assuming that it does.
+Details, estimates and limits: **`docs/scaling_benchmark.md`**; examples: `docs/example_scaling_synthetic/` (SYNTHETIC illustration of the crossover
+analysis and charts) and `docs/example_scaling_cpu_only/` (a real CPU-only sandbox run).
+
+```bash
+python tf_memory_stress_test.py --tests scaling --quick --grappler none --dry-run   # estimates (cells, minutes, memory); trains nothing
+python tf_memory_stress_test.py --tests scaling --quick --grappler none --max-gb 6   # quick: ~5-10 min, hard cap 10 min
+python tf_memory_stress_test.py --tests scaling --grappler none --max-gb 6           # full: ~15-30 min, hard cap 30 min
+python tools/recommend_device.py bench_results/RUN/report.json --params 5e6 --layers 6 --steps 50 --population 16   # advice only
+```
 
 ## Layout
 

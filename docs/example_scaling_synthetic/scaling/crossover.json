@@ -1,0 +1,168 @@
+{
+  "crossover": {
+    "status": "confirmed",
+    "confirmed_crossings": [
+      {
+        "axis": "model size (mean parameters)",
+        "steps": 50,
+        "population": 8,
+        "between": [
+          103281.0,
+          2459969.0
+        ],
+        "ratios": [
+          0.1260020899718445,
+          1.146104784222019
+        ],
+        "interpolated_x": 2022475.0013378048
+      }
+    ],
+    "candidate_crossings": [
+      {
+        "axis": "training steps",
+        "tier": "large",
+        "population": 8,
+        "between": [
+          20,
+          50
+        ],
+        "ratios": [
+          0.5919013030496977,
+          1.146104784222019
+        ],
+        "interpolated_x": 41.385226637548726
+      },
+      {
+        "axis": "model size (mean parameters)",
+        "steps": 50,
+        "population": 4,
+        "between": [
+          66705.0,
+          2993345.0
+        ],
+        "ratios": [
+          0.1253816629130862,
+          1.1300300490709134
+        ],
+        "interpolated_x": 2422733.607087209
+      }
+    ],
+    "gpu_faster_confirmed": [
+      "large/P4/S50/hetero",
+      "large/P8/S50/hetero"
+    ],
+    "cpu_faster_confirmed": [
+      "medium/P8/S50/hetero"
+    ],
+    "gpu_faster_explored_only": [],
+    "best": {
+      "key": "large/P8/S50/hetero",
+      "tier": "large",
+      "population": 8,
+      "steps": 50,
+      "explore_ratio": 1.0972748029481907,
+      "explore_cpu_ips": 0.6046049428850132,
+      "explore_gpu_ips": 0.6634177695656549,
+      "confirm": {
+        "n_num": 3,
+        "n_den": 3,
+        "ratio": 1.146104784222019,
+        "lo": 1.0835269463691362,
+        "hi": 1.2122967322762805,
+        "df": 3.61068173285637,
+        "cpu": {
+          "n": 3,
+          "median": 0.5735735644808724,
+          "mean": 0.5817531447099645,
+          "cv": 0.027216390075038444,
+          "min": 0.5716827186434027,
+          "max": 0.6000031510056186
+        },
+        "gpu": {
+          "n": 3,
+          "median": 0.6639231688879056,
+          "mean": 0.6666692267953759,
+          "cv": 0.01926184790835936,
+          "min": 0.6554231084458146,
+          "max": 0.6806614030524072
+        }
+      },
+      "verdict": "gpu_faster",
+      "ratio": 1.146104784222019,
+      "evidence": "confirmed (independent repetitions)"
+    },
+    "n_points": 17,
+    "n_confirmed_points": 3
+  },
+  "answers": [
+    {
+      "q": "Is GPU execution faster for any tested neuroevolution configuration?",
+      "a": "YES (confirmed): GPU sequential execution was faster than CPU sequential at large/P4/S50/hetero: 1.13x (95% CI 1.06-1.21, n=3 GPU / 3 CPU reps); large/P8/S50/hetero: 1.15x (95% CI 1.08-1.21, n=3 GPU / 3 CPU reps). Cross-strategy (best available strategy on each device, exploration data): GPU ahead at large/P4/S50/hetero (seq vs seq, 1.16x).",
+      "confidence": "confirmed"
+    },
+    {
+      "q": "At what workload sizes does GPU execution become competitive?",
+      "a": "GPU reached >= 50% of CPU throughput (a definition of 'competitive', not a measurement) at: large/P4/S50/hetero (1.13x), large/P8/S20/hetero (0.59x), large/P8/S50/hetero (1.15x). Confirmed crossover along model size (mean parameters) between 103281 and 2.45997e+06 (interpolated ~2.02e+06). Tier 'small': no break-even from the fitted model (GPU per-step cost is not lower than CPU's). Tier 'medium': no break-even from the fitted model (GPU per-step cost is not lower than CPU's). ESTIMATED (model extrapolation, not measured) break-even for tier 'large': ~43 training steps per individual (inside the tested range).",
+      "confidence": "confirmed"
+    },
+    {
+      "q": "Which components dominate total runtime?",
+      "a": "cpu/small: per-model fixed work (construct+trace+first execution+fitness) 89%, training 7%, GA+cleanup 4.0%, unattributed 0.0%; cpu/medium: per-model fixed work (construct+trace+first execution+fitness) 73%, training 25%, GA+cleanup 2.1%, unattributed 0.0%; cpu/large: per-model fixed work (construct+trace+first execution+fitness) 17%, training 83%, GA+cleanup 0.4%, unattributed 0.0%; gpu/small: per-model fixed work (construct+trace+first execution+fitness) 96%, training 4%, GA+cleanup 0.4%, unattributed 0.0%; gpu/medium: per-model fixed work (construct+trace+first execution+fitness) 92%, training 7%, GA+cleanup 0.4%, unattributed 0.0%; gpu/large: per-model fixed work (construct+trace+first execution+fitness) 90%, training 10%, GA+cleanup 0.4%, unattributed 0.0%",
+      "confidence": "measured"
+    },
+    {
+      "q": "Does GPU batching materially improve throughput?",
+      "a": "Batched vs sequential on the SAME device and workload (cross-strategy): homogeneous populations GPU 1.96-2.01x (n=2), CPU 1.97-1.98x (n=2); heterogeneous populations GPU 1.36-1.41x (n=2), CPU 1.33-1.39x (n=2); only 40% of heterogeneous individuals fell into a batchable bucket (median).",
+      "confidence": "unconfirmed"
+    },
+    {
+      "q": "How does memory usage scale with population and model complexity?",
+      "a": "Largest additional memory in any completed configuration: 3.46 GB (gpu-batched, large, P=32, homo); maximum swap growth 0 MB. sequential strategies discard each model so their peak depends on model size, not population.",
+      "confidence": "measured"
+    },
+    {
+      "q": "What evidence supports or contradicts the proposed crossover?",
+      "a": "3 point(s) have confirmation repetitions. Crossover status: confirmed. Confirmation agreed with exploration within 25% wherever both exist. A crossover is claimed only where adjacent confirmed points changed from CPU-faster to GPU-faster.",
+      "confidence": "confirmed"
+    },
+    {
+      "q": "Which findings are specific to TensorFlow Metal and this M1 Pro?",
+      "a": "Observed on this software/hardware combination only: per-model graph tracing/first execution accounts for 91% of GPU wall time at its worst tier, consistent with a per-model compilation/dispatch cost on tensorflow-metal; strict-placement kernel gaps are reported in the block table; results are valid only for the recorded TensorFlow / tensorflow-metal versions and `--grappler` setting. Whether this cost is a Metal-plugin limitation or a property of the M1 Pro GPU is NOT separable with this experiment.",
+      "confidence": "hypothesis"
+    },
+    {
+      "q": "Which conclusions remain uncertain?",
+      "a": "only 3 independent repetitions per confirmed point (wide intervals); one machine, one session; day-to-day variance (up to ~6% on throughput in earlier baselines) is not included in the CIs; cold vs warm Metal shader cache can change first-execution cost between sessions; break-even steps are model extrapolations; synthetic regression task and small dense networks only; paired comparisons use identical genomes/data but GPU reductions are not bit-reproducible; 0 configuration(s) did not complete and 11 were skipped by the budget/limits.",
+      "confidence": "n/a"
+    }
+  ],
+  "break_even_estimated": {
+    "small": {
+      "gpu_fixed_s": 1.1938192436678985,
+      "gpu_step_s": 0.0025269490055014744,
+      "cpu_fixed_s": 0.10067375056549274,
+      "cpu_step_s": 0.00040612300938138753,
+      "break_even_steps": null,
+      "within_tested_steps": false,
+      "reason_none": "GPU per-step cost is not lower than CPU's"
+    },
+    "medium": {
+      "gpu_fixed_s": 1.253823373503462,
+      "gpu_step_s": 0.002987990850242192,
+      "cpu_fixed_s": 0.11956806317930754,
+      "cpu_step_s": 0.0010188746107345824,
+      "break_even_steps": null,
+      "within_tested_steps": false,
+      "reason_none": "GPU per-step cost is not lower than CPU's"
+    },
+    "large": {
+      "gpu_fixed_s": 1.2953274215127315,
+      "gpu_step_s": 0.003982157655950966,
+      "cpu_fixed_s": 0.20021020830746297,
+      "cpu_step_s": 0.02951760842029905,
+      "break_even_steps": 42.88615162158179,
+      "within_tested_steps": true,
+      "reason_none": null
+    }
+  }
+}

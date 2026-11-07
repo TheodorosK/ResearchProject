@@ -179,7 +179,7 @@ def build_report(meta: Dict[str, Any], jobs: List[Dict[str, Any]]) -> Dict[str, 
 
 
 CSV_COLUMNS = ["job", "test", "device", "workload", "placement", "name", "value", "unit", "kind",
-               "repeat", "generation", "cycle", "policy"]
+               "repeat", "generation", "cycle", "policy", "phase", "tier", "population", "steps"]
 
 
 def render_csv(report: Dict[str, Any]) -> str:
@@ -194,7 +194,8 @@ def render_csv(report: Dict[str, Any]) -> str:
                         "placement": ctx.get("placement", j.get("placement")),
                         "name": m["name"], "value": sanitize(m["value"]), "unit": m["unit"], "kind": m["kind"],
                         "repeat": ctx.get("repeat"), "generation": ctx.get("generation"),
-                        "cycle": ctx.get("cycle"), "policy": ctx.get("policy")})
+                        "cycle": ctx.get("cycle"), "policy": ctx.get("policy"), "phase": ctx.get("phase"),
+                        "tier": ctx.get("tier"), "population": ctx.get("population"), "steps": ctx.get("steps")})
     for row in report["derived"]["cpu_vs_gpu_performance"]:
         for k, v in row.items():
             if k not in ("workload", "kind", "gpu_placement_mode"):
@@ -426,6 +427,10 @@ def render_markdown(r: Dict[str, Any]) -> str:
     for n in r["limitations"]:
         A(f"- {n}")
     A("")
+    for j in jobs:
+        if j.get("test") == "scaling" and j.get("data", {}).get("analysis"):
+            from .scaling import report as scaling_report
+            A(scaling_report.markdown(j, "scaling/charts"))
     return "\n".join(L)
 
 

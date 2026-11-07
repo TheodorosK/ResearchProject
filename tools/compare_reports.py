@@ -43,7 +43,22 @@ SIMILAR = 0.07      # default 'similar' band. In-session CV is 0.3-3 %, but one 
                     # up to 6 % (2.3 % for the other three metrics); override with --similar once you have more repeats
 
 
+def scaling_metrics(job):
+    """name -> value for a scaling job: GPU/CPU ratio per sequential point (confirmed if available) + best ratio + crossover status."""
+    an = (job.get("data") or {}).get("analysis") or {}
+    out = {}
+    for p in an.get("seq_points", []):
+        if p.get("ratio") is not None:
+            out[f"scaling_ratio {p['key']}"] = p["ratio"]
+    best = (an.get("crossover") or {}).get("best")
+    if best and best.get("ratio") is not None:
+        out["scaling_best_gpu_cpu_ratio"] = best["ratio"]
+    return out
+
+
 def metric(job, name):
+    if name.startswith("scaling_"):
+        return scaling_metrics(job).get(name)
     if name.startswith("memdiag_"):
         c = (job.get("data", {}).get("classification") or {}).get("rss" if name.endswith("rss") else "system_extra", {})
         return c.get("slope_mb_per_cycle")
@@ -124,6 +139,13 @@ def main(argv=None):
     for name in names:
         test = name.split("@")[0].split(":")[0]
         specs = list(METRICS.get(test, []))
+        if test == "scaling":
+            keys = []
+            for r in reports:
+                for j in r["jobs"]:
+                    if j["job"] == name:
+                        keys += [k for k in scaling_metrics(j) if k not in keys]
+            specs = [(k, True) for k in keys]
         if test == "memdiag":
             specs = [("memdiag_slope_rss", False), ("memdiag_slope_system", False)]
         rows = []

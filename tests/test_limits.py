@@ -59,6 +59,15 @@ class CheckLimitsTests(unittest.TestCase):
             LIM.min_avail_gb = 0.1                            # type: ignore[misc]
 
 
+class HeadroomTests(unittest.TestCase):
+    def test_headroom_is_the_smallest_of_the_three_limits(self):
+        # 16 GB machine, limits 6 GB / 2 GB floor / 80 %
+        self.assertAlmostEqual(L.memory_headroom_gb(LIM, S(avail=12.0, pct=25.0), 16.0), 6.0)          # extra-memory allowance binds
+        self.assertAlmostEqual(L.memory_headroom_gb(LIM, S(avail=4.0, pct=50.0), 16.0), 2.0)           # availability floor binds (4-2)
+        self.assertAlmostEqual(L.memory_headroom_gb(LIM, S(avail=7.0, pct=60.0), 16.0), 3.2)           # 80 % ceiling binds
+        self.assertEqual(L.memory_headroom_gb(LIM, S(avail=1.0, pct=90.0), 16.0), 0.0)                 # never negative
+
+
 class FakeClock:
     def __init__(self):
         self.t = 0.0

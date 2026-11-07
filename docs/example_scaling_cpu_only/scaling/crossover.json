@@ -1,0 +1,56 @@
+{
+  "crossover": {
+    "status": "no_paired_data",
+    "confirmed_crossings": [],
+    "candidate_crossings": [],
+    "gpu_faster_confirmed": [],
+    "cpu_faster_confirmed": [],
+    "gpu_faster_explored_only": [],
+    "best": null,
+    "n_points": 5,
+    "n_confirmed_points": 0
+  },
+  "answers": [
+    {
+      "q": "Is GPU execution faster for any tested neuroevolution configuration?",
+      "a": "NOT MEASURED: no paired CPU/GPU data were collected (see incomplete configurations).",
+      "confidence": "none"
+    },
+    {
+      "q": "At what workload sizes does GPU execution become competitive?",
+      "a": "NOT MEASURED: there is no paired CPU/GPU measurement, so nothing can be said about where the GPU becomes competitive.",
+      "confidence": "none"
+    },
+    {
+      "q": "Which components dominate total runtime?",
+      "a": "cpu/small: per-model fixed work (construct+trace+first execution+fitness) 70%, training 7%, GA+cleanup 22.3%, unattributed 0.8%; cpu/medium: per-model fixed work (construct+trace+first execution+fitness) 79%, training 12%, GA+cleanup 8.9%, unattributed 0.7%",
+      "confidence": "measured"
+    },
+    {
+      "q": "Does GPU batching materially improve throughput?",
+      "a": "Batched vs sequential on the SAME device and workload (cross-strategy): homogeneous populations GPU n/a, CPU 2.29-3.70x (n=2); heterogeneous populations GPU n/a, CPU 1.16-1.16x (n=1); only 29% of heterogeneous individuals fell into a batchable bucket (median).",
+      "confidence": "confirmed"
+    },
+    {
+      "q": "How does memory usage scale with population and model complexity?",
+      "a": "Largest additional memory in any completed configuration: 0.08 GB (cpu-batched, medium, P=8, homo); maximum swap growth 0 MB. sequential strategies discard each model so their peak depends on model size, not population.",
+      "confidence": "measured"
+    },
+    {
+      "q": "What evidence supports or contradicts the proposed crossover?",
+      "a": "0 point(s) have confirmation repetitions. Crossover status: no_paired_data. Confirmation agreed with exploration within 25% wherever both exist. No crossover is claimed because none was confirmed.",
+      "confidence": "none"
+    },
+    {
+      "q": "Which findings are specific to TensorFlow Metal and this M1 Pro?",
+      "a": "Observed on this software/hardware combination only: strict-placement kernel gaps are reported in the block table; results are valid only for the recorded TensorFlow / tensorflow-metal versions and `--grappler` setting. Whether this cost is a Metal-plugin limitation or a property of the M1 Pro GPU is NOT separable with this experiment.",
+      "confidence": "hypothesis"
+    },
+    {
+      "q": "Which conclusions remain uncertain?",
+      "a": "only 3 independent repetitions per confirmed point (wide intervals); one machine, one session; day-to-day variance (up to ~6% on throughput in earlier baselines) is not included in the CIs; cold vs warm Metal shader cache can change first-execution cost between sessions; break-even steps are model extrapolations; synthetic regression task and small dense networks only; paired comparisons use identical genomes/data but GPU reductions are not bit-reproducible; 4 configuration(s) did not complete and 0 were skipped by the budget/limits.",
+      "confidence": "n/a"
+    }
+  ],
+  "break_even_estimated": {}
+}

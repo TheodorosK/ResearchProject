@@ -124,6 +124,17 @@ def check_limits(limits: ResourceLimits, base: Baseline, s: MemSample,
     return None
 
 
+def memory_headroom_gb(limits: ResourceLimits, s: MemSample, total_gb: Optional[float] = None) -> float:
+    """Additional memory a benchmark may still use right now: the SMALLEST of the three memory limits given current usage
+    (extra-memory allowance, available-memory floor, system-use ceiling).  Planning against this, instead of only
+    --max-gb, keeps estimated peaks inside the limit that would actually fire first."""
+    total = total_gb if total_gb is not None else psutil.virtual_memory().total / GB
+    by_extra = limits.max_extra_gb
+    by_floor = s.avail_gb - limits.min_avail_gb
+    by_pct = total * limits.max_sys_pct / 100.0 - total * s.sys_pct / 100.0
+    return max(0.0, min(by_extra, by_floor, by_pct))
+
+
 def preflight(limits: ResourceLimits, s: MemSample) -> List[str]:
     """Absolute limits that are ALREADY violated before any work starts.
 
