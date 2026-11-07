@@ -85,6 +85,12 @@ CREATE TABLE IF NOT EXISTS collections (
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS search_history (
+    query TEXT PRIMARY KEY,
+    last_used REAL NOT NULL,
+    uses INTEGER NOT NULL DEFAULT 1,
+    pinned INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS collection_items (
     collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
     photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,

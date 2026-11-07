@@ -192,6 +192,21 @@ def get(model_key: str | None = None):
         return _embedder
 
 
+def prepare(model_key: str):
+    """Load a model (downloading it first if needed) without making it the active one."""
+    inst = (FakeEmbedder if config.EMBEDDER == "fake" else FastEmbedder)(model_key)
+    if hasattr(inst, "_load"):
+        inst._load()
+    return inst
+
+
+def adopt(inst) -> None:
+    """Make an already-loaded model the active one."""
+    global _embedder
+    with _embedder_lock:
+        _embedder = inst
+
+
 def embed_query(text: str) -> np.ndarray:
     """One normalized vector for a free-text query, averaged over caption-style phrasings."""
     return _cached_query(get().key, " ".join(text.split()))

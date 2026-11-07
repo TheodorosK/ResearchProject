@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import autostart, config, db, describe, duplicates, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, search
+from . import autostart, config, db, describe, duplicates, history, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, search
 from .indexer import delete_photos, preview_path, switch_model, watcher, worker
 from .vectors import index
 
@@ -228,8 +228,10 @@ def put_settings(body: SettingsIn):
     if body.model not in config.MODELS:
         raise HTTPException(400, "Unknown model")
     if body.model != embedder.get().key:
-        switch_model(body.model)
-        worker.nudge()
+        try:
+            switch_model(body.model)
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
     return get_settings()
 
 
@@ -587,8 +589,11 @@ def do_search(
     q: str = "", limit: int = Query(300, le=1000), folder_id: int | None = None,
     year_from: int | None = None, year_to: int | None = None, collection_id: int | None = None,
     sort: str = "relevance", like: str | None = None, dislike: str | None = None, colors: str | None = None,
+    remember: bool = False,
 ):
     require_model()
+    if remember and q.strip():
+        history.record(q)
     like_ids, dislike_ids = _ids_param(like), _ids_param(dislike)
     hits = search.text_search(q, limit, sort=sort, filters=filters_from(folder_id, year_from, year_to, collection_id),
                               like=like_ids, dislike=dislike_ids, colors=_hex_param(colors))
@@ -603,6 +608,35 @@ def do_search(
             "items": hydrate(hits), "indexed": len(index)}
 
 
+class SearchMemoryIn(BaseModel):
+    query: str = Field(min_length=1, max_length=200)
+    pinned: bool = True
+
+
+@app.get("/api/searches")
+def remembered_searches(limit: int = Query(12, ge=1, le=50)):
+    return history.items(limit)
+
+
+@app.post("/api/searches/pin")
+def pin_search(body: SearchMemoryIn):
+    if not history.pin(body.query, body.pinned):
+        raise HTTPException(400, "Empty search")
+    return history.items()
+
+
+@app.post("/api/searches/forget")
+def forget_search(body: SearchMemoryIn):
+    history.forget(body.query)
+    return history.items()
+
+
+@app.post("/api/searches/clear")
+def clear_searches():
+    history.clear()
+    return history.items()
+
+
 @app.get("/api/home")
 def home():
     loading = embedder.get().loading
@@ -610,6 +644,7 @@ def home():
     mood_groups = [] if loading else search.moods()
     return {
         "suggestions": search.suggestions(),
+        "history": history.items(),
         "on_this_day": hydrate(search.on_this_day()),
         "explore": [{**g, "photos": hydrate(g.pop("photo_ids"))} for g in (dict(g) for g in groups)],
         "moods": [{**g, "photos": hydrate(g.pop("photo_ids"))} for g in (dict(g) for g in mood_groups)],

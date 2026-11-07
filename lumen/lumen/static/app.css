@@ -606,3 +606,8 @@ textarea.input { height: auto; min-height: 72px; padding: 10px 14px; resize: ver
 .suggest-actions { display: flex; gap: 6px; }
 .suggest-actions .icon-btn { width: 34px; height: 34px; }
 .suggest-actions .yes:hover { color: var(--accent); }
+
+.chips.history { margin-top: 10px; }
+.chips.history .chip a { color: inherit; text-decoration: none; }
+.chips.history .chip button { border: 0; background: none; color: inherit; opacity: .5; cursor: pointer; padding: 0 0 0 4px; }
+.chips.history .chip button:hover { opacity: 1; }

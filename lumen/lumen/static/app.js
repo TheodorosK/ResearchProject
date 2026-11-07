@@ -355,6 +355,20 @@ async function renderHome(view) {
     go(`#/search?q=${encodeURIComponent(pool[Math.floor(Math.random() * pool.length)])}`);
   };
   chips.append(surprise);
+  if (data.history?.length) {
+    const row = h(`<div class="chips history" aria-label="Your searches"></div>`);
+    const draw = (list) => {
+      row.innerHTML = "";
+      for (const it of list) {
+        const c = h(`<span class="chip"><a href="#/search?q=${encodeURIComponent(it.query)}">${it.pinned ? "📌 " : "🕘 "}${esc(it.query)}</a><button type="button" aria-label="Forget this search" title="Forget">✕</button></span>`);
+        $("button", c).onclick = () => api("/api/searches/forget", { method: "POST", body: { query: it.query } }).then(draw).catch(fail);
+        row.append(c);
+      }
+      row.hidden = !list.length;
+    };
+    draw(data.history);
+    hero.insertBefore(row, $(".hint", hero));
+  }
   view.append(hero);
   typePlaceholder(input, data.suggestions);
   setTimeout(() => input.focus({ preventScroll: true }), 50);
@@ -511,7 +525,7 @@ async function renderSearch(view, params) {
   view.append(results);
 
   const [res, years, folders] = await Promise.all([
-    api(`/api/search?q=${encodeURIComponent(q)}&${filters}`),
+    api(`/api/search?q=${encodeURIComponent(q)}&${filters}${q && !title && !params.get("like") && !params.get("dislike") ? "&remember=1" : ""}`),
     api("/api/years"),
     api("/api/folders"),
   ]);
@@ -551,6 +565,16 @@ async function renderSearch(view, params) {
   saveBtn.onclick = () => openCollectionEditor({ kind: "smart", query: q, name: title || q.replace(/^./, (c) => c.toUpperCase()) });
   const selAll = h('<button class="btn small">Select all</button>');
   $(".row-actions", head).append(selAll, saveBtn);
+  if (q && !title) {
+    // Pin it to the home page so it's one click away next time.
+    const pinBtn = h('<button class="btn small"></button>');
+    const paint = (on) => { pinBtn.innerHTML = `${I.pin} ${on ? "Pinned" : "Pin search"}`; pinBtn.dataset.on = on ? "1" : ""; };
+    paint(false);
+    api("/api/searches?limit=50").then((list) => paint(list.some((x) => x.pinned && x.query === q))).catch(() => {});
+    pinBtn.onclick = () => api("/api/searches/pin", { method: "POST", body: { query: q, pinned: !pinBtn.dataset.on } })
+      .then((list) => paint(list.some((x) => x.pinned && x.query === q))).catch(fail);
+    $(".row-actions", head).append(pinBtn);
+  }
 
   results.innerHTML = "";
   if (!res.indexed) {
@@ -1142,14 +1166,14 @@ async function renderSources(view) {
     list.append(row);
   }
   const right = h(`<div><div class="panel fade-in" id="index-panel"></div>
-    <div class="panel fade-in"><h2>Understanding model</h2><p class="muted" style="margin:0">Runs entirely on this computer. Switching re-reads every photo (previews are reused, so it's quicker than the first time).</p>
+    <div class="panel fade-in"><h2>Understanding model</h2><p class="muted" style="margin:0">Runs entirely on this computer. Switching downloads the new model first, then re-reads every photo (previews are reused, so it's quicker than the first time).</p>
       <form id="model-form">${settings.models.map((x) => `<label class="model-opt"><input type="radio" name="model" value="${x.key}" ${x.key === settings.model ? "checked" : ""}><span><strong>${esc(x.label)}</strong><br><span class="muted">${esc(x.description)}</span></span></label>`).join("")}</form>
       <p class="muted" style="font-size:13px;margin:14px 0 0">🔒 Library and previews are stored in <code>${esc(settings.data_dir)}</code></p></div></div>`);
   $$("input[name=model]", right).forEach((r) => (r.onchange = async () => {
     const ok = await confirmDialog("Switch model?", "Lumen will re-index all photos with the new model. Search keeps working with the photos already done.", "Switch");
     if (!ok) { $(`input[value="${settings.model}"]`, right).checked = true; return; }
     await api("/api/settings", { method: "PUT", body: { model: r.value } }).catch(fail);
-    toast("Switching model — re-indexing in the background");
+    toast("Downloading the new model. Your current one keeps working until it's ready, then Lumen re-reads your photos.", { ms: 9000 });
     route();
   }));
   grid.append(left, right);
@@ -1217,7 +1241,7 @@ function drawIndexPanel() {
       <div class="stat"><b>${s.rate ? s.rate.toFixed(1) + "/s" : "—"}</b><span>${s.eta_seconds ? fmtDuration(s.eta_seconds) + " left" : "speed"}</span></div>
       ${s.errors ? `<div class="stat"><b>${fmt(s.errors)}</b><span>unreadable · <button class="link" id="retry">retry</button></span></div>` : ""}
     </div>
-    <p class="muted" style="font-size:13px;margin:12px 0 0;word-break:break-all">${s.state === "scanning" ? `Scanned ${fmt(s.scanned_files)} files · ` : ""}${s.current ? esc(s.current) : ""}${s.model_state !== "ready" ? ` · Model: ${esc(s.model_state)}` : ""}${s.last_error ? `<br>⚠️ ${esc(s.last_error)}` : ""}</p>`;
+    <p class="muted" style="font-size:13px;margin:12px 0 0;word-break:break-all">${s.state === "scanning" ? `Scanned ${fmt(s.scanned_files)} files · ` : ""}${s.current ? esc(s.current) : ""}${s.model_state !== "ready" ? ` · Model: ${esc(s.model_state)}` : ""}${s.model_switch?.to ? `<br>⏬ Getting the new model ready — search keeps using the current one until then.` : ""}${s.model_switch?.error ? `<br>⚠️ ${esc(s.model_switch.error)}` : ""}${s.last_error ? `<br>⚠️ ${esc(s.last_error)}` : ""}</p>`;
   $("#pp", p)?.addEventListener("click", async () => {
     state.status = await api(`/api/index/${s.state === "paused" ? "resume" : "pause"}`, { method: "POST" });
     refreshStatus();

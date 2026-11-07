@@ -381,6 +381,7 @@ class Indexer:
             "scanned_files": self.scanned_files,
             "model": emb.key,
             "model_state": emb.state,
+            "model_switch": switch_status(),
             "last_error": self.last_error,
         }
 
@@ -606,13 +607,40 @@ def delete_photos(ids):
     index.remove(ids)
 
 
+_switch = {"to": None, "error": None}
+_switch_lock = threading.Lock()
+
+
+def switch_status():
+    """What the model switch is doing now: {"to": key or None, "error": text or None}."""
+    return dict(_switch)
+
+
 def switch_model(model_key: str):
-    """Re-embed everything with another model. Previews are kept, so this is much faster than a first index."""
-    db.set_setting("model", model_key)
-    with db.tx() as c:
-        c.execute("UPDATE photos SET status='pending' WHERE status='ready'")
-    embedder.get(model_key)
-    index.load(model_key)
+    """Move to another model. The new one is downloaded and loaded in the background first; the
+    current one keeps working until it's ready, and a failed download changes nothing."""
+    with _switch_lock:
+        if _switch["to"]:
+            raise RuntimeError(f"Already switching to {config.MODELS[_switch['to']]['label']}")
+        _switch.update(to=model_key, error=None)
+    threading.Thread(target=_finish_switch, args=(model_key,), daemon=True, name="model-switch").start()
+
+
+def _finish_switch(model_key: str):
+    try:
+        new = embedder.prepare(model_key)
+        # Re-embed everything with the new model. Previews are kept, so this is quicker than a first index.
+        db.set_setting("model", model_key)
+        with db.tx() as c:
+            c.execute("UPDATE photos SET status='pending' WHERE status='ready'")
+        embedder.adopt(new)
+        index.load(model_key)
+        worker.nudge()
+        _switch.update(to=None, error=None)
+    except Exception as e:
+        keep = config.MODELS.get(embedder.get().key, {}).get("label", embedder.get().key)
+        _switch.update(to=None, error=f"Couldn't switch to {config.MODELS[model_key]['label']} "
+                                      f"({type(e).__name__}: {e}). Still using {keep}.")
 
 
 worker = Indexer()

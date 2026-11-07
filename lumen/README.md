@@ -70,6 +70,9 @@ also search **by picture** (📷 next to the search box, or drop any image onto 
 colour** (🎨). If a search isn't quite right, press **👍 / 👎** on a few results and Lumen steers
 towards what you mean.
 
+Searches you run are remembered on the home page (🕘). Press **Pin search** on a results page to keep one
+there (📌), or ✕ to forget it. Only searches you submit are saved, not Explore or mood cards.
+
 Results come in *Spot on*, *Strong* and *Possible* tiers. *Best looking first* sorts each tier by
 photo quality. Videos are searched frame by frame: a match opens at the moment that fits.
 
@@ -101,6 +104,8 @@ photo quality. Videos are searched frame by frame: a match opens at the moment t
 - **Phone access.** Turn it on in *Sources* to browse and search from phones and tablets on your Wi-Fi.
   Scan the QR code and enter the PIN. Phones can't browse your computer's folders, delete photos or
   change settings.
+- **Switching models** (*Settings*) downloads and loads the new model first. Search keeps using the
+  current one meanwhile, and if the download fails nothing changes and *Sources* says why.
 - **Start with my computer**, **GPU acceleration**, and live folder watching are switches in *Sources*.
 
 Keyboard: `/` search · `←` `→` browse · `Space` pause a slideshow · `Esc` close or clear the selection ·
