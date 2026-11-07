@@ -33,7 +33,8 @@ METRICS = {
                        ("best_individual_test_r2", True), ("system_memory_growth_per_generation_mb", False),
                        ("rss_growth_per_generation_mb", False), ("peak_extra_system_gb_sampled", False)],
 }
-SIMILAR = 0.05      # +-5 % is within typical repeat-to-repeat noise (CV 0.3-3 %) -> reported as 'similar'
+SIMILAR = 0.07      # default 'similar' band. In-session CV is 0.3-3 %, but one day-to-day repeat on an M1 Pro moved throughput by
+                    # up to 6 % (2.3 % for the other three metrics); override with --similar once you have more repeats
 
 
 def metric(job, name):
@@ -53,10 +54,10 @@ def fmt(x):
     return str(x)
 
 
-def verdict(ratio, higher_better):
+def verdict(ratio, higher_better, similar=SIMILAR):
     if ratio is None:
         return ""
-    if abs(ratio - 1) <= SIMILAR:
+    if abs(ratio - 1) <= similar:
         return "similar"
     good = (ratio > 1) == higher_better
     return "better" if good else "worse"
@@ -77,6 +78,8 @@ def comparability(reports):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("reports", nargs="+", help="report.json files; the first is the reference")
+    ap.add_argument("--similar", type=float, default=SIMILAR,
+                    help=f"relative band reported as 'similar' (default {SIMILAR:.0%}; set it from your own repeat-to-repeat spread)")
     a = ap.parse_args(argv)
     if len(a.reports) < 2:
         ap.error("give at least two report.json files")
@@ -129,7 +132,7 @@ def main(argv=None):
                 ratio = (v / vals[0]) if (i and v is not None and vals[0]) else None
                 ratios.append(ratio)
                 line += f"{fmt(v):>16}" + (f"{fmt(ratio):>10}" if i else "")
-            line += "   " + ", ".join(verdict(x, hib) for x in ratios[1:] if x is not None)
+            line += "   " + ", ".join(verdict(x, hib, a.similar) for x in ratios[1:] if x is not None)
             rows.append(line)
         if rows:
             print(name)
@@ -143,7 +146,7 @@ def main(argv=None):
         if ne:
             parts.append(f"neuroevolution GPU/CPU throughput {fmt(ne.get('gpu_vs_cpu_throughput_x'))}x")
         print(f"[{i}] " + ("; ".join(parts) or "n/a"))
-    print(f"\n'similar' means within +-{SIMILAR:.0%}; run-to-run CV was 0.3-3 % in-session, session-to-session spread is "
+    print(f"\n'similar' means within +-{a.similar:.0%}; run-to-run CV was 0.3-3 % in-session, session-to-session spread is "
           "what comparing two days of the SAME machine measures.")
     return 0
 

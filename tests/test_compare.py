@@ -56,6 +56,20 @@ class CompareTests(unittest.TestCase):
         self.assertIn("NOT meaningful", out)
         self.assertIn("hardware differs", out)
 
+    def test_similar_band_is_configurable(self):
+        a, b = make_report(9.0), make_report(9.5)               # 5.6 % slower
+        self.assertIn("similar", self.run_compare(a, b))        # inside the default 7 % band
+        with tempfile.TemporaryDirectory() as d:
+            ps = []
+            for i, r in enumerate((a, b)):
+                ps.append(os.path.join(d, f"r{i}.json"))
+                with open(ps[-1], "w") as fh:
+                    json.dump(r, fh)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                compare.main([*ps, "--similar", "0.02"])
+        self.assertIn("worse", buf.getvalue())
+
     def test_needs_two_reports(self):
         with self.assertRaises(SystemExit):
             compare.main(["only_one.json"])
