@@ -28,6 +28,7 @@ class BlockSpec:
     cells: List[Cell]
     phase: str
     rep: int = 0
+    extra: Dict[str, Any] = field(default_factory=dict)      # variant-specific parameters (resident probe)
 
 
 class Controller:

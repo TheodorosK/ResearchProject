@@ -364,6 +364,7 @@ def run_cell(ctx: Ctx, cell: Cell, cell_limit_s: float) -> Dict[str, Any]:
         "min_avail_gb": peaks.get("min_avail_gb"), "max_sys_pct": peaks.get("max_sys_pct"),
         "peak_rss_gb": peaks.get("max_rss_gb"), "swap_growth_mb": (sw1["used_gb"] - sw0["used_gb"]) * 1024,
         "rss_start_gb": s0.rss_gb, "rss_end_gb": s1.rss_gb, "retained_gb": s1.rss_gb - s0.rss_gb,
+        "retained_sys_gb": s0.avail_gb - s1.avail_gb,          # system-wide (sees Metal buffers, unlike RSS)
         "batched_member_fraction": (best_batched["batched_members"] / evals) if (evals and strat.mode == "batched") else None,
         "padded_ratio_mean": float(np.mean(best_batched["padded"])) if best_batched["padded"] else None,
         "train_fraction": (train_wall / wall) if wall else None,
@@ -423,7 +424,8 @@ def record_cell(rec, cell_rec: Dict[str, Any]) -> None:
                                   ("steps_per_s", "steps_per_s", "steps/s", "calculated"),
                                   ("peak_additional_gb", "peak_additional_gb", "GB", "measured"),
                                   ("swap_growth_mb", "swap_growth_mb", "MB", "measured"),
-                                  ("retained_gb", "retained_gb", "GB", "measured")):
+                                  ("retained_gb", "retained_gb", "GB", "measured"),
+                                  ("retained_sys_gb", "retained_sys_gb", "GB", "measured")):
         if cell_rec.get(key) is not None:
             rec.measure(name, cell_rec[key], unit, kind=kind, **ctx)
     for k, v in cell_rec["comps"].items():
@@ -442,6 +444,16 @@ def run_block(args, rec, monitor, job, placement: str, plan_path: str) -> None:
     rec.data["block"] = {"device": device, "variant": variant, "n_cells": len(cells), "placement": placement,
                          "cell_limit_s": plan.get("cell_limit_s", st.max_cell_s)}
     cell_limit = plan.get("cell_limit_s", st.max_cell_s)
+    if variant == "resident":
+        from . import capacity
+        ctx.tf = tfenv.configure(device, placement, st.grappler)
+        rec.data["tf"] = tfenv.tf_info(ctx.tf)
+        bad = verify_device(ctx.tf, device, st, rec)
+        if bad:
+            rec.set_status("failed", bad)
+            return
+        capacity.run_resident(ctx, plan.get("extra", {}), rec, monitor)
+        return
     t_cold = pc()
     if variant.startswith("mp"):
         from .pool import MPEvaluator, max_workers_by_memory

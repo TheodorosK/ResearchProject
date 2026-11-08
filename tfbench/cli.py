@@ -185,6 +185,12 @@ def build_parser(total_gb: float) -> argparse.ArgumentParser:
     sc.add_argument("--scaling-max-cell-min", type=float, default=5.0, help="time limit per configuration")
     sc.add_argument("--scaling-max-total-min", type=float, default=30.0, help="time limit for the whole scaling benchmark")
     sc.add_argument("--scaling-extend-steps", nargs="+", type=int, default=[], help="OPT-IN larger step counts tried at the best candidate")
+    sc.add_argument("--scaling-design", choices=["adaptive", "capacity"], default="adaptive",
+                    help="adaptive: crossover search (default). capacity: memory-capacity / concurrency design - a resident-model probe plus a FIXED grid of "
+                         "--scaling-tiers x --scaling-steps x --scaling-pops for sequential, homogeneous-batched and CPU-multiprocessing strategies")
+    sc.add_argument("--capacity-ladder", nargs="+", type=int, default=[1, 2, 4, 8, 16, 32],
+                    help="capacity design: numbers of simultaneously resident models probed (a rung is refused when its projected memory would not fit)")
+    sc.add_argument("--capacity-resident-tiers", nargs="+", choices=["small", "medium", "large"], default=["large", "medium"])
     sc.add_argument("--scaling-skip-batched", action="store_true")
     sc.add_argument("--scaling-skip-mp", action="store_true")
     sc.add_argument("--scaling-allow-gpu-multiprocess", action="store_true",
@@ -241,7 +247,8 @@ def scaling_settings(args):
         max_total_s=args.scaling_max_total_min * 60.0, workers=tuple(args.scaling_workers),
         max_workers=max_workers_by_memory(args.max_gb, requested=args.scaling_max_workers),
         extend_steps=tuple(args.scaling_extend_steps), skip_batched=args.scaling_skip_batched, skip_mp=args.scaling_skip_mp,
-        grappler=args.grappler, quick=args.quick)
+        grappler=args.grappler, quick=args.quick, design=args.scaling_design, ladder=tuple(sorted(set(args.capacity_ladder))),
+        resident_tiers=tuple(args.capacity_resident_tiers))
 
 
 def scaling_preflight(args, limits: ResourceLimits, sample) -> List[str]:
@@ -338,7 +345,12 @@ def estimate_plan(args) -> Dict[str, Any]:
             "dataset_gb": data_gb, "workers": args.ne_workers, "kind": "estimated"}
     if "scaling" in args.tests:
         from .scaling.design import design_summary
-        plan["scaling"] = design_summary(scaling_settings(args))
+        st_ = scaling_settings(args)
+        if st_.design == "capacity":
+            from .scaling.capacity import design_summary_capacity
+            plan["scaling"] = design_summary_capacity(st_, memory_headroom_gb(limits_from(args), take_sample()))
+        else:
+            plan["scaling"] = design_summary(st_)
     if "memdiag" in args.tests:
         plan["memdiag"] = {"jobs": len(args.memdiag_policies) * len(args.memdiag_devices), "cycles_per_job": args.memdiag_cycles,
                            "kind": "estimated"}
@@ -379,6 +391,18 @@ def dry_run(args, limits: ResourceLimits) -> int:
     if md:
         print(f"  memdiag: {md['jobs']} processes x {md['cycles_per_job']} build/train/discard cycles")
     sc = plan.get("scaling")
+    if sc and sc.get("design") == "capacity":
+        lo, hi = sc["estimated_total_s_range"]
+        head = memory_headroom_gb(limits, s)
+        print(f"  scaling CAPACITY design (fixed grid, not adaptive): {sc['grid_cells']} grid cells + {sc['resident_blocks']} resident probes "
+              f"(ladder {sc['resident_ladder']}) in <= {sc['worker_processes_max']} worker processes")
+        print(f"    estimated runtime ~{sc['estimated_total_s'] / 60:.0f} min (plausible range {lo / 60:.0f}-{hi / 60:.0f} min) | hard caps: "
+              f"{sc['per_cell_limit_s'] / 60:.0f} min per configuration, {sc['budget_s'] / 60:.0f} min total")
+        print(f"    resource exposure: worst-case single grid cell ~{sc['worst_case_cell_memory_gb']:.1f} GB (estimated); current memory headroom {head:.1f} GB. "
+              f"Cells whose estimate x1.5 exceeds the headroom are skipped by estimate, so are batched cells whose projection from the slope MEASURED by the probe (x1.5) does not fit; "
+              f"each probe rung is refused when its projected memory exceeds 90% of the headroom. {len(sc['cells_over_headroom_by_estimate'])} cell(s) would be skipped now by estimate: "
+              + (", ".join(sc["cells_over_headroom_by_estimate"][:6]) or "none"))
+        sc = None
     if sc:
         print(f"  scaling (adaptive; NOT the full grid): exhaustive grid would be {sc['full_cartesian_points']} workload points "
               f"({sc['full_cartesian_cells_seq_only']} sequential cell-runs before strategies/repetitions)")
@@ -541,7 +565,8 @@ def _run_scaling(args, limits: ResourceLimits, out_dir: str) -> Dict[str, Any]:
         os.makedirs(os.path.join(out_dir, "raw"), exist_ok=True)
         plan_path = os.path.join(out_dir, "raw", f"plan_{block.block_id}.json")
         with open(plan_path, "w") as fh:
-            json.dump({"settings": st.as_dict(), "cells": [c.as_dict() for c in block.cells], "cell_limit_s": cell_cap}, fh)
+            json.dump({"settings": st.as_dict(), "cells": [c.as_dict() for c in block.cells], "cell_limit_s": cell_cap,
+                       "extra": getattr(block, "extra", {})}, fh)
         # GPU conclusions need STRICT placement (soft placement could hide CPU fallbacks), so a strict failure is reported
         # as an unsupported configuration instead of being silently re-run in soft mode.
         placement = "soft" if args.placement == "soft" else "strict"
@@ -606,7 +631,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     for j in jobs:
         if j.get("test") == "scaling" and j.get("data", {}).get("analysis"):
             from .scaling import report as scaling_report
-            paths["scaling"] = scaling_report.write_artifacts(out_dir, j)["summary"]
+            art = scaling_report.write_artifacts(out_dir, j)
+            paths["scaling"] = art["summary"]
+            if art.get("capacity"):
+                paths["capacity"] = art["capacity"]
     print("\nReports written:")
     for k, v in paths.items():
         print(f"  {k:<9} {v}")

@@ -13,16 +13,21 @@ from .workload import Settings
 def run_scaling(st: Settings, max_memory_gb: float, runner: Callable, machine: Optional[Dict[str, Any]] = None,
                 clock: Optional[Callable[[], float]] = None, log: Callable[[str], None] = print) -> Dict[str, Any]:
     kw = {"clock": clock} if clock else {}
-    ctrl = Controller(st, max_memory_gb, runner, log=log, **kw)
+    if st.design == "capacity":
+        from .capacity import CapacityController
+        ctrl = CapacityController(st, max_memory_gb, runner, log=log, **kw)
+    else:
+        ctrl = Controller(st, max_memory_gb, runner, log=log, **kw)
     interrupted: Optional[BaseException] = None
     try:
         ctrl.run()
     except BaseException as e:                              # noqa: BLE001 - keep partial results, re-raise after assembling
         interrupted = e
-    return assemble(st, ctrl, machine, interrupted)
+    return assemble(st, ctrl, machine, interrupted, max_memory_gb)
 
 
-def assemble(st: Settings, ctrl: Controller, machine: Optional[Dict[str, Any]], interrupted: Optional[BaseException] = None) -> Dict[str, Any]:
+def assemble(st: Settings, ctrl: Controller, machine: Optional[Dict[str, Any]], interrupted: Optional[BaseException] = None,
+             headroom_gb: float = 0.0) -> Dict[str, Any]:
     res = ctrl.result()
     an = analysis.analyze(res["cells"], st, res["skipped"])
     from . import scheduler
@@ -32,6 +37,13 @@ def assemble(st: Settings, ctrl: Controller, machine: Optional[Dict[str, Any]], 
         if c.get("point") and c.get("strategy"):
             record_cell(rec, {**c, "comps": c.get("comps") or {}})
     paired = [p for p in an["seq_points"] if p["ratio"] is not None]
+    if st.design == "capacity":
+        from . import capacity
+        an["capacity"] = capacity.analyze_capacity(res, st, headroom_gb)
+        if interrupted is None and not an["capacity"]["table"] and not an["capacity"]["resident"]:
+            paired = []
+        elif interrupted is None:
+            paired = [1]
     if interrupted is not None:
         status, reason = "interrupted", f"{type(interrupted).__name__}: {interrupted}"
     elif paired:

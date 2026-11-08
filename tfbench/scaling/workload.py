@@ -61,6 +61,9 @@ class Settings:
     skip_mp: bool = False
     grappler: str = "none"
     quick: bool = False
+    design: str = "adaptive"                    # adaptive (crossover search) | capacity (memory / concurrency grid + resident probe)
+    ladder: Tuple[int, ...] = (1, 2, 4, 8, 16, 32)   # capacity design: numbers of simultaneously resident models probed
+    resident_tiers: Tuple[str, ...] = ("large", "medium")
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -68,7 +71,7 @@ class Settings:
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "Settings":
         d = dict(d)
-        for k in ("activations", "tiers", "pops", "steps", "pilot_steps", "workers", "extend_steps"):
+        for k in ("activations", "tiers", "pops", "steps", "pilot_steps", "workers", "extend_steps", "ladder", "resident_tiers"):
             if k in d:
                 d[k] = tuple(d[k])
         return Settings(**d)

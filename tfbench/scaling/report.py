@@ -14,7 +14,7 @@ from .workload import TIER_ORDER, Point, Settings, point_param_stats
 CELL_COLUMNS = ["cell_id", "phase", "rep", "tier", "population", "population_mode", "steps", "generations", "strategy", "device",
                 "placement", "status", "reason", "evaluations", "failed_evaluations", "wall_s", "ips", "steps_per_s", "train_steps_per_s",
                 "construct_s", "trace_s", "first_exec_s", "train_s", "fitness_s", "teardown_s", "ga_s", "cleanup_s", "unattributed_s",
-                "peak_additional_gb", "swap_growth_mb", "retained_gb", "batched_member_fraction", "padded_ratio_mean",
+                "peak_additional_gb", "swap_growth_mb", "retained_gb", "retained_sys_gb", "min_avail_gb", "batched_member_fraction", "padded_ratio_mean",
                 "best_val_r2", "signature"]
 
 
@@ -191,5 +191,10 @@ def write_artifacts(out_dir: str, job: Dict[str, Any]) -> Dict[str, str]:
     with open(os.path.join(base, "crossover.json"), "w") as fh:
         json.dump(sanitize({"crossover": d["analysis"]["crossover"], "answers": d["analysis"]["answers"],
                             "break_even_estimated": d["analysis"]["cost_model"]["break_even"]}), fh, indent=2, allow_nan=False)
+    if d["analysis"].get("capacity"):
+        from . import capacity
+        with open(os.path.join(base, "capacity_summary.md"), "w") as fh:
+            fh.write(capacity.markdown(d["analysis"]["capacity"], st, job["status"], d["controller"]["elapsed_s"], d["controller"]["skipped"]))
+        paths["capacity"] = os.path.join(base, "capacity_summary.md")
     paths.update(cells_csv=os.path.join(base, "cells.csv"), summary=os.path.join(base, "scaling_summary.md"), crossover=os.path.join(base, "crossover.json"))
     return paths
