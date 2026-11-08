@@ -467,15 +467,20 @@ def run_block(args, rec, monitor, job, placement: str, plan_path: str) -> None:
         ctx.tf = tfenv.configure(device, placement, st.grappler)
         rec.data["tf"] = tfenv.tf_info(ctx.tf)
         bad = verify_device(ctx.tf, device, st, rec)
-        if bad is None and variant == "batched":
+        if bad is None and variant in ("batched", "lifecycle"):
             bad = selfcheck_batched(ctx.tf, device, st, rec)
         if bad:
             rec.set_status("failed", bad)
             rec.note("Numerical/placement validation failed: no timings are reported from this device/strategy.")
             return
-        warm = Cell(Point("small", 2, 2, "homo" if variant == "batched" else "hetero", 1), Strategy(device, variant), "warmup")
+        warm = Cell(Point("small", 2, 2, "homo" if variant in ("batched", "lifecycle") else "hetero", 1),
+                    Strategy(device, "batched" if variant == "lifecycle" else variant), "warmup")
         run_cell(ctx, warm, cell_limit)                       # discarded: absorbs runtime / shader-cache cold start
     rec.data["block"]["cold_start_s"] = pc() - t_cold
+    if variant == "lifecycle":
+        from . import lifecycle
+        lifecycle.run_instrumented(ctx, cells, plan.get("extra", {}), rec, monitor, record_cell, cell_limit)
+        return
     aborted_floor: Dict[Tuple[str, str], float] = {}
     try:
         for cell in cells:

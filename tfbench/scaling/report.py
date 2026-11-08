@@ -196,5 +196,10 @@ def write_artifacts(out_dir: str, job: Dict[str, Any]) -> Dict[str, str]:
         with open(os.path.join(base, "capacity_summary.md"), "w") as fh:
             fh.write(capacity.markdown(d["analysis"]["capacity"], st, job["status"], d["controller"]["elapsed_s"], d["controller"]["skipped"]))
         paths["capacity"] = os.path.join(base, "capacity_summary.md")
+    if d["analysis"].get("lifecycle"):
+        from . import lifecycle
+        with open(os.path.join(base, "lifecycle_summary.md"), "w") as fh:
+            fh.write(lifecycle.markdown(d["analysis"]["lifecycle"], st, job["status"], d["controller"]["elapsed_s"], d["controller"]["skipped"]))
+        paths["lifecycle"] = os.path.join(base, "lifecycle_summary.md")
     paths.update(cells_csv=os.path.join(base, "cells.csv"), summary=os.path.join(base, "scaling_summary.md"), crossover=os.path.join(base, "crossover.json"))
     return paths

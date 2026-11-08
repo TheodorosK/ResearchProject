@@ -83,7 +83,8 @@ def design_summary_capacity(st: Settings, headroom_gb: float) -> Dict[str, Any]:
 
 
 # -------------------------------------------------------------------------------------------- resident probe
-def _build_resident(tf, device: str, genome, data, st: Settings) -> Dict[str, Any]:
+def _build_resident(tf, device: str, genome, data, st: Settings, mode: str = "full") -> Dict[str, Any]:
+    """mode: ``full`` build + trace + first execution | ``trace`` build + trace, never executed | ``vars`` variables and optimiser state only."""
     seed = individual_seed(st.seed, genome.uid)
     with tfenv.device_scope(tf, device):
         model = build_keras(tf, genome, st.in_dim, seed)
@@ -92,6 +93,8 @@ def _build_resident(tf, device: str, genome, data, st: Settings) -> Dict[str, An
         idx = batch_indices(seed, len(data["x_train"]), st.batch, 2)
         xb, yb = tf.constant(data["x_train"][idx]), tf.constant(data["y_train"][idx])
         tfenv.sync(tvars[-1], xb, yb)
+        if mode == "vars":
+            return {"model": model, "opt": opt, "step": None, "xb": xb, "yb": yb, "tvars": tvars}
 
         @tf.function(jit_compile=False)
         def step(x, y):
@@ -100,9 +103,18 @@ def _build_resident(tf, device: str, genome, data, st: Settings) -> Dict[str, An
             opt.apply_gradients(zip(tape.gradient(loss, tvars), tvars))
             return loss
 
+        if mode == "trace":
+            step.get_concrete_function(tf.TensorSpec((st.batch, st.in_dim), tf.float32), tf.TensorSpec((st.batch,), tf.float32))
+            return {"model": model, "opt": opt, "step": None, "xb": xb, "yb": yb, "tvars": tvars}
         loss = step(xb[0], yb[0])
         tfenv.sync(loss, tvars[-1])
     return {"model": model, "opt": opt, "step": step, "xb": xb, "yb": yb, "tvars": tvars}
+
+
+def _proc_fields() -> Dict[str, Any]:
+    from .lifecycle import proc_mem
+    m = proc_mem(want_footprint=True)
+    return {"uss_gb": m.get("uss_gb"), "footprint_gb": m.get("footprint_gb")}
 
 
 def _project_gb(rungs: List[Dict[str, Any]], cur_extra: float, new_params: List[int], st: Settings, tier: str, device: str) -> float:
@@ -124,12 +136,13 @@ def run_resident(ctx, extra: Dict[str, Any], rec, monitor) -> None:
     tf.get_logger().setLevel("ERROR")                    # one tf.function per resident model is intended: silence the retracing warning
     tier, headroom = extra["tier"], float(extra["headroom_gb"])
     ladder = sorted({int(n) for n in extra["ladder"] if int(n) >= 1})
-    genomes = initial_population(Point(tier, max(ladder), 1, "hetero", 1), st)
+    mode, homo = extra.get("mode", "full"), bool(extra.get("homo", False))
+    genomes = initial_population(Point(tier, max(ladder), 1, "homo" if homo else "hetero", 1), st)
     params = [params_of(g, st) for g in genomes]
     data = ctx.data
     base = monitor.baseline if monitor is not None and getattr(monitor, "baseline", None) is not None else capture_baseline()
     sw0 = swap_counters()
-    out: Dict[str, Any] = {"tier": tier, "device": device, "ladder": ladder, "headroom_gb": headroom, "rungs": [], "stopped": None,
+    out: Dict[str, Any] = {"tier": tier, "device": device, "ladder": ladder, "headroom_gb": headroom, "mode": mode, "homo": homo, "rungs": [], "stopped": None,
                            "release": None, "mean_params": float(np.mean(params)), "kind": "measured"}
     rec.data["resident"] = out
     held: List[Dict[str, Any]] = []
@@ -151,12 +164,13 @@ def run_resident(ctx, extra: Dict[str, Any], rec, monitor) -> None:
             t0 = pc()
             for i in range(n_have, target):
                 ctx.check()
-                held.append(_build_resident(tf, device, genomes[i], data, st))
+                held.append(_build_resident(tf, device, genomes[i], data, st, mode))
             build_s = pc() - t0
             t0 = pc()
-            for h in held:                                         # one more training step on EVERY resident model
-                loss = h["step"](h["xb"][1], h["yb"][1])
-            tfenv.sync(loss, held[-1]["tvars"][-1])
+            if mode == "full":
+                for h in held:                                     # one more training step on EVERY resident model
+                    loss = h["step"](h["xb"][1], h["yb"][1])
+                tfenv.sync(loss, held[-1]["tvars"][-1])
             step_s = pc() - t0
             peaks = monitor.window_peaks() if monitor is not None else {}
             s = take_sample()
@@ -166,7 +180,9 @@ def run_resident(ctx, extra: Dict[str, Any], rec, monitor) -> None:
                 "peak_extra_gb": (peaks.get("max_extra_gb") if peaks else None), "rss_gb": s.rss_gb, "avail_gb": s.avail_gb,
                 "min_avail_gb": (peaks.get("min_avail_gb") if peaks else None),
                 "swap_growth_mb": (s.swap_used_gb - sw0["used_gb"]) * 1024, "theory_gb": sum(theory_gb(p, st, tier) for p in params[:target]),
-                "build_s_added": build_s, "build_s_per_model": build_s / (target - n_have), "step_ms_per_model": 1000.0 * step_s / target,
+                **_proc_fields(),
+                "build_s_added": build_s, "build_s_per_model": build_s / (target - n_have),
+                "step_ms_per_model": (1000.0 * step_s / target) if mode == "full" else None,
                 "projected_gb": proj})
             rec.checkpoint()
     except (LimitExceeded, Exception) as e:                        # noqa: BLE001 - CellTimeout / limit: keep what was measured
@@ -184,6 +200,7 @@ def _release(out: Dict[str, Any], held: List[Dict[str, Any]], base, sw0) -> None
     peak = max([r["extra_gb"] for r in out["rungs"]] or [0.0])
     n = len(held)
     s_hold = take_sample()
+    pm_hold = _proc_fields()
     held.clear()
     s_refs = take_sample()
     t = pc()
@@ -193,7 +210,8 @@ def _release(out: Dict[str, Any], held: List[Dict[str, Any]], base, sw0) -> None
     s_gc = take_sample()
     time.sleep(2.0)
     s_late = take_sample()
-    out["release"] = {"n_released": n, "peak_extra_gb": peak, "extra_before_release_gb": extra_gb(base, s_hold),
+    pm_late = _proc_fields()
+    out["release"] = {"proc_before": pm_hold, "proc_after_3s": pm_late, "n_released": n, "peak_extra_gb": peak, "extra_before_release_gb": extra_gb(base, s_hold),
                       "extra_after_dropping_refs_gb": extra_gb(base, s_refs), "extra_after_gc_gb": extra_gb(base, s_gc),
                       "extra_after_3s_gb": extra_gb(base, s_late), "gc_s": gc_s,
                       "returned_fraction": ((peak - extra_gb(base, s_late)) / peak) if peak > 0 else None,
@@ -214,6 +232,12 @@ def fit_resident(r: Dict[str, Any]) -> Dict[str, Any]:
         pred = icpt + slope * x
         ss_res, ss_tot = float(np.sum((y - pred) ** 2)), float(np.sum((y - y.mean()) ** 2))
         theory = sum(q["theory_gb"] for q in rungs) / max(sum(q["total_params"] for q in rungs), 1)
+        uss = [q.get("uss_gb") for q in rungs]
+        if all(u is not None for u in uss):
+            res["uss_gb_per_model"] = float(np.polyfit(n, np.array(uss, float), 1)[0])
+        fp = [q.get("footprint_gb") for q in rungs]
+        if all(u is not None for u in fp):
+            res["footprint_gb_per_model"] = float(np.polyfit(n, np.array(fp, float), 1)[0])
         res.update(gb_per_param=float(slope), gb_per_model=float(slope_n), intercept_gb=float(icpt), intercept_per_model_fit_gb=float(icpt_n),
                    bytes_per_param=float(slope * GB), r2=(1 - ss_res / ss_tot) if ss_tot > 0 else None,
                    theory_bytes_per_param=float(theory * GB), overhead_factor=float(slope / theory) if theory > 0 else None)

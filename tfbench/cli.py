@@ -185,9 +185,15 @@ def build_parser(total_gb: float) -> argparse.ArgumentParser:
     sc.add_argument("--scaling-max-cell-min", type=float, default=5.0, help="time limit per configuration")
     sc.add_argument("--scaling-max-total-min", type=float, default=30.0, help="time limit for the whole scaling benchmark")
     sc.add_argument("--scaling-extend-steps", nargs="+", type=int, default=[], help="OPT-IN larger step counts tried at the best candidate")
-    sc.add_argument("--scaling-design", choices=["adaptive", "capacity"], default="adaptive",
+    sc.add_argument("--scaling-design", choices=["adaptive", "capacity", "lifecycle"], default="adaptive",
                     help="adaptive: crossover search (default). capacity: memory-capacity / concurrency design - a resident-model probe plus a FIXED grid of "
                          "--scaling-tiers x --scaling-steps x --scaling-pops for sequential, homogeneous-batched and CPU-multiprocessing strategies")
+    sc.add_argument("--lifecycle-pops", nargs="+", type=int, default=[4, 8, 16], help="lifecycle design: GPU-batched homogeneous population sizes per round")
+    sc.add_argument("--lifecycle-rounds", type=int, default=3, help="lifecycle design: identical rounds in the long-lived process (>= 3 to judge a plateau)")
+    sc.add_argument("--lifecycle-settle-s", type=float, default=3.0)
+    sc.add_argument("--lifecycle-device", choices=["gpu", "cpu"], default="gpu", help=argparse.SUPPRESS)
+    sc.add_argument("--lifecycle-skip-fresh", action="store_true", help="do not repeat every cell in a fresh process")
+    sc.add_argument("--lifecycle-skip-medium", action="store_true", help="skip the medium-tier resident-overhead probes")
     sc.add_argument("--capacity-ladder", nargs="+", type=int, default=[1, 2, 4, 8, 16, 32],
                     help="capacity design: numbers of simultaneously resident models probed (a rung is refused when its projected memory would not fit)")
     sc.add_argument("--capacity-resident-tiers", nargs="+", choices=["small", "medium", "large"], default=["large", "medium"])
@@ -248,7 +254,8 @@ def scaling_settings(args):
         max_workers=max_workers_by_memory(args.max_gb, requested=args.scaling_max_workers),
         extend_steps=tuple(args.scaling_extend_steps), skip_batched=args.scaling_skip_batched, skip_mp=args.scaling_skip_mp,
         grappler=args.grappler, quick=args.quick, design=args.scaling_design, ladder=tuple(sorted(set(args.capacity_ladder))),
-        resident_tiers=tuple(args.capacity_resident_tiers))
+        resident_tiers=tuple(args.capacity_resident_tiers), lifecycle_pops=tuple(args.lifecycle_pops), lifecycle_rounds=args.lifecycle_rounds,
+        lifecycle_fresh=not args.lifecycle_skip_fresh, lifecycle_medium=not args.lifecycle_skip_medium, lifecycle_settle_s=args.lifecycle_settle_s, lifecycle_device=args.lifecycle_device)
 
 
 def scaling_preflight(args, limits: ResourceLimits, sample) -> List[str]:
@@ -346,7 +353,10 @@ def estimate_plan(args) -> Dict[str, Any]:
     if "scaling" in args.tests:
         from .scaling.design import design_summary
         st_ = scaling_settings(args)
-        if st_.design == "capacity":
+        if st_.design == "lifecycle":
+            from .scaling.lifecycle import design_summary_lifecycle
+            plan["scaling"] = design_summary_lifecycle(st_, memory_headroom_gb(limits_from(args), take_sample()))
+        elif st_.design == "capacity":
             from .scaling.capacity import design_summary_capacity
             plan["scaling"] = design_summary_capacity(st_, memory_headroom_gb(limits_from(args), take_sample()))
         else:
@@ -391,7 +401,18 @@ def dry_run(args, limits: ResourceLimits) -> int:
     if md:
         print(f"  memdiag: {md['jobs']} processes x {md['cycles_per_job']} build/train/discard cycles")
     sc = plan.get("scaling")
-    if sc and sc.get("design") == "capacity":
+    if sc and sc.get("design") == "lifecycle":
+        lo, hi = sc["estimated_total_s_range"]
+        head = memory_headroom_gb(limits, s)
+        print(f"  scaling LIFECYCLE design: {sc['cells']} GPU-batched cells (P={sc['pops']} x {sc['rounds']} rounds) in one long-lived process, the same cells again one fresh process each, "
+              f"then medium-tier resident-overhead probes => {sc['blocks']} worker processes")
+        print(f"    estimated runtime ~{sc['estimated_total_s'] / 60:.0f} min (plausible range {lo / 60:.0f}-{hi / 60:.0f} min) | hard caps: "
+              f"{sc['per_cell_limit_s'] / 60:.0f} min per configuration, {sc['budget_s'] / 60:.0f} min total")
+        print(f"    resource exposure: worst single cell ~{sc['worst_case_cell_memory_gb']:.1f} GB (estimated); current headroom {head:.1f} GB. The long-lived sequence stops itself "
+              f"when memory held since the runtime was ready exceeds 60% of the headroom or the next cell (x1.5) would not fit; cells whose estimate x1.5 exceeds the headroom are skipped "
+              f"({len(sc['cells_over_headroom_by_estimate'])} now). Probe rungs are refused above 90% of the headroom.")
+        sc = None
+    elif sc and sc.get("design") == "capacity":
         lo, hi = sc["estimated_total_s_range"]
         head = memory_headroom_gb(limits, s)
         print(f"  scaling CAPACITY design (fixed grid, not adaptive): {sc['grid_cells']} grid cells + {sc['resident_blocks']} resident probes "
@@ -633,8 +654,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             from .scaling import report as scaling_report
             art = scaling_report.write_artifacts(out_dir, j)
             paths["scaling"] = art["summary"]
-            if art.get("capacity"):
-                paths["capacity"] = art["capacity"]
+            for k_ in ("capacity", "lifecycle"):
+                if art.get(k_):
+                    paths[k_] = art[k_]
     print("\nReports written:")
     for k, v in paths.items():
         print(f"  {k:<9} {v}")

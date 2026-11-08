@@ -16,6 +16,9 @@ def run_scaling(st: Settings, max_memory_gb: float, runner: Callable, machine: O
     if st.design == "capacity":
         from .capacity import CapacityController
         ctrl = CapacityController(st, max_memory_gb, runner, log=log, **kw)
+    elif st.design == "lifecycle":
+        from .lifecycle import LifecycleController
+        ctrl = LifecycleController(st, max_memory_gb, runner, log=log, **kw)
     else:
         ctrl = Controller(st, max_memory_gb, runner, log=log, **kw)
     interrupted: Optional[BaseException] = None
@@ -44,6 +47,10 @@ def assemble(st: Settings, ctrl: Controller, machine: Optional[Dict[str, Any]], 
             paired = []
         elif interrupted is None:
             paired = [1]
+    if st.design == "lifecycle":
+        from . import lifecycle
+        an["lifecycle"] = lifecycle.analyze_lifecycle(res, st, headroom_gb)
+        paired = [1] if (res.get("lifecycle_long") or res.get("lifecycle_variants")) else []
     if interrupted is not None:
         status, reason = "interrupted", f"{type(interrupted).__name__}: {interrupted}"
     elif paired:

@@ -64,6 +64,12 @@ class Settings:
     design: str = "adaptive"                    # adaptive (crossover search) | capacity (memory / concurrency grid + resident probe)
     ladder: Tuple[int, ...] = (1, 2, 4, 8, 16, 32)   # capacity design: numbers of simultaneously resident models probed
     resident_tiers: Tuple[str, ...] = ("large", "medium")
+    lifecycle_pops: Tuple[int, ...] = (4, 8, 16)     # lifecycle design: GPU-batched homogeneous populations, repeated per round
+    lifecycle_rounds: int = 3
+    lifecycle_fresh: bool = True                     # also run every cell in a fresh process
+    lifecycle_medium: bool = True                    # medium-tier resident-overhead variants
+    lifecycle_settle_s: float = 3.0
+    lifecycle_device: str = "gpu"                    # cpu is for testing the machinery where no GPU exists
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -71,7 +77,7 @@ class Settings:
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "Settings":
         d = dict(d)
-        for k in ("activations", "tiers", "pops", "steps", "pilot_steps", "workers", "extend_steps", "ladder", "resident_tiers"):
+        for k in ("activations", "tiers", "pops", "steps", "pilot_steps", "workers", "extend_steps", "ladder", "resident_tiers", "lifecycle_pops"):
             if k in d:
                 d[k] = tuple(d[k])
         return Settings(**d)
