@@ -293,8 +293,11 @@ def build_answers(an: Dict[str, Any], st: Settings) -> List[Dict[str, Any]]:
         txt, conf = "NOT MEASURED: no paired CPU/GPU data were collected (see incomplete configurations).", "none"
     bw = [p for p in an.get("batched_points", []) if p["verdict"] == "gpu_faster"]
     if bw:
+        seq_txt = txt
+        for a, b in (("NO,", "No,"), ("YES", "Yes"), ("POSSIBLY", "Possibly"), ("NOT MEASURED", "Not measured")):
+            seq_txt = seq_txt.replace(a, b, 1)
         txt = ("YES for the BATCHED strategy (confirmed, identical strategy GPU-batched vs CPU-batched): "
-               + "; ".join(f'{p["key"]}: {_fmt_ci(p)}' for p in bw[:4]) + ". For SEQUENTIAL evaluation: " + txt[0].lower() + txt[1:])
+               + "; ".join(f'{p["key"]}: {_fmt_ci(p)}' for p in bw[:4]) + ". For SEQUENTIAL evaluation: " + seq_txt)
         conf = "confirmed"
     ba = [b for b in an["best_available"] if b["ratio_best_gpu_over_best_cpu"] > 1.0]
     if ba:
@@ -315,9 +318,10 @@ def build_answers(an: Dict[str, Any], st: Settings) -> List[Dict[str, Any]]:
         lines.append(f"GPU reached >= {COMPETITIVE:.0%} of CPU throughput (a definition of 'competitive', not a measurement) at: " +
                      ", ".join(f'{p["key"]} ({p["ratio"]:.2f}x)' for p in comp[:6]) + ".")
     else:
-        lines.append(f"The GPU never reached {COMPETITIVE:.0%} of CPU throughput in the tested region.")
+        lines.append(f"In SEQUENTIAL evaluation the GPU never reached {COMPETITIVE:.0%} of CPU throughput in the tested region.")
     for e in cr.get("batched", {}).get("confirmed_crossings", [])[:2]:
-        lines.append(f"Confirmed crossover of the batched strategy along population size between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']}).")
+        lines.append(f"Confirmed crossover of the batched strategy along population size between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']})"
+                     + (f"; log-linear interpolation ~P={e['interpolated_x']:.2g} (rough: only two points bracket it)." if e.get("interpolated_x") else "."))
     for e in cr.get("batched", {}).get("candidate_crossings", [])[:2]:
         lines.append(f"Candidate (NOT confirmed) batched crossover along population size between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']}).")
     for e in cr["confirmed_crossings"][:2]:

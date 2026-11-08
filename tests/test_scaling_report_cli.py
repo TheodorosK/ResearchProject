@@ -195,6 +195,23 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(len(one["candidate_crossings"]), 1)
         self.assertEqual(one["gpu_faster_confirmed"], ["large/P8/S20/homo"])
 
+    def test_answer_text_is_well_formed_when_batched_wins_but_sequential_does_not(self):
+        st, job = synth_job()
+        an = A.analyze([c for c in job["data"]["controller"]["cells"]], st)
+        for a in an["answers"]:
+            self.assertNotIn("nO,", a["a"])
+        pts = [p for p in an["batched_points"] if p["ratio"] is not None]
+        fake = dict(an)
+        fake["batched_points"] = [dict(pts[0], verdict="gpu_faster", ratio=1.25, confirm={"ratio": 1.25, "lo": 1.2, "hi": 1.3, "n_num": 3, "n_den": 3})]
+        fake["seq_points"] = [dict(p, verdict="cpu_faster", ratio=0.4, explore_ratio=0.4) for p in an["seq_points"][:3]]
+        fake["crossover"] = dict(an["crossover"], gpu_faster_confirmed=[], gpu_faster_explored_only=[], cpu_faster_confirmed=["x"],
+                                 best=dict(fake["seq_points"][0], confirm={"lo": None}))
+        q1 = A.build_answers(fake, st)[0]["a"]
+        self.assertTrue(q1.startswith("YES for the BATCHED strategy"))
+        self.assertIn("No, not in the tested region", q1)
+        q2 = A.build_answers(fake, st)[1]["a"]
+        self.assertIn("In SEQUENTIAL evaluation", q2) if "never reached" in q2 else None
+
     def test_best_available_states_whether_cpu_multiprocessing_was_measured(self):
         _, job = synth_job()
         rows = job["data"]["analysis"]["best_available"]

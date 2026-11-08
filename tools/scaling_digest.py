@@ -63,7 +63,8 @@ def main(path: str) -> int:
             print(f"{p['key']:<28}explore {f(p['explore_ratio']):>6}  confirmed {conf:<22} {p['verdict']}")
         cb = cr.get("batched", {})
         for e in cb.get("confirmed_crossings", []):
-            print(f"  CONFIRMED batched crossing along population: P {e['between']} ({e['tier']}, S={e['steps']}, {e['population_mode']})")
+            print(f"  CONFIRMED batched crossing along population: P {e['between']} ({e['tier']}, S={e['steps']}, {e['population_mode']})"
+                  + (f", interpolated ~P={e['interpolated_x']:.2g} (rough)" if e.get("interpolated_x") else ""))
         for e in cb.get("candidate_crossings", []):
             print(f"  candidate (unconfirmed) batched crossing along population: P {e['between']} ({e['tier']}, S={e['steps']}, {e['population_mode']})")
     print("\n-- strategies vs sequential on the same device and workload (cross-strategy) --")

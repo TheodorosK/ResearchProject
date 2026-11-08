@@ -114,7 +114,8 @@ def markdown(job: Dict[str, Any], chart_dir: str = "charts") -> str:
         A(_table(["Point", "Exploration GPU/CPU", "Confirmed [95% CI]", "Verdict"],
                  [[p["key"], p["explore_ratio"], (f'{p["confirm"]["ratio"]:.3g} [{p["confirm"]["lo"]:.3g}, {p["confirm"]["hi"]:.3g}]' if p["confirm"].get("lo") is not None else "n/a"), p["verdict"]] for p in bp]))
     for e in cr.get("batched", {}).get("confirmed_crossings", []):
-        A(f"- **Confirmed** batched crossover along population size between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']}).")
+        A(f"- **Confirmed** batched crossover along population size between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']})"
+          + (f"; log-linear interpolation ~P={e['interpolated_x']:.2g} (rough)." if e.get("interpolated_x") else "."))
     for e in cr.get("batched", {}).get("candidate_crossings", []):
         A(f"- *Candidate, NOT confirmed*: batched GPU/CPU ratio crosses 1 between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']}).")
     for name in ("ratio_vs_steps.svg", "ratio_vs_model_size.svg", "heatmap_ratio.svg"):
