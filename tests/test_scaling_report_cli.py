@@ -184,6 +184,26 @@ class AnalysisTests(unittest.TestCase):
         q4 = next(a for a in an["answers"] if "batching" in a["q"])
         self.assertIn("GPU-batched vs CPU-batched", q4["a"])
 
+    def test_batched_crossover_along_population_is_confirmed_only_from_confirmed_neighbours(self):
+        def pt(P, ratio, verdict):
+            return {"key": f"large/P{P}/S20/homo", "tier": "large", "steps": 20, "population": P, "ratio": ratio, "verdict": verdict}
+        both = A.crossover_batched([pt(4, 0.86, "cpu_faster"), pt(8, 1.26, "gpu_faster")])
+        self.assertEqual(len(both["confirmed_crossings"]), 1)
+        self.assertEqual(both["confirmed_crossings"][0]["between"], [4, 8])
+        one = A.crossover_batched([pt(4, 0.86, "unconfirmed"), pt(8, 1.26, "gpu_faster")])       # P=4 is a single run only
+        self.assertEqual(one["confirmed_crossings"], [])
+        self.assertEqual(len(one["candidate_crossings"]), 1)
+        self.assertEqual(one["gpu_faster_confirmed"], ["large/P8/S20/homo"])
+
+    def test_best_available_states_whether_cpu_multiprocessing_was_measured(self):
+        _, job = synth_job()
+        rows = job["data"]["analysis"]["best_available"]
+        self.assertTrue(rows)
+        self.assertTrue(all("cpu_multiprocessing_measured" in r and r["cpu_strategies_measured"] for r in rows))
+        self.assertTrue(any(r["cpu_multiprocessing_measured"] for r in rows))
+        no_mp = [r for r in rows if not r["cpu_multiprocessing_measured"]]
+        self.assertTrue(no_mp)                                                                      # pilot-only points never ran mp
+
     def test_eight_questions_are_answered(self):
         _, job = synth_job()
         qs = [a["q"] for a in job["data"]["analysis"]["answers"]]

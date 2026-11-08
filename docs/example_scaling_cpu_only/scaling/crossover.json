@@ -8,7 +8,13 @@
     "gpu_faster_explored_only": [],
     "best": null,
     "n_points": 5,
-    "n_confirmed_points": 0
+    "n_confirmed_points": 0,
+    "batched": {
+      "confirmed_crossings": [],
+      "candidate_crossings": [],
+      "gpu_faster_confirmed": [],
+      "cpu_faster_confirmed": []
+    }
   },
   "answers": [
     {
@@ -23,12 +29,12 @@
     },
     {
       "q": "Which components dominate total runtime?",
-      "a": "cpu/small: per-model fixed work (construct+trace+first execution+fitness) 70%, training 7%, GA+cleanup 22.3%, unattributed 0.8%; cpu/medium: per-model fixed work (construct+trace+first execution+fitness) 79%, training 12%, GA+cleanup 8.9%, unattributed 0.7%",
+      "a": "cpu/small: per-model fixed work (construct+trace+first execution+fitness) 70%, training 7%, GA+cleanup 22.0%, unattributed 0.3%; cpu/medium: per-model fixed work (construct+trace+first execution+fitness) 79%, training 11%, GA+cleanup 9.3%, unattributed 0.2%",
       "confidence": "measured"
     },
     {
       "q": "Does GPU batching materially improve throughput?",
-      "a": "Batched vs sequential on the SAME device and workload (cross-strategy): homogeneous populations GPU n/a, CPU 2.29-3.70x (n=2); heterogeneous populations GPU n/a, CPU 1.16-1.16x (n=1); only 29% of heterogeneous individuals fell into a batchable bucket (median).",
+      "a": "Batched vs sequential on the SAME device and workload (cross-strategy): homogeneous populations GPU n/a, CPU 2.29-3.60x (n=2); heterogeneous populations GPU n/a, CPU 1.03-1.03x (n=1); only 29% of heterogeneous individuals fell into a batchable bucket (median).",
       "confidence": "confirmed"
     },
     {
@@ -48,7 +54,7 @@
     },
     {
       "q": "Which conclusions remain uncertain?",
-      "a": "only 3 independent repetitions per confirmed point (wide intervals); one machine, one session; day-to-day variance (up to ~6% on throughput in earlier baselines) is not included in the CIs; cold vs warm Metal shader cache can change first-execution cost between sessions; break-even steps are model extrapolations; synthetic regression task and small dense networks only; paired comparisons use identical genomes/data but GPU reductions are not bit-reproducible; 4 configuration(s) did not complete and 0 were skipped by the budget/limits.",
+      "a": "only 3 independent repetitions per confirmed point (wide intervals); one machine, one session; day-to-day variance (up to ~6% on throughput in earlier baselines) is not included in the CIs; cold vs warm Metal shader cache can change first-execution cost between sessions; break-even steps are model extrapolations; synthetic regression task and small dense networks only; paired comparisons use identical genomes/data but GPU reductions are not bit-reproducible; 4 configuration(s) did not complete and 3 were skipped by the budget/limits.",
       "confidence": "n/a"
     }
   ],

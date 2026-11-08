@@ -61,6 +61,11 @@ def main(path: str) -> int:
             c = p["confirm"]
             conf = f"{c['ratio']:.3g} [{c['lo']:.3g}, {c['hi']:.3g}]" if c.get("lo") is not None else "n/a"
             print(f"{p['key']:<28}explore {f(p['explore_ratio']):>6}  confirmed {conf:<22} {p['verdict']}")
+        cb = cr.get("batched", {})
+        for e in cb.get("confirmed_crossings", []):
+            print(f"  CONFIRMED batched crossing along population: P {e['between']} ({e['tier']}, S={e['steps']}, {e['population_mode']})")
+        for e in cb.get("candidate_crossings", []):
+            print(f"  candidate (unconfirmed) batched crossing along population: P {e['between']} ({e['tier']}, S={e['steps']}, {e['population_mode']})")
     print("\n-- strategies vs sequential on the same device and workload (cross-strategy) --")
     for r in an["strategies"]:
         ci = f"[{r['ci_lo']:.3g}, {r['ci_hi']:.3g}]" if r.get("ci_lo") else "n/a"
@@ -69,7 +74,7 @@ def main(path: str) -> int:
     if an["best_available"]:
         print("best strategy per device (cross-strategy, exploration):")
         for b in an["best_available"]:
-            print(f"  {b['point']} [{b.get('population_mode', '')}]: CPU {b['best_cpu']} {f(b['best_cpu_ips'])} ind/s vs GPU {b['best_gpu']} {f(b['best_gpu_ips'])} ind/s -> {f(b['ratio_best_gpu_over_best_cpu'])}x")
+            print(f"  {b['point']} [{b.get('population_mode', '')}]: CPU {b['best_cpu']} {f(b['best_cpu_ips'])} ind/s vs GPU {b['best_gpu']} {f(b['best_gpu_ips'])} ind/s -> {f(b['ratio_best_gpu_over_best_cpu'])}x" + ("" if b.get("cpu_multiprocessing_measured") else "  [CPU multiprocessing NOT measured]"))
 
     print("\n-- where the time goes (sequential, share of wall time) --")
     for c in an["components"]:

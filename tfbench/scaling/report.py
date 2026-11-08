@@ -113,6 +113,10 @@ def markdown(job: Dict[str, Any], chart_dir: str = "charts") -> str:
         A("**Batched strategy, CPU vs GPU (identical strategy, same workload):**\n")
         A(_table(["Point", "Exploration GPU/CPU", "Confirmed [95% CI]", "Verdict"],
                  [[p["key"], p["explore_ratio"], (f'{p["confirm"]["ratio"]:.3g} [{p["confirm"]["lo"]:.3g}, {p["confirm"]["hi"]:.3g}]' if p["confirm"].get("lo") is not None else "n/a"), p["verdict"]] for p in bp]))
+    for e in cr.get("batched", {}).get("confirmed_crossings", []):
+        A(f"- **Confirmed** batched crossover along population size between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']}).")
+    for e in cr.get("batched", {}).get("candidate_crossings", []):
+        A(f"- *Candidate, NOT confirmed*: batched GPU/CPU ratio crosses 1 between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']}).")
     for name in ("ratio_vs_steps.svg", "ratio_vs_model_size.svg", "heatmap_ratio.svg"):
         A(f"![{name}]({chart_dir}/{name})\n")
     A("### 11.4 Timing decomposition (sequential strategy, share of wall time)\n")
@@ -126,8 +130,8 @@ def markdown(job: Dict[str, Any], chart_dir: str = "charts") -> str:
                r["batched_member_fraction"], r["padded_ratio"], r["parallel_efficiency"], r["pool_startup_s"]] for r in an["strategies"]]))
     if an["best_available"]:
         A("**Best available strategy per device (cross-strategy, exploration data):**\n")
-        A(_table(["Point", "Pop. mode", "Best CPU", "CPU ind/s", "Best GPU", "GPU ind/s", "GPU/CPU"],
-                 [[b["point"], b.get("population_mode"), b["best_cpu"], b["best_cpu_ips"], b["best_gpu"], b["best_gpu_ips"], b["ratio_best_gpu_over_best_cpu"]] for b in an["best_available"]]))
+        A(_table(["Point", "Pop. mode", "Best CPU", "CPU ind/s", "Best GPU", "GPU ind/s", "GPU/CPU", "CPU multiprocessing measured"],
+                 [[b["point"], b.get("population_mode"), b["best_cpu"], b["best_cpu_ips"], b["best_gpu"], b["best_gpu_ips"], b["ratio_best_gpu_over_best_cpu"], b.get("cpu_multiprocessing_measured")] for b in an["best_available"]]))
     A("### 11.6 Memory\n")
     A(_table(["Strategy", "Tier", "Pop. mode", "P", "Peak additional (GB)", "Retained after cleanup (GB)", "Swap growth (MB)", "n"],
              [[m["strategy"], m["tier"], m["population_mode"], m["population"], m["peak_additional_gb"], m["retained_gb"], m["swap_growth_mb"], m["n"]] for m in an["memory"]]))

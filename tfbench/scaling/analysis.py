@@ -90,6 +90,24 @@ def crossover(points: List[Dict[str, Any]], st: Settings) -> Dict[str, Any]:
             "best": best, "n_points": len(points), "n_confirmed_points": sum(1 for p in points if p["confirm"].get("lo") is not None)}
 
 
+def crossover_batched(points: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Crossover of the BATCHED strategy (GPU-batched vs CPU-batched) along population size, per (tier, steps, population mode)."""
+    groups: Dict[Tuple[str, int, str], List[Dict[str, Any]]] = {}
+    for p in points:
+        if p["ratio"] is not None:
+            groups.setdefault((p["tier"], p["steps"], p["key"].rsplit("/", 1)[-1]), []).append(p)
+    confirmed, candidates = [], []
+    for (tier, steps, pm), items in groups.items():
+        scan = stats.crossover_scan([{"x": i["population"], "ratio": i["ratio"], "verdict": i["verdict"]}
+                                     for i in sorted(items, key=lambda i: i["population"])])
+        ctx = {"axis": "population size (batched strategy)", "tier": tier, "steps": steps, "population_mode": pm}
+        confirmed.extend({**ctx, **e} for e in scan["confirmed"])
+        candidates.extend({**ctx, **e} for e in scan["candidates"])
+    return {"confirmed_crossings": confirmed, "candidate_crossings": candidates,
+            "gpu_faster_confirmed": [p["key"] for p in points if p["verdict"] == "gpu_faster"],
+            "cpu_faster_confirmed": [p["key"] for p in points if p["verdict"] == "cpu_faster"]}
+
+
 def strategy_rows(results, st: Settings) -> List[Dict[str, Any]]:
     """Each non-sequential strategy vs the SEQUENTIAL run of the identical Point on the same device (cross-strategy)."""
     seq: Dict[Tuple[str, str], Dict[str, List[float]]] = {}
@@ -129,6 +147,11 @@ def strategy_rows(results, st: Settings) -> List[Dict[str, Any]]:
 def best_available(results) -> List[Dict[str, Any]]:
     """Best CPU strategy vs best GPU strategy per hetero Point (a CROSS-strategy comparison, labelled as such)."""
     best: Dict[str, Dict[str, Tuple[float, str]]] = {}
+    measured: Dict[str, Dict[str, set]] = {}
+    for r in results:
+        if _usable(r) and r["phase"] != "confirmation":
+            nm0 = r["strategy"]["mode"] + (str(r["strategy"]["workers"]) if r["strategy"]["mode"] == "mp" else "")
+            measured.setdefault(_key(r), {}).setdefault(r["strategy"]["device"], set()).add(nm0)
     for r in results:
         if not _usable(r) or r["phase"] == "confirmation":
             continue
@@ -142,7 +165,10 @@ def best_available(results) -> List[Dict[str, Any]]:
         if "cpu" in d and "gpu" in d:
             out.append({"point": k, "best_cpu": d["cpu"][1], "best_cpu_ips": d["cpu"][0], "best_gpu": d["gpu"][1],
                         "best_gpu_ips": d["gpu"][0], "ratio_best_gpu_over_best_cpu": d["gpu"][0] / d["cpu"][0],
-                        "population_mode": k.rsplit("/", 1)[-1], "comparison": "cross-strategy (best available on each device); exploration data"})
+                        "population_mode": k.rsplit("/", 1)[-1],
+                        "cpu_strategies_measured": sorted(measured.get(k, {}).get("cpu", [])), "gpu_strategies_measured": sorted(measured.get(k, {}).get("gpu", [])),
+                        "cpu_multiprocessing_measured": any(x.startswith("mp") for x in measured.get(k, {}).get("cpu", [])),
+                        "comparison": "cross-strategy (best available on each device); exploration data"})
     return out
 
 
@@ -225,7 +251,9 @@ def analyze(results: List[Dict[str, Any]], st: Settings, skipped: Optional[List[
     pts = seq_points(results, st)
     cross = crossover(pts, st)
     mem = memory_rows(results)
-    an = {"seq_points": pts, "crossover": cross, "batched_points": seq_points(results, st, "batched", ("hetero", "homo")), "strategies": strategy_rows(results, st), "best_available": best_available(results),
+    batched_pts = seq_points(results, st, "batched", ("hetero", "homo"))
+    cross["batched"] = crossover_batched(batched_pts)
+    an = {"seq_points": pts, "crossover": cross, "batched_points": batched_pts, "strategies": strategy_rows(results, st), "best_available": best_available(results),
           "components": components(results), "cost_model": cost_fit(results, st), "memory": mem, "memory_slopes": memory_slopes(mem),
           "incomplete": incomplete(results, skipped or [])}
     from . import scheduler
@@ -263,10 +291,18 @@ def build_answers(an: Dict[str, Any], st: Settings) -> List[Dict[str, Any]]:
         conf = "confirmed" if best["confirm"].get("lo") is not None else "unconfirmed"
     else:
         txt, conf = "NOT MEASURED: no paired CPU/GPU data were collected (see incomplete configurations).", "none"
+    bw = [p for p in an.get("batched_points", []) if p["verdict"] == "gpu_faster"]
+    if bw:
+        txt = ("YES for the BATCHED strategy (confirmed, identical strategy GPU-batched vs CPU-batched): "
+               + "; ".join(f'{p["key"]}: {_fmt_ci(p)}' for p in bw[:4]) + ". For SEQUENTIAL evaluation: " + txt[0].lower() + txt[1:])
+        conf = "confirmed"
     ba = [b for b in an["best_available"] if b["ratio_best_gpu_over_best_cpu"] > 1.0]
     if ba:
         txt += (" Cross-strategy (best available strategy on each device, exploration data): GPU ahead at "
                 + ", ".join(f'{b["point"]} ({b["best_gpu"]} vs {b["best_cpu"]}, {b["ratio_best_gpu_over_best_cpu"]:.2f}x)' for b in ba[:3]) + ".")
+        if any(not b["cpu_multiprocessing_measured"] for b in ba):
+            txt += (" CAVEAT: CPU multiprocessing was NOT measured at "
+                    + ", ".join(b["point"] for b in ba if not b["cpu_multiprocessing_measured"]) + ", so the best CPU strategy there may be faster than shown.")
     A.append({"q": "Is GPU execution faster for any tested neuroevolution configuration?", "a": txt, "confidence": conf})
 
     # 2 ------------------------------------------------------------------------------------------------------------
@@ -280,6 +316,10 @@ def build_answers(an: Dict[str, Any], st: Settings) -> List[Dict[str, Any]]:
                      ", ".join(f'{p["key"]} ({p["ratio"]:.2f}x)' for p in comp[:6]) + ".")
     else:
         lines.append(f"The GPU never reached {COMPETITIVE:.0%} of CPU throughput in the tested region.")
+    for e in cr.get("batched", {}).get("confirmed_crossings", [])[:2]:
+        lines.append(f"Confirmed crossover of the batched strategy along population size between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']}).")
+    for e in cr.get("batched", {}).get("candidate_crossings", [])[:2]:
+        lines.append(f"Candidate (NOT confirmed) batched crossover along population size between P={e['between'][0]:g} and P={e['between'][1]:g} ({e['tier']}, S={e['steps']}, {e['population_mode']}).")
     for e in cr["confirmed_crossings"][:2]:
         lines.append(f"Confirmed crossover along {e['axis']} between {e['between'][0]:g} and {e['between'][1]:g}"
                      + (f" (interpolated ~{e['interpolated_x']:.3g})" if e.get("interpolated_x") else "") + ".")

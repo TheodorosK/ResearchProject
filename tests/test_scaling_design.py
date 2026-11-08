@@ -139,7 +139,7 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(res["phase_log"]["candidates"])
 
     def test_confirmed_batched_strategy_is_paired_across_devices(self):
-        _, res, _, _ = run_synth(W.Settings(skip_mp=True))          # batching is then the best strategy gain
+        _, res, _, _ = run_synth(W.Settings(skip_mp=True, pilot_pop=4, pops=(4, 8)))   # batching is the best gain; P=8 is an adjacent size
         plan = res["phase_log"]["confirmation_plan"]
         batched_entries = [names for _, names in plan if any(n.endswith("batched") for n in names)]
         self.assertTrue(batched_entries)
@@ -148,6 +148,14 @@ class ControllerTests(unittest.TestCase):
             self.assertIn("gpu-batched", names)
         conf_batched = {r["strategy"]["device"] for r in res["cells"] if r["phase"] == "confirmation" and r["strategy"]["mode"] == "batched"}
         self.assertEqual(conf_batched, {"cpu", "gpu"})
+        pops = {r["point"]["population"] for r in res["cells"] if r["phase"] == "confirmation" and r["strategy"]["mode"] == "batched"}
+        self.assertGreaterEqual(len(pops), 2)                      # adjacent population sizes are confirmed, so a P-axis crossing can be
+
+    def test_mp_is_planned_at_the_homogeneous_point_too(self):
+        cands = [{"point": {"tier": "large", "population": 8, "steps": 20, "mode": "hetero", "generations": 3}, "key": "k", "ratio": 0.4}]
+        cells, _ = D.plan_expansion(cands, W.Settings(), [], D.CostModel(), 1e6, 6.0)
+        mp_modes = {c.point.mode for c in cells if c.strategy.mode == "mp"}
+        self.assertEqual(mp_modes, {"hetero", "homo"})
 
     def test_confirmation_uses_fresh_blocks_per_repetition_and_alternates_device_order(self):
         _, res, _, _ = run_synth()
@@ -192,7 +200,8 @@ class ControllerTests(unittest.TestCase):
     def test_quick_mode_is_small(self):
         st = W.Settings(quick=True, pilot_pop=4, pilot_steps=(1, 20), generations=2, confirm_points=1, pops=(4, 8), workers=(2,))
         ctrl, res, calls, clock = run_synth(st)
-        self.assertLess(len(res["cells"]), 45)
+        self.assertLess(len(res["cells"]), D.design_summary(st)["total_cell_runs_max"] + 1)        # never more than the announced upper bound
+        self.assertLess(len(res["cells"]), 60)
         self.assertLess(clock[0], 11 * 60)
 
 

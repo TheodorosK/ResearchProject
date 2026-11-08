@@ -22,11 +22,11 @@ gate at the start of every block refuses to report timings otherwise.
 |---|---|---|
 | Exhaustive grid (tiers x populations x steps), NOT run | 24 workload points | 48 workload points |
 | Pilot (paired CPU/GPU sequential, 1 repetition) | 12 cells | 24 cells |
-| Expansion (upper bound; cut by budget) | <= 16 cells | <= 42 cells |
-| Confirmation (upper bound; 3 independent repetitions) | <= 12 cells | <= 24 cells |
-| **Cell-runs in total (upper bound)** | **<= 40** | **<= 90** |
+| Expansion (upper bound; cut by budget) | <= 17 cells | <= 46 cells |
+| Confirmation (upper bound; 3 independent repetitions) | <= 21 cells | <= 33 cells |
+| **Cell-runs in total (upper bound)** | **<= 50** | **<= 103** |
 | Worker processes (each block = one fresh process) | <= 22 | <= 22 |
-| Typical runtime / plausible range | ~7 min / 3-13 min | ~23 min / 11-45 min |
+| Typical runtime / plausible range (measured quick run on an M1 Pro: ~5 min for 39 cells) | ~7 min / 4-15 min | ~26 min / 13-51 min |
 | Hard caps | 2.5 min per configuration, 10 min total | 5 min per configuration, 30 min total |
 | Worst-case single configuration, memory (estimated) | ~1.6 GB | ~3.6 GB (large, P=32, batched) |
 
@@ -63,11 +63,13 @@ Strategies: **cpu-seq**, **gpu-seq**, **cpu-mpW** (spawned worker processes, W i
 2. **Candidates** - the best GPU/CPU ratio, both sides of any sign change of (ratio-1) along steps or model size, then points near
    parity. If the GPU is hopeless everywhere the best point is still confirmed so a negative result is evidenced, not assumed.
 3. **Expansion** - around the candidates, in order of information value: nearest other population size, batched (heterogeneous and
-   homogeneous populations, with sequential baselines on the same workload), CPU multiprocessing, remaining sizes, larger populations,
+   homogeneous populations, with sequential baselines on the same workload), CPU multiprocessing (heterogeneous AND homogeneous
+   populations, so the best CPU strategy is known wherever batching is tested), remaining sizes, larger populations,
    and (opt-in `--scaling-extend-steps`) step counts beyond the grid.
 4. **Pruning** - a configuration is skipped when its predicted time exceeds the per-configuration limit, its estimated memory x1.5
    exceeds the headroom, an equal-or-cheaper configuration of the same strategy/tier already aborted, or the phase budget is spent.
-5. **Confirmation** - the candidates are repeated `--scaling-confirm-reps` times (default 3), each repetition in **fresh processes**
+5. **Confirmation** - the candidates (and, when batching is the best strategy gain, the batched strategy on BOTH devices at that point and at the nearest
+   other population size, so a crossover along population size can be confirmed) are repeated `--scaling-confirm-reps` times (default 3), each repetition in **fresh processes**
    with the CPU/GPU order alternated, so process state and slow drift are not shared. Only these repetitions feed confidence intervals.
 
 ## Timing decomposition (per cell, from host read-back barriers; no per-batch callbacks)
@@ -97,7 +99,7 @@ or on any limit violation, time-out or Ctrl-C.
 Throughput ratios are analysed in log space: `log r = mean(log gpu) - mean(log cpu)` with a Welch t-interval (95 %). Verdicts:
 `gpu_faster` / `cpu_faster` only when the interval **excludes parity**, `inconclusive` when it straddles 1, `unconfirmed` with fewer
 than 2 repetitions on either side. A **crossover is declared only between two adjacent confirmed points that change from cpu_faster
-to gpu_faster**; an exploration-only sign change is reported as an *unconfirmed candidate*. With `n = 3` intervals are wide - that
+to gpu_faster** (along training steps and model size for sequential evaluation, along population size for the batched strategy); an exploration-only sign change is reported as an *unconfirmed candidate*. With `n = 3` intervals are wide - that
 is reported, not hidden. A two-parameter cost model per device and tier (`fixed seconds per new model` + `seconds per step`, fitted
 to the measured components) gives an **estimated** break-even `S* = (fixed_gpu - fixed_cpu) / (step_cpu - step_gpu)`; above the tested
 range this is an extrapolation and is labelled as one.

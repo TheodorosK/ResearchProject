@@ -206,6 +206,8 @@ def plan_expansion(cands: List[Dict[str, Any]], st: Settings, results: List[Dict
             for w in st.workers:
                 if w <= st.max_workers:
                     add(2, base, Strategy("cpu", "mp", w))
+                    if not st.skip_batched:                          # best CPU strategy for a batchable (homogeneous) population
+                        add(2, Point(tier, p0, steps, "homo", st.generations), Strategy("cpu", "mp", w))
         if steps == max(st.steps) and st.extend_steps:                              # opt-in extension past the grid
             for s2 in st.extend_steps:
                 for dev in ("cpu", "gpu"):
@@ -260,7 +262,26 @@ def plan_confirmation(table: List[Dict[str, Any]], results: List[Dict[str, Any]]
                 strategies.append(other)
         if all(p.key != q.key or {s.name for s in strategies} != {s.name for s in ss} for q, ss in plan):
             plan.append((p, strategies))
+        if batched:                                   # also confirm the nearest other population size: adjacent points on the P axis
+            nb = batched_neighbor(results, p)
+            if nb is not None and all(nb.key != q.key or {s.name for s in strategies} != {s.name for s in ss} for q, ss in plan):
+                plan.append((nb, [Strategy("cpu", "batched"), Strategy("gpu", "batched")]))
     return plan
+
+
+def batched_neighbor(results: List[Dict[str, Any]], point: Point) -> Optional[Point]:
+    """Nearest other population size (same tier/steps/mode) with completed batched runs on BOTH devices."""
+    have: Dict[int, set] = {}
+    for r in results:
+        pt = r["point"]
+        if (r.get("status") == "completed" and r["strategy"]["mode"] == "batched" and pt["tier"] == point.tier and pt["steps"] == point.steps
+                and pt["mode"] == point.mode and pt["population"] != point.population and _usable(r)):
+            have.setdefault(pt["population"], set()).add(r["strategy"]["device"])
+    both = [pop for pop, devs in have.items() if devs == {"cpu", "gpu"}]
+    if not both:
+        return None
+    pop = min(both, key=lambda q: abs(q - point.population))
+    return Point(point.tier, pop, point.steps, point.mode, point.generations)
 
 
 def best_strategy_gain(results: List[Dict[str, Any]]) -> Optional[Tuple[Point, List[Strategy]]]:
@@ -295,11 +316,12 @@ def design_summary(st: Settings, cost: Optional[CostModel] = None) -> Dict[str, 
     cost = cost or CostModel()
     pilot = pilot_cells(st)
     pilot_s = sum(cost.predict(c.point, c.strategy, st) for c in pilot)
-    n_conf_points = st.confirm_points + (0 if (st.skip_batched and st.skip_mp) else 1)
-    conf_cells = n_conf_points * 2 * st.confirm_reps
+    # confirmation upper bound: crossover candidates (CPU+GPU) + one strategy-gain point (up to 3 strategies) + its neighbouring population (2)
+    conf_cells = (st.confirm_points * 2 + (0 if (st.skip_batched and st.skip_mp) else 3) + (0 if st.skip_batched else 2)) * st.confirm_reps
     typical = max(pilot, key=lambda c: cost.predict(c.point, c.strategy, st))
     # expansion: upper bound = candidates x (3 other pops x 2 devices + batched/homo 9 + P-max 4 + mp len(workers))
-    per_cand = (len(st.pops) - 1) * 2 + (0 if st.skip_batched else 13) + (0 if st.skip_mp else len(st.workers))
+    per_cand = ((len(st.pops) - 1) * 2 + (0 if st.skip_batched else 13)
+                + (0 if st.skip_mp else len(st.workers) * (1 if st.skip_batched else 2)))
     exp_cells = min(st.confirm_points, 2) * per_cand
     exp_s = 0.5 * exp_cells * (pilot_s / max(len(pilot), 1)) * 1.5
     conf_s = conf_cells * (pilot_s / max(len(pilot), 1)) * 1.2

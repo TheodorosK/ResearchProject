@@ -4,16 +4,16 @@
 
 ## 11. Neuroevolution CPU/GPU scaling and crossover
 
-**Status:** partial - no paired CPU/GPU sequential measurement was completed (unsupported: no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU silently.). Elapsed 1.2 min of a 7 min budget (per-configuration limit 2 min).
+**Status:** partial - no paired CPU/GPU sequential measurement was completed (unsupported: no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU silently.). Elapsed 0.9 min of a 7 min budget (per-configuration limit 2 min).
 
 ### 11.1 Design and coverage
 
 | Item | Value |
 |---|---|
 | Exhaustive grid (tiers x populations x steps) | 16 workload points (x strategies x repetitions - NOT run) |
-| Cell-runs executed (completed / not completed) | 17 / 4 |
-| Skipped by budget or limits | 0 |
-| Pilot / expansion / confirmation completed | 4 / 7 / 6 |
+| Cell-runs executed (completed / not completed) | 18 / 4 |
+| Skipped by budget or limits | 3 |
+| Pilot / expansion / confirmation completed | 4 / 8 / 6 |
 | Candidates carried into expansion | medium/P4/S20/hetero |
 | Worker processes started | 11 |
 | Workload | batch 128, input dim 32, G=2 generations, activations relu, tanh, seed 1234 |
@@ -32,11 +32,11 @@ NOT MEASURED: there is no paired CPU/GPU measurement, so nothing can be said abo
 
 **3. Which components dominate total runtime?** *(evidence: measured)*
 
-cpu/small: per-model fixed work (construct+trace+first execution+fitness) 70%, training 7%, GA+cleanup 22.3%, unattributed 0.8%; cpu/medium: per-model fixed work (construct+trace+first execution+fitness) 79%, training 12%, GA+cleanup 8.9%, unattributed 0.7%
+cpu/small: per-model fixed work (construct+trace+first execution+fitness) 70%, training 7%, GA+cleanup 22.0%, unattributed 0.3%; cpu/medium: per-model fixed work (construct+trace+first execution+fitness) 79%, training 11%, GA+cleanup 9.3%, unattributed 0.2%
 
 **4. Does GPU batching materially improve throughput?** *(evidence: confirmed)*
 
-Batched vs sequential on the SAME device and workload (cross-strategy): homogeneous populations GPU n/a, CPU 2.29-3.70x (n=2); heterogeneous populations GPU n/a, CPU 1.16-1.16x (n=1); only 29% of heterogeneous individuals fell into a batchable bucket (median).
+Batched vs sequential on the SAME device and workload (cross-strategy): homogeneous populations GPU n/a, CPU 2.29-3.60x (n=2); heterogeneous populations GPU n/a, CPU 1.03-1.03x (n=1); only 29% of heterogeneous individuals fell into a batchable bucket (median).
 
 **5. How does memory usage scale with population and model complexity?** *(evidence: measured)*
 
@@ -52,7 +52,7 @@ Observed on this software/hardware combination only: strict-placement kernel gap
 
 **8. Which conclusions remain uncertain?** *(evidence: n/a)*
 
-only 3 independent repetitions per confirmed point (wide intervals); one machine, one session; day-to-day variance (up to ~6% on throughput in earlier baselines) is not included in the CIs; cold vs warm Metal shader cache can change first-execution cost between sessions; break-even steps are model extrapolations; synthetic regression task and small dense networks only; paired comparisons use identical genomes/data but GPU reductions are not bit-reproducible; 4 configuration(s) did not complete and 0 were skipped by the budget/limits.
+only 3 independent repetitions per confirmed point (wide intervals); one machine, one session; day-to-day variance (up to ~6% on throughput in earlier baselines) is not included in the CIs; cold vs warm Metal shader cache can change first-execution cost between sessions; break-even steps are model extrapolations; synthetic regression task and small dense networks only; paired comparisons use identical genomes/data but GPU reductions are not bit-reproducible; 4 configuration(s) did not complete and 3 were skipped by the budget/limits.
 
 ### 11.3 Crossover analysis (identical strategy: CPU sequential vs GPU sequential)
 
@@ -75,10 +75,10 @@ only 3 independent repetitions per confirmed point (wide intervals); one machine
 
 ### 11.4 Timing decomposition (sequential strategy, share of wall time)
 
-| Device | Tier | Wall (s) | Evals | Construct | Trace | First exec | Train | Fitness | GA | Cleanup | Unattributed |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| cpu | small | 2.30 | 14 | 13.4% | 33.7% | 21.6% | 7.1% | 1.2% | 0.0% | 22.3% | 0.8% |
-| cpu | medium | 7.42 | 28 | 17.6% | 35.8% | 22.8% | 11.7% | 2.6% | 0.0% | 8.9% | 0.7% |
+| Device | Tier | Wall (s) | Evals | Construct | Trace | First exec | Train | Fitness | Teardown | GA | Cleanup | Unattributed |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cpu | small | 1.84 | 14 | 13.9% | 32.2% | 22.7% | 7.3% | 1.1% | 0.5% | 0.0% | 21.9% | 0.3% |
+| cpu | medium | 5.77 | 28 | 16.9% | 34.9% | 24.3% | 11.3% | 2.6% | 0.4% | 0.0% | 9.3% | 0.2% |
 
 Components are measured per individual with host read-back barriers; *First exec* includes graph optimisation, kernel/shader compilation and training step #1.
 
@@ -88,24 +88,26 @@ Components are measured per individual with host read-back barriers; *First exec
 
 | Point | Strategy | Pop. mode | Speed-up vs sequential | 95% CI | Evidence | Batchable members | Padding x | MP efficiency | Pool start-up (s) |
 |---|---|---|---|---|---|---|---|---|---|
-| medium/P4/S20/hetero | cpu-batched | hetero | 1.16 | n/a | exploration (1 rep) | 0.286 | 1.00 | n/a | n/a |
-| medium/P4/S20/hetero | cpu-mp2 | hetero | 1.80 | n/a | exploration (1 rep) | n/a | n/a | 0.826 | 2.35 |
+| medium/P4/S20/hetero | cpu-batched | hetero | 1.03 | n/a | exploration (1 rep) | 0.286 | 1.00 | n/a | n/a |
+| medium/P4/S20/hetero | cpu-mp2 | hetero | 1.78 | n/a | exploration (1 rep) | n/a | n/a | 0.805 | 1.90 |
 | medium/P4/S20/homo | cpu-batched | homo | 2.29 | n/a | exploration (1 rep) | 1.00 | 1.00 | n/a | n/a |
-| medium/P8/S20/homo | cpu-batched | homo | 3.70 | [3.19, 4.29] | confirmed | 1.00 | 1.00 | n/a | n/a |
+| medium/P4/S20/homo | cpu-mp2 | homo | 1.72 | n/a | exploration (1 rep) | n/a | n/a | 0.82 | 1.90 |
+| medium/P8/S20/homo | cpu-batched | homo | 3.60 | [3.08, 4.19] | confirmed | 1.00 | 1.00 | n/a | n/a |
 
 ### 11.6 Memory
 
 | Strategy | Tier | Pop. mode | P | Peak additional (GB) | Retained after cleanup (GB) | Swap growth (MB) | n |
 |---|---|---|---|---|---|---|---|
-| cpu-batched | medium | hetero | 4 | 0.00143 | 0.00566 | 0 | 1 |
-| cpu-batched | medium | homo | 4 | 0.037 | 0.0342 | 0 | 1 |
-| cpu-batched | medium | homo | 8 | 0.0776 | 0.0662 | 0 | 4 |
-| cpu-mp2 | medium | hetero | 4 | 0.0228 | 0.000103 | 0 | 1 |
-| cpu-seq | medium | hetero | 4 | 0.00943 | 0.00959 | 0 | 2 |
-| cpu-seq | medium | hetero | 8 | 0.0072 | 0.0199 | 0 | 1 |
-| cpu-seq | medium | homo | 4 | 0.00385 | 0.0164 | 0 | 1 |
-| cpu-seq | medium | homo | 8 | 0.0236 | 0.022 | 0 | 4 |
-| cpu-seq | small | hetero | 4 | 0 | 0.00128 | 0 | 2 |
+| cpu-batched | medium | hetero | 4 | 0.00167 | 0.00558 | 0 | 1 |
+| cpu-batched | medium | homo | 4 | 0.0349 | 0.0365 | 0 | 1 |
+| cpu-batched | medium | homo | 8 | 0.0757 | 0.0643 | 0 | 4 |
+| cpu-mp2 | medium | hetero | 4 | 0.02 | 5.34e-05 | 0 | 1 |
+| cpu-mp2 | medium | homo | 4 | 0.0119 | 3.81e-06 | 0 | 1 |
+| cpu-seq | medium | hetero | 4 | 0.011 | 0.00955 | 0 | 2 |
+| cpu-seq | medium | hetero | 8 | 0.00518 | 0.0193 | 0 | 1 |
+| cpu-seq | medium | homo | 4 | 0.0144 | 0.0163 | 0 | 1 |
+| cpu-seq | medium | homo | 8 | 0.0192 | 0.0217 | 0 | 4 |
+| cpu-seq | small | hetero | 4 | 0.00143 | 0.00146 | 0 | 2 |
 
 Retained = process RSS after the cell's final `gc.collect()` minus RSS before the cell; allocator caching is NOT distinguished from retention here (use `memdiag` for that).
 
@@ -119,7 +121,7 @@ Two-parameter model per device and tier (fixed seconds per new model + seconds p
 
 | Device | Held-out MAPE | Cells | Per held-out tier |
 |---|---|---|---|
-| cpu | 47.2% | 1 | small: 47% |
+| cpu | 54.8% | 1 | small: 55% |
 
 Advisor reliable (held-out error <= 30% on both devices): **False**. Few tiers means a coarse test; 'reliable' = held-out MAPE <= 30% on both devices. An unreliable advisor still reports its predictions but always with confidence 'low'. Use `python tools/recommend_device.py <report.json> --params ... --layers ... --steps ... --population ...`; it prints advice only and never switches devices.
 
@@ -132,6 +134,14 @@ Advisor reliable (held-out error <= 30% on both devices): **False**. Few tiers m
 | pilot:medium/P4/S1/hetero:gpu-seq:r0 | unsupported | unsupported: no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU silently. |
 | pilot:medium/P4/S20/hetero:gpu-seq:r0 | unsupported | unsupported: no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU silently. |
 
+Skipped before running (budget, memory estimate, pruning):
+
+| Cell | Reason |
+|---|---|
+| confirmation:medium/P8/S20/homo:gpu-batched:r0 | strategy unavailable: unsupported: no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU s |
+| confirmation:medium/P8/S20/homo:gpu-batched:r1 | strategy unavailable: unsupported: no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU s |
+| confirmation:medium/P8/S20/homo:gpu-batched:r2 | strategy unavailable: unsupported: no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU s |
+
 Unavailable strategies: `gpu-*` - unsupported: no GPU is visible to TensorFlow (is tensorflow-metal installed and compatible?). Refusing to fall back to the CPU silently.
 
 An aborted, failed, skipped or unsupported configuration is never counted as a performance measurement.
@@ -140,7 +150,7 @@ An aborted, failed, skipped or unsupported configuration is never counted as a p
 
 - For neuroevolution workloads like those tested (new model per individual, <= 50 steps), the CPU path was at least as fast; buying more GPU cores alone is not supported by this evidence for such workloads.
 - The per-model fixed cost (tracing, first execution) is the term that decides the outcome for small networks; this suite cannot tell whether a different Apple Silicon chip reduces it. Only running `tf_memory_stress_test.py --tests scaling` on that machine can.
-- CPU multiprocessing reached 1.80x over sequential CPU (cpu-mp2, efficiency 83%); if your engine can evaluate individuals in parallel, CPU core count is a relevant purchase dimension.
+- CPU multiprocessing reached 1.78x over sequential CPU (cpu-mp2, efficiency 81%); if your engine can evaluate individuals in parallel, CPU core count is a relevant purchase dimension.
 - Memory: see Q5; peak additional memory in these experiments is the measured figure to compare with candidate RAM sizes. No performance numbers are inferred for untested processors.
 - Valid only for the recorded TensorFlow / tensorflow-metal versions, `--grappler` setting, `SimpleAdam` optimizer and synthetic regression task.
 - Exploration runs are single measurements; CIs use only confirmation repetitions (small n -> wide intervals).
