@@ -224,6 +224,7 @@ class LifecycleController(Controller):
                     if self._unusable_reason(Strategy(self.st.lifecycle_device, "batched")):
                         self._skip(c, "strategy unavailable")
                         continue
+                    time.sleep(2.0)                                     # the previous process may still be returning its memory
                     s0, sw0 = take_sample(), swap_counters()
                     res = self._block("lifecycle", [c], {**base, "label": "fresh"}, "lifecycle-fresh")
                     time.sleep(2.0)                                     # let the OS reclaim the exited process
