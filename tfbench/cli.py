@@ -244,6 +244,22 @@ def scaling_settings(args):
         grappler=args.grappler, quick=args.quick)
 
 
+def scaling_preflight(args, limits: ResourceLimits, sample) -> List[str]:
+    """Refuse a scaling run that cannot make a single paired CPU/GPU comparison with the memory available RIGHT NOW."""
+    from .scaling import design as sd
+    st = scaling_settings(args)
+    head = memory_headroom_gb(limits, sample)
+    need = {}
+    for c in sd.pilot_cells(st):
+        need[c.strategy.device] = min(need.get(c.strategy.device, 1e9), sd.estimate_memory_gb(c.point, c.strategy, st) * 1.5)
+    if head >= max(need.values()):
+        return []
+    worst = max(need, key=need.get)
+    return [f"memory headroom is only {head:.1f} GB (system use {sample.sys_pct:.0f}%, {sample.avail_gb:.1f} GB available), but even the smallest "
+            f"{worst} configuration needs ~{need[worst]:.1f} GB (estimate x1.5). No paired CPU/GPU comparison would be possible. "
+            "Close other applications (browsers, IDEs, VMs) and retry; `--dry-run` shows the current headroom. Limits are never raised automatically."]
+
+
 def limits_from(args) -> ResourceLimits:
     return ResourceLimits(max_extra_gb=args.max_gb, min_avail_gb=args.min_avail_gb, max_sys_pct=args.max_sys_pct,
                           max_swap_mb=args.max_swap_mb, max_runtime_s=args.max_runtime_min * 60.0)
@@ -333,6 +349,8 @@ def dry_run(args, limits: ResourceLimits) -> int:
     errs = validate_args(args)
     s = take_sample()
     pre = preflight(limits, s)
+    if "scaling" in args.tests:
+        pre += scaling_preflight(args, limits, s)
     plan = estimate_plan(args)
     print("DRY RUN - nothing will be trained.\n")
     print(f"Tests: {', '.join(args.tests)}   (quick={args.quick}, seed={args.seed}, placement={args.placement})")
@@ -555,6 +573,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("Invalid configuration:\n  " + "\n  ".join(errs), file=sys.stderr)
         return 2
     pre = preflight(limits, take_sample())
+    if "scaling" in args.tests:
+        pre += scaling_preflight(args, limits, take_sample())
     if pre:
         print("Refusing to start - resource limits are already (nearly) violated:\n  " + "\n  ".join(pre) +
               "\nClose other applications and retry. Limits are never raised automatically.", file=sys.stderr)
@@ -590,6 +610,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("\nReports written:")
     for k, v in paths.items():
         print(f"  {k:<9} {v}")
+    for j in jobs:
+        if j.get("test") == "scaling" and j.get("data", {}).get("controller"):
+            ctl = j["data"]["controller"]
+            if ctl["skipped"] or j["status"] != "completed":
+                from collections import Counter
+                reasons = Counter(x["reason"][:90] for x in ctl["skipped"])
+                print(f"\nscaling: status {j['status']}" + (f" - {j['reason']}" if j.get("reason") else "") + f"; {len(ctl['skipped'])} configuration(s) skipped:")
+                for r, n in reasons.most_common(5):
+                    print(f"  {n:>3} x {r}")
     bad = [j for j in jobs if j.get("status") != "completed"]
     print(f"\n{len(jobs) - len(bad)}/{len(jobs)} job(s) completed." + (" Incomplete: " + ", ".join(
         f"{j['job']} ({j['status']})" for j in bad) if bad else ""))

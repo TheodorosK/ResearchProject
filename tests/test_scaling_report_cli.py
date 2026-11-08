@@ -69,6 +69,18 @@ class CliTests(unittest.TestCase):
         summary = D.design_summary(cli.scaling_settings(a))
         self.assertLess(summary["total_cell_runs_max"], summary["full_cartesian_points"] * 2 * 3 * 2)
 
+    def test_preflight_refuses_when_no_paired_comparison_can_fit(self):
+        from tfbench.limits import MemSample
+        a = args_for("--tests", "scaling", "--quick", "--grappler", "none")
+        lim = cli.limits_from(a)
+        tight = MemSample(t=0.0, avail_gb=2.6, sys_pct=77.0, swap_used_gb=0.0)            # headroom ~0.6 GB, as on the failing run
+        roomy = MemSample(t=0.0, avail_gb=9.0, sys_pct=40.0, swap_used_gb=0.0)
+        msgs = cli.scaling_preflight(a, lim, tight)
+        self.assertEqual(len(msgs), 1)
+        self.assertIn("No paired CPU/GPU comparison", msgs[0])
+        self.assertIn("never raised automatically", msgs[0])
+        self.assertEqual(cli.scaling_preflight(a, lim, roomy), [])
+
     def test_dry_run_rejects_gpu_multiprocess(self):
         a = args_for("--tests", "scaling", "--dry-run", "--scaling-allow-gpu-multiprocess")
         with redirect_stdout(io.StringIO()):
