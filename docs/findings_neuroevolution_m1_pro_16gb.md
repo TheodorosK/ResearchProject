@@ -67,10 +67,31 @@ headroom (3.1 GB at best) and were skipped, not run.
 * Small and medium tiers are unchanged (GPU/CPU 0.16-0.21): compute per step is negligible there. Heterogeneous batching stays ~1.0x (28.6 % batchable).
 * Caveats: one quick run; CPU multiprocessing was skipped twice for memory headroom; batch sizes above 512 were not tested.
 
-## 6. What this does and does not support
-* **Supported:** for sequential evaluation of freshly built networks (<= 50 steps, <= ~4M parameters, batch 128) the CPU is faster, confirmed (up to ~2.6x at S=20, ~1.5x at S=50 large).
-  The GPU wins only when a homogeneous population is evaluated as one batch (1.25-1.73x vs the CPU's batched strategy, P >= 8), and approaches parity in sequential mode near ~200 steps.
-* **Engine design hypotheses (not tested):** ~80 % of GPU time at low step counts is per-model overhead, so amortising it (batching, reusing traced functions, keeping models resident)
+## 6. Sequential evaluation at batch 512 with extended steps (run `...T192046Z`; large tier, P=4, heterogeneous, G=3)
+GPU/CPU individuals per second, 3 independent repetitions each (95% CI):
+
+| Steps | CPU ind/s | GPU ind/s | GPU/CPU | Verdict |
+|---|---|---|---|---|
+| 20 | 1.43 | 0.97 | 0.673 [0.659, 0.687] | CPU faster |
+| 50 | 0.631 | 0.762 | **1.22 [1.17, 1.27]** | **GPU faster** |
+| 100 | 0.375 | 0.541 | 1.44 (single run) | unconfirmed |
+| 200 | 0.176 | 0.363 | **2.05 [2.01, 2.09]** | **GPU faster** |
+
+* **Confirmed sequential crossover along training steps between S=20 and S=50 (interpolated ~S=37)** at batch 512.
+* The cost model fitted on the earlier batch-512 quick run predicted break-even ~39 steps and ratios of ~1.15 / 1.6 / 2.0 at S=50 / 100 / 200; measured 1.22 / 1.44 / 2.05 (within ~10 %).
+  The new fit (GPU ~0.79 s per model + 10.2 ms/step; CPU ~0.16 s + 27.4 ms/step) gives a break-even of 37 steps. This validates the model for THIS tier only.
+* Time split (S up to 200): GPU first execution 28 %, training 52 %, teardown 10 %; CPU training 92 %. The per-step advantage (27.4 / 10.2 ms) is ~2.7x.
+* Small and medium tiers at batch 512 (quick run, S <= 20): GPU/CPU 0.16-0.21; the fitted GPU per-step cost is not lower than the CPU's there, so the model predicts no crossover at any step count
+  (a model reading, not a confirmed measurement).
+* Caveats: one tier, one population size, one batch size; CPU multiprocessing not measured at batch 512; batches above 512 untested.
+
+## 7. What this does and does not support
+* **Supported:** at batch 128 the CPU is faster for sequential evaluation (confirmed up to ~2.6x at S=20, ~1.5x at S=50 for the large tier) and the sequential GPU only reaches parity near ~200 steps;
+  the GPU wins at batch 128 only when a homogeneous population is evaluated as one batch (1.25-1.73x vs the CPU's batched strategy, P >= 8).
+  **At batch 512 the large tier flips: GPU sequential is confirmed faster from ~37 steps (1.22x at S=50, 2.05x at S=200)** and the batched crossover moves below P=4.
+  Whether the GPU wins is therefore decided by compute per step (network size x batch) and steps per individual, with per-model overhead (~0.6 s on the GPU) as the cost to amortise.
+* **Engine design:** the measured rule of thumb for this machine is: GPU when (large networks AND batch >= 512 AND >= ~40 steps/individual) or a homogeneous population can be batched; CPU for small/medium networks, short training, or heterogeneous topologies at batch <= 128.
+  Hypotheses (not tested): ~80 % of GPU time at low step counts is per-model overhead, so amortising it (batching, reusing traced functions, keeping models resident)
   is the lever; random topologies defeat batching (20-29 % coverage), grouping individuals by architecture is the obvious way to create batchable buckets.
 * **Hardware decision:** which engine design you build decides whether GPU capability matters (batched homogeneous) or CPU speed does (heterogeneous sequential). This suite cannot predict
   other chips; run the identical commands on the candidate Mac with the same versions and compare with `tools/compare_reports.py`.
