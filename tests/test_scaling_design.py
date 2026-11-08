@@ -139,7 +139,7 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(res["phase_log"]["candidates"])
 
     def test_confirmed_batched_strategy_is_paired_across_devices(self):
-        _, res, _, _ = run_synth()
+        _, res, _, _ = run_synth(W.Settings(skip_mp=True))          # batching is then the best strategy gain
         plan = res["phase_log"]["confirmation_plan"]
         batched_entries = [names for _, names in plan if any(n.endswith("batched") for n in names)]
         self.assertTrue(batched_entries)
