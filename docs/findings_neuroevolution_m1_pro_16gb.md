@@ -2,7 +2,7 @@
 
 **Provenance.** Numbers are copied from `tools/scaling_digest.py` output produced on the machine itself, in runs on 2026-11-08:
 four `--quick` runs (`...T070051Z`, `T131936Z`, `T132922Z`, `T134011Z`), one full run (`T135128Z`), one targeted step-extension run
-(`T141617Z`), a batch-512 quick run (`T191017Z`), a batch-512 extended-steps run (`T192046Z`) and a batch-1024 extended-steps run (`T194917Z`). Raw reports stay in `bench_results/` on that Mac (git-ignored). Nothing here is extrapolated to other hardware.
+(`T141617Z`), a batch-512 quick run (`T191017Z`), a batch-512 extended-steps run (`T192046Z`) a batch-1024 extended-steps run (`T194917Z`) and a memory-capacity/concurrency run (`T210559Z`). Raw reports stay in `bench_results/` on that Mac (git-ignored). Nothing here is extrapolated to other hardware.
 
 **Setup.** TensorFlow 2.15.1, tensorflow-metal 1.2.0, macOS 27.0.1, `--grappler none` (required: the default graph optimizer breaks the GPU),
 `SimpleAdam`, strict GPU placement, batch 128, input dim 32, synthetic regression, activations relu/tanh, seed 1234, G=3 generations (quick runs G=2,
@@ -108,7 +108,37 @@ GPU/CPU individuals per second, 3 independent repetitions per confirmed point (9
   Not memory-bound: peak extra memory is ~0.6 GB. This is an inference from timings, not a profiler result; the per-step GPU cost was not decomposed further.
 * **Not done / limitations:** one tier (large), one population size (4), heterogeneous sequential only; CPU multiprocessing and batched strategies were not run; S=100 is a single exploration run; batches above 1024 and S<20 untested; no other machine measured; the break-even is below or near the shortest step count tested (20).
 
-## 8. What this does and does not support
+## 8. Memory capacity and concurrency (run `...T210559Z`; `--scaling-design capacity`; large tier, S=20, G=2, batch 128, single runs, no CIs)
+Run status: completed in 5.8 min of 20; planning headroom **4.3 GB** (the 80 % system-use ceiling with macOS and background apps using ~9.6 GB of 16 GB; limits not raised); no aborts, **0 MB swap growth anywhere**.
+Skipped (never counted as measurements): GPU-batched P=32 (projected 3.25 GB from max(closed-form estimate, probe slope), x1.5 margin > 4.3 GB) and all four CPU 4-worker cells (estimated 3.1 GB x1.5 > 4.3 GB).
+
+**Resident-model probe (MEASURED; models built and kept alive, 1..32; additional system memory):**
+| | 1 | 4 | 8 | 16 | 32 | fit (CALCULATED) |
+|---|---|---|---|---|---|---|
+| GPU large (78.5 M params at 32) | 0.60 GB | 0.85 | 0.96 | 1.11 | 1.57 | 0.67 GB fixed + 28 MB/model (12.4 B/param) |
+| CPU large | 0.11 | 0.11 | 0.36 | 0.62 | 0.96 | 0.07 GB fixed + 29 MB/model (12.6 B/param) |
+| GPU medium (2.9 M params at 32) | 0.23 | 0.48 | 0.90 | 1.59 | 2.87 | ~85 MB/model (~990 B/param) |
+| CPU medium | 0.00 | 0.00 | 0.13 | 0.13 | 0.39 | ~13 MB/model |
+* Large-tier resident memory is **weights + two Adam moments = 12 B/parameter** (the 16 B/param theory additionally counts the transient gradient). 32 resident large models cost 1.6 GB on the GPU and 1.0 GB on the CPU.
+* **Unexplained:** GPU medium-tier models cost ~85 MB each although their parameters are ~0.1 M (0.4 MB of weights+state): per-model framework state (graph, buffers) seems to dominate for small networks on the GPU, yet the large tier does not show a larger per-model cost. This contradiction is not resolved; the fitted GPU medium figure must not be used for projections until repeated.
+* **Release:** after dropping 32 models and `gc`, the system got back 46 % (GPU large), 0 % (CPU large), and nothing (GPU medium: 2.9 GB still held). Process memory is not reliably returned to macOS; reuse inside the same process was not tested.
+
+**Strategy grid (MEASURED):**
+| P | GPU-seq | CPU-seq | GPU-batched | CPU-batched | CPU mp2 |
+|---|---|---|---|---|---|
+| 4 | 0.98 | 2.49 | 2.34 | 2.77 | 1.66 |
+| 8 | 1.21 | 3.00 | 3.79 | 2.99 | 2.44 |
+| 16 | 1.21 | 3.11 | 4.88 | 3.07 | 2.90 |
+| 32 | 1.11 | 2.98 | skipped | 3.07 | 2.64 |
+(individuals per second; GPU-batched/CPU-batched = 0.84, 1.27, 1.59 at P=4, 8, 16, the first two reproducing the earlier 0.87 and 1.25 within the earlier CIs.)
+* **Sequential population size is not resident memory:** peak additional memory of the sequential strategies was 0.12-0.53 GB for every P (the P=4 value contains first-use runtime start-up), i.e. one model alive at a time whatever P is; throughput is flat in P once start-up is amortised. Batched keeps P models alive: CPU-batched peaked at 0.42 / 0.28 / 0.84 / 1.97 GB for P=4/8/16/32; GPU-batched 0.98 / 1.17 / 1.77 GB for P=4/8/16.
+* **GPU-batched memory accumulated across cells of one process:** it held 0.98 / 1.17 / 1.13 GB after the P=4/8/16 cells (retained, system-wide) and minimum available memory fell 7.92 -> 6.75 -> 4.98 GB, i.e. about 3.9 GB were consumed cumulatively although every cell's own peak was <= 1.8 GB. Per-cell peaks therefore understate the footprint of a long-lived GPU process (an inference from these three cells; repeat needed). This is why P=32 was not run, and it argues for fresh processes per batch/generation in an engine.
+* **Compute:** CPU-batched and CPU-sequential plateau at ~3.0 ind/s from P=8 (compute-bound, 1.00-1.03x of sequential); CPU mp2 (1 thread/worker) never beats sequential (0.67-0.93x); GPU-batched was **still rising at the largest tested P** (x1.29 for 8->16), i.e. not saturated at 16 resident models. P=32 on the GPU was not measured.
+* **Framework overhead and construction:** GPU sequential spends 78-80 % of wall time in fixed per-model cost (construct+trace+first execution+teardown) vs 37-40 % on the CPU; building a model costs 0.6-0.9 s (GPU) vs 0.12-0.26 s (CPU). Sequential retained system memory was small (<= ~0.5 GB per cell; ~8 MB per evaluation on the GPU, ~2 MB on the CPU at P=32).
+
+**What this does and does not say about memory capacity.** No configuration that ran needed more than 2 GB for a single cell (3.9 GB cumulative in one GPU-batched process); the workload as tested is far below 16 GB. The configurations that could not be run were skipped because of the headroom of this machine under its normal load (4.3 GB) with a 1.5x safety margin, not because they were measured to exceed 16 GB (the estimate for the largest skipped cell is ~3.3 GB). The calculated resident capacity (large tier, 12.4 B/param) is ~190 models per 6 GB of free memory; this is a linear extrapolation of the probe that excludes the unexplained small-model GPU overhead and is not a measurement.
+
+## 9. What this does and does not support
 * **Supported:** at batch 128 the CPU is faster for sequential evaluation (confirmed up to ~2.6x at S=20, ~1.5x at S=50 for the large tier) and the sequential GPU only reaches parity near ~200 steps;
   the GPU wins at batch 128 only when a homogeneous population is evaluated as one batch (1.25-1.73x vs the CPU's batched strategy, P >= 8).
   **At batch 512 the large tier flips: GPU sequential is confirmed faster from ~37 steps (1.22x at S=50, 2.05x at S=200)** and the batched crossover moves below P=4. At batch 1024 the GPU is confirmed faster at S=50 (1.67x) and S=200 (2.46x) and at parity at S=20 (0.96x); estimated break-even ~22 steps.
@@ -116,11 +146,12 @@ GPU/CPU individuals per second, 3 independent repetitions per confirmed point (9
 * **Engine design:** the measured rule of thumb for this machine is: GPU when (large networks AND batch >= 512 AND >= ~40 steps/individual) or a homogeneous population can be batched; CPU for small/medium networks, short training, or heterogeneous topologies at batch <= 128.
   Hypotheses (not tested): ~80 % of GPU time at low step counts is per-model overhead, so amortising it (batching, reusing traced functions, keeping models resident)
   is the lever; random topologies defeat batching (20-29 % coverage), grouping individuals by architecture is the obvious way to create batchable buckets.
-* **Hardware decision (what the 512/1024 data say):** (a) Memory: every sequential configuration peaked at ~0.6 GB additional on a 16 GB machine with zero swap; the largest measured peak anywhere was ~1.8 GB (batched P=8). Nothing measured here shows
+* **Hardware decision (batch 512/1024 and capacity data):** (a) Memory: every sequential configuration peaked at ~0.6 GB additional on a 16 GB machine with zero swap; the largest measured peak anywhere was ~1.8 GB (batched P=8). Nothing measured here shows
   memory capacity limiting the workload, so these results give **no evidence that 48, 64 or 96 GB would speed up this workload**; larger populations held concurrently (not measured: P=32 batched and 4-worker runs were skipped for headroom) could change that and should be measured before buying for memory.
   (b) Processor: GPU per-step time did not respond to a 2x batch increase, i.e. the sequential GPU path is not compute-limited at these sizes, so extra GPU cores alone are not supported as a benefit for this path by the data; whether a Max-class chip helps depends on engine design
   (large batched/compute-heavy work vs per-step overhead, which depends on single-thread CPU speed and the framework), which is untested. These are readings of M1 Pro measurements only; no newer chip was measured and none is inferred.
 * **Hardware decision:** which engine design you build decides whether GPU capability matters (batched homogeneous) or CPU speed does (heterogeneous sequential). This suite cannot predict
   other chips; run the identical commands on the candidate Mac with the same versions and compare with `tools/compare_reports.py`.
+* **Not measured (capacity run):** GPU-batched P=32 and CPU 4-worker multiprocessing (skipped for headroom); repeats/CIs for any capacity cell; the small-model GPU memory overhead (unexplained); whether process memory is reused after release; concurrent CPU+GPU use of memory; tiers other than large in the strategy grid.
 * **Not measured:** batch sizes other than 128, 512 and 1024 (larger than 1024 untested; at 1024 only the large tier, P=4, sequential, and no S below 20), populations above 8 for
   batching, medium/small tiers in batched mode, steps above 50 for other tiers, day-to-day variance beyond the repeats above.

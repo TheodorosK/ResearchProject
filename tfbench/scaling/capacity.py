@@ -323,7 +323,7 @@ def _row(c: Dict[str, Any]) -> Dict[str, Any]:
     ev = c.get("evaluations") or 0
     return {"strategy": name, "tier": p["tier"], "population": p["population"], "steps": p["steps"], "mode": p["mode"], "status": c["status"],
             "reason": c.get("reason", ""), "ips": c.get("ips"), "wall_s": c.get("wall_s"), "evaluations": ev,
-            "peak_additional_gb": c.get("peak_additional_gb"), "retained_rss_gb": c.get("retained_gb"),
+            "peak_additional_gb": c.get("peak_additional_gb"), "peak_extra_block_gb": c.get("peak_extra_gb_abs"), "retained_rss_gb": c.get("retained_gb"),
             "retained_sys_gb": c.get("retained_sys_gb"), "swap_growth_mb": c.get("swap_growth_mb"), "min_avail_gb": c.get("min_avail_gb"),
             "fixed_share": ((sum(comps.get(k, 0.0) or 0.0 for k in ("construct", "trace", "first_exec", "teardown")) / wall)
                             if (wall and s["mode"] == "seq") else None),
@@ -443,13 +443,13 @@ def markdown(cap: Dict[str, Any], st: Settings, status: str, elapsed_s: float, s
                      f'{_f(r["extra_after_3s_gb"])} | {_f(r["returned_fraction"], 2)} |')
     L += ["", "## 2. Strategy grid (MEASURED): population size vs resident memory and throughput", "",
           "Sequential strategies keep ONE model alive at a time, whatever P is; batched keeps P alive together; multiprocessing keeps one per worker.", "",
-          "| strategy | tier | P | S | status | ind/s | vs seq (same device) | wall s | peak additional GB | retained GB (RSS) | retained GB (system) | swap MB | min avail GB |", "|" + "---|" * 13]
+          "| strategy | tier | P | S | status | ind/s | vs seq (same device) | wall s | peak additional GB | peak vs block start GB | retained GB (RSS) | retained GB (system) | swap MB | min avail GB |", "|" + "---|" * 14]
     for r in cap["table"]:
         if r["status"] == "completed":
             L.append(f'| {r["strategy"]} | {r["tier"]} | {r["population"]} | {r["steps"]} | ok | {_f(r["ips"])} | {_f(r.get("vs_seq_same_device"), 2, "x")} | {_f(r["wall_s"], 1)} | '
-                     f'{_f(r["peak_additional_gb"])} | {_f(r["retained_rss_gb"], 3)} | {_f(r["retained_sys_gb"], 3)} | {_f(r["swap_growth_mb"], 0)} | {_f(r["min_avail_gb"])} |')
+                     f'{_f(r["peak_additional_gb"])} | {_f(r.get("peak_extra_block_gb"))} | {_f(r["retained_rss_gb"], 3)} | {_f(r["retained_sys_gb"], 3)} | {_f(r["swap_growth_mb"], 0)} | {_f(r["min_avail_gb"])} |')
         else:
-            L.append(f'| {r["strategy"]} | {r["tier"]} | {r["population"]} | {r["steps"]} | **{r["status"]}** | - | - | - | - | - | - | - | {r.get("reason", "")[:110]} |')
+            L.append(f'| {r["strategy"]} | {r["tier"]} | {r["population"]} | {r["steps"]} | **{r["status"]}** | - | - | - | - | - | - | - | - | {r.get("reason", "")[:110]} |')
     rd = cap["readings"]
     c = rd["memory_capacity"]
     L += ["", "## 3. What limits the workload? (indicators; thresholds stated, not verdicts)", "",
