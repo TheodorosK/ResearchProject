@@ -51,12 +51,28 @@ No swap growth anywhere. The same cell (GPU-batched, large, P=8, homogeneous) us
 session-dependent to support a scaling law; an earlier "~0.2 GB per individual" estimate was withdrawn. P=32 batched cells and 4-worker multiprocessing did not fit the available
 headroom (3.1 GB at best) and were skipped, not run.
 
-## 5. What this does and does not support
+## 5. Batch size (one quick run at `--scaling-batch 512`, run `...T191017Z`; G=2, pilot P=4; compare with the batch-128 quick runs above)
+| Measurement (large tier, S=20, P=4) | Batch 128 | Batch 512 |
+|---|---|---|
+| Sequential GPU/CPU (conf.) | 0.394 [0.391, 0.398], 0.400 [0.395, 0.405] | **0.666 [0.646, 0.687]** |
+| Sequential CPU / GPU individuals per second | 2.47 / 0.99 | 1.47 / 0.98 |
+| Batched homogeneous GPU/CPU (conf.) | 0.871 [0.841, 0.902] (CPU faster) | **1.70 [1.65, 1.75]** (GPU faster) |
+| GPU-batched vs GPU-sequential (conf.) | 2.0-2.2x | 1.91x [1.86, 1.95] |
+| CPU-batched vs CPU-sequential | 1.14-1.20x | 0.97x |
+| Fitted per-step cost, GPU / CPU (estimated) | 8.2-9.1 ms / 10.0-11.8 ms | 9.6 ms / 25.9 ms |
+
+* GPU throughput did not change when the batch quadrupled (per-step cost 8.7 -> 9.6 ms) while the CPU's per-step cost grew 2.2x: at these batch sizes the GPU is **overhead-bound**, not compute-bound.
+* Larger batches therefore help the GPU relative to the CPU: the sequential per-step advantage rose from ~1.3x to ~2.7x, and the batched crossover along population size moved below P=4.
+* The fitted model now gives a sequential break-even of ~39 steps for the large tier at batch 512 (ESTIMATED; the run only reached S=20, so this is an extrapolation to be tested).
+* Small and medium tiers are unchanged (GPU/CPU 0.16-0.21): compute per step is negligible there. Heterogeneous batching stays ~1.0x (28.6 % batchable).
+* Caveats: one quick run; CPU multiprocessing was skipped twice for memory headroom; batch sizes above 512 were not tested.
+
+## 6. What this does and does not support
 * **Supported:** for sequential evaluation of freshly built networks (<= 50 steps, <= ~4M parameters, batch 128) the CPU is faster, confirmed (up to ~2.6x at S=20, ~1.5x at S=50 large).
   The GPU wins only when a homogeneous population is evaluated as one batch (1.25-1.73x vs the CPU's batched strategy, P >= 8), and approaches parity in sequential mode near ~200 steps.
 * **Engine design hypotheses (not tested):** ~80 % of GPU time at low step counts is per-model overhead, so amortising it (batching, reusing traced functions, keeping models resident)
   is the lever; random topologies defeat batching (20-29 % coverage), grouping individuals by architecture is the obvious way to create batchable buckets.
 * **Hardware decision:** which engine design you build decides whether GPU capability matters (batched homogeneous) or CPU speed does (heterogeneous sequential). This suite cannot predict
   other chips; run the identical commands on the candidate Mac with the same versions and compare with `tools/compare_reports.py`.
-* **Not measured:** batch sizes other than 128 (the GPU's per-step efficiency is far below the earlier large-batch benchmark, so this is the most important open axis), populations above 8 for
+* **Not measured:** batch sizes other than 128 and 512 (larger batches than 512, and the sequential break-even at batch 512, are untested), populations above 8 for
   batching, medium/small tiers in batched mode, steps above 50 for other tiers, day-to-day variance beyond the repeats above.
