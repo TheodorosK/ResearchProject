@@ -20,7 +20,10 @@ SETTING_KEYS = ["quick", "seed", "placement", "grappler", "optimizer", "perf_mod
                 "perf_warmup", "perf_repeats", "perf_width", "perf_depth", "perf_pool", "ne_pop", "ne_generations",
                 "ne_elite", "ne_epochs", "ne_batch", "ne_train_n", "ne_val_n", "ne_test_n", "ne_in_dim",
                 "ne_max_layers", "ne_max_units", "ne_activations", "ne_workers", "ne_cleanup", "ne_inherit_weights",
-                "memdiag_cycles", "memdiag_policies", "memdiag_devices"]
+                "memdiag_cycles", "memdiag_policies", "memdiag_devices",
+                "scaling_batch", "scaling_tiers", "scaling_pops", "scaling_steps", "scaling_pilot_steps", "scaling_pilot_pop",
+                "scaling_generations", "scaling_confirm_reps", "scaling_confirm_points", "scaling_activations", "scaling_in_dim",
+                "scaling_train_n", "scaling_val_n", "scaling_workers", "scaling_extend_steps", "scaling_skip_batched", "scaling_skip_mp"]
 # Metrics that were observed to swing far more than throughput between two sessions on the same machine (one repeat, M1 Pro):
 # compile time x3.7 (cold vs warm shader cache?), per-generation memory growth up to x5, peak memory up to 26 %, CV +-30 %.
 # They get a wide band so noise is not reported as "better"/"worse". PROVISIONAL: widen/narrow with your own repeats.

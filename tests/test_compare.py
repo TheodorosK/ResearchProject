@@ -76,6 +76,13 @@ class CompareTests(unittest.TestCase):
         self.assertIn("first_execution_s", compare.VOLATILE)
         self.assertNotIn("steady_samples_per_s", compare.VOLATILE)
 
+    def test_scaling_batch_size_difference_is_flagged(self):
+        a, b = make_report(9.0), make_report(9.0)
+        a["config"]["scaling_batch"], b["config"]["scaling_batch"] = 128, 512
+        out = self.run_compare(a, b)
+        self.assertIn("scaling_batch", out)
+        self.assertIn("NOT meaningful", out)
+
     def test_needs_two_reports(self):
         with self.assertRaises(SystemExit):
             compare.main(["only_one.json"])
