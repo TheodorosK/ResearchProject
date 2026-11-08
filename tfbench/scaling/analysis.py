@@ -282,8 +282,12 @@ def build_answers(an: Dict[str, Any], st: Settings) -> List[Dict[str, Any]]:
         txt = "YES (confirmed): GPU sequential execution was faster than CPU sequential at " + "; ".join(f'{p["key"]}: {_fmt_ci(p)}' for p in ps[:4]) + "."
         conf = "confirmed"
     elif cr["gpu_faster_explored_only"]:
-        txt = ("POSSIBLY: exploration runs show GPU > CPU at " + ", ".join(cr["gpu_faster_explored_only"][:4]) +
-               ", but these were not confirmed with independent repetitions, so no claim is made.")
+        parts = []
+        for p in [p for p in pts if p["key"] in cr["gpu_faster_explored_only"]][:4]:
+            c = p["confirm"]
+            parts.append(f'{p["key"]}: {_fmt_ci(p)} - the confidence interval includes parity, so the repeated measurement is inconclusive'
+                         if c.get("lo") is not None else f'{p["key"]}: a single exploration run only')
+        txt = ("POSSIBLY (parity reached; NOT confirmed as a GPU win): " + "; ".join(parts) + ". No claim is made that the GPU is faster.")
         conf = "unconfirmed"
     elif best:
         txt = (f"NO, not in the tested region. The best GPU/CPU throughput ratio was {_fmt_ci(best)} at {best['key']}; "

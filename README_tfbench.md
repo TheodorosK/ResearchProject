@@ -212,7 +212,7 @@ represent every model; FLOP and pre-run memory numbers are estimates.
 
 ## Baseline results
 
-`docs/baseline_m1_pro_16gb.md` records the two-day baseline of the author's M1 Pro / 16 GB (settings, results, spread, caveats).
+`docs/findings_neuroevolution_m1_pro_16gb.md` collects the CPU/GPU neuroevolution evidence from six runs; `docs/baseline_m1_pro_16gb.md` records the two-day baseline of the author's M1 Pro / 16 GB (settings, results, spread, caveats).
 
 ## Comparing machines later
 

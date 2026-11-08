@@ -212,6 +212,18 @@ class AnalysisTests(unittest.TestCase):
         q2 = A.build_answers(fake, st)[1]["a"]
         self.assertIn("In SEQUENTIAL evaluation", q2) if "never reached" in q2 else None
 
+    def test_parity_with_an_interval_that_includes_one_is_not_called_a_win_nor_unrepeated(self):
+        st, job = synth_job()
+        an = A.analyze(job["data"]["controller"]["cells"], st)
+        pt = dict(an["seq_points"][0], key="large/P8/S200/hetero", verdict="inconclusive", ratio=1.04, explore_ratio=1.05,
+                  confirm={"ratio": 1.04, "lo": 0.999, "hi": 1.08, "n_num": 3, "n_den": 3})
+        fake = dict(an, seq_points=[pt], batched_points=[])
+        fake["crossover"] = dict(an["crossover"], gpu_faster_confirmed=[], cpu_faster_confirmed=[], gpu_faster_explored_only=["large/P8/S200/hetero"], best=pt)
+        q1 = A.build_answers(fake, st)[0]["a"]
+        self.assertIn("includes parity", q1)
+        self.assertIn("No claim is made that the GPU is faster", q1)
+        self.assertNotIn("not confirmed with independent repetitions", q1)
+
     def test_best_available_states_whether_cpu_multiprocessing_was_measured(self):
         _, job = synth_job()
         rows = job["data"]["analysis"]["best_available"]
