@@ -252,6 +252,12 @@ def plan_confirmation(table: List[Dict[str, Any]], results: List[Dict[str, Any]]
     gain = best_strategy_gain(results)
     if gain is not None:
         p, strategies = gain
+        strategies = list(strategies)
+        batched = [s for s in strategies if s.mode == "batched"]
+        if batched:                                   # also confirm the OTHER device's batched run: an identical-strategy pair
+            other = Strategy("cpu" if batched[0].device == "gpu" else "gpu", "batched")
+            if other.name not in {s.name for s in strategies}:
+                strategies.append(other)
         if all(p.key != q.key or {s.name for s in strategies} != {s.name for s in ss} for q, ss in plan):
             plan.append((p, strategies))
     return plan

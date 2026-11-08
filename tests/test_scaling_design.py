@@ -138,6 +138,17 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(res["status"], "completed")
         self.assertTrue(res["phase_log"]["candidates"])
 
+    def test_confirmed_batched_strategy_is_paired_across_devices(self):
+        _, res, _, _ = run_synth()
+        plan = res["phase_log"]["confirmation_plan"]
+        batched_entries = [names for _, names in plan if any(n.endswith("batched") for n in names)]
+        self.assertTrue(batched_entries)
+        for names in batched_entries:
+            self.assertIn("cpu-batched", names)                   # identical-strategy pair, so the device ratio gets a CI
+            self.assertIn("gpu-batched", names)
+        conf_batched = {r["strategy"]["device"] for r in res["cells"] if r["phase"] == "confirmation" and r["strategy"]["mode"] == "batched"}
+        self.assertEqual(conf_batched, {"cpu", "gpu"})
+
     def test_confirmation_uses_fresh_blocks_per_repetition_and_alternates_device_order(self):
         _, res, _, _ = run_synth()
         conf = [b for b in res["blocks"] if b["phase"] == "confirmation"]
