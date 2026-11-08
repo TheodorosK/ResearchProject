@@ -13,7 +13,7 @@ from . import design as D
 from . import stats
 from .workload import TIER_ORDER, Point, Settings, point_param_stats
 
-COMP_ORDER = ("construct", "trace", "first_exec", "train", "fitness", "ga", "cleanup", "unattributed")
+COMP_ORDER = ("construct", "trace", "first_exec", "train", "fitness", "teardown", "ga", "cleanup", "unattributed")
 COMPETITIVE = 0.5          # "competitive" = GPU reaches at least half of the CPU throughput (definition, not a measurement)
 
 
@@ -29,20 +29,22 @@ def _usable(r: Dict[str, Any]) -> bool:
     return D._usable(r)
 
 
-def _ips_lists(results, phases: Tuple[str, ...], mode: str = "seq", pop_mode: str = "hetero") -> Dict[str, Dict[str, List[float]]]:
+def _ips_lists(results, phases: Tuple[str, ...], mode: str = "seq", pop_modes: Tuple[str, ...] = ("hetero",)) -> Dict[str, Dict[str, List[float]]]:
     out: Dict[str, Dict[str, List[float]]] = {}
     for r in results:
-        if r["phase"] in phases and _usable(r) and r["strategy"]["mode"] == mode and r["point"]["mode"] == pop_mode:
+        if r["phase"] in phases and _usable(r) and r["strategy"]["mode"] == mode and r["point"]["mode"] in pop_modes:
             out.setdefault(_key(r), {"cpu": [], "gpu": []})[r["strategy"]["device"]].append(r["ips"])
     return out
 
 
-def seq_points(results, st: Settings) -> List[Dict[str, Any]]:
-    explore = _ips_lists(results, ("pilot", "expansion"))
-    conf = _ips_lists(results, ("confirmation",))
+def seq_points(results, st: Settings, mode: str = "seq", pop_modes: Tuple[str, ...] = ("hetero",)) -> List[Dict[str, Any]]:
+    """CPU vs GPU for ONE identical strategy (``mode``) on identical workloads."""
+    explore = _ips_lists(results, ("pilot", "expansion"), mode, pop_modes)
+    conf = _ips_lists(results, ("confirmation",), mode, pop_modes)
     cells = {}
     for r in results:
         cells[_key(r)] = r["point"]
+    explore = {k: v for k, v in explore.items() if k in cells}
     out = []
     for key in sorted(set(explore) | set(conf), key=lambda k: (TIER_ORDER.index(cells[k]["tier"]), cells[k]["population"], cells[k]["steps"])):
         p = cells[key]
@@ -128,7 +130,7 @@ def best_available(results) -> List[Dict[str, Any]]:
     """Best CPU strategy vs best GPU strategy per hetero Point (a CROSS-strategy comparison, labelled as such)."""
     best: Dict[str, Dict[str, Tuple[float, str]]] = {}
     for r in results:
-        if not _usable(r) or r["point"]["mode"] != "hetero" or r["phase"] == "confirmation":
+        if not _usable(r) or r["phase"] == "confirmation":
             continue
         k, d = _key(r), r["strategy"]["device"]
         nm = r["strategy"]["mode"] + (str(r["strategy"]["workers"]) if r["strategy"]["mode"] == "mp" else "")
@@ -140,7 +142,7 @@ def best_available(results) -> List[Dict[str, Any]]:
         if "cpu" in d and "gpu" in d:
             out.append({"point": k, "best_cpu": d["cpu"][1], "best_cpu_ips": d["cpu"][0], "best_gpu": d["gpu"][1],
                         "best_gpu_ips": d["gpu"][0], "ratio_best_gpu_over_best_cpu": d["gpu"][0] / d["cpu"][0],
-                        "comparison": "cross-strategy (best available on each device); exploration data"})
+                        "population_mode": k.rsplit("/", 1)[-1], "comparison": "cross-strategy (best available on each device); exploration data"})
     return out
 
 
@@ -223,7 +225,7 @@ def analyze(results: List[Dict[str, Any]], st: Settings, skipped: Optional[List[
     pts = seq_points(results, st)
     cross = crossover(pts, st)
     mem = memory_rows(results)
-    an = {"seq_points": pts, "crossover": cross, "strategies": strategy_rows(results, st), "best_available": best_available(results),
+    an = {"seq_points": pts, "crossover": cross, "batched_points": seq_points(results, st, "batched", ("hetero", "homo")), "strategies": strategy_rows(results, st), "best_available": best_available(results),
           "components": components(results), "cost_model": cost_fit(results, st), "memory": mem, "memory_slopes": memory_slopes(mem),
           "incomplete": incomplete(results, skipped or [])}
     from . import scheduler
@@ -312,6 +314,10 @@ def build_answers(an: Dict[str, Any], st: Settings) -> List[Dict[str, Any]]:
                f"{rng([r for r in hom if r['device'] == 'gpu'])}, CPU {rng([r for r in hom if r['device'] == 'cpu'])}; heterogeneous populations "
                f"GPU {rng([r for r in het if r['device'] == 'gpu'])}, CPU {rng([r for r in het if r['device'] == 'cpu'])}"
                + (f"; only {cov:.0%} of heterogeneous individuals fell into a batchable bucket (median)." if cov is not None else "."))
+        bp = [p for p in an.get("batched_points", []) if p["ratio"] is not None]
+        if bp:
+            txt += (" Identical-strategy comparison, GPU-batched vs CPU-batched (GPU/CPU throughput): "
+                    + "; ".join(f'{p["key"]}: {_fmt_ci(p)}' for p in bp[:4]) + ".")
         conf = "confirmed" if any(r["evidence"] == "confirmed" for r in batched) else "unconfirmed"
     else:
         txt, conf = "NOT MEASURED in this run (batched strategy not scheduled or not completed).", "none"

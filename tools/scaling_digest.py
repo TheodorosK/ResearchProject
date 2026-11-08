@@ -54,6 +54,13 @@ def main(path: str) -> int:
     for e in cr["candidate_crossings"]:
         print(f"  candidate (unconfirmed) along {e['axis']}: {e['between']}")
 
+    bp = [p for p in an.get("batched_points", []) if p["ratio"] is not None]
+    if bp:
+        print("\n-- batched CPU vs GPU (identical strategy; ratio = GPU/CPU) --")
+        for p in bp:
+            c = p["confirm"]
+            conf = f"{c['ratio']:.3g} [{c['lo']:.3g}, {c['hi']:.3g}]" if c.get("lo") is not None else "n/a"
+            print(f"{p['key']:<28}explore {f(p['explore_ratio']):>6}  confirmed {conf:<22} {p['verdict']}")
     print("\n-- strategies vs sequential on the same device and workload (cross-strategy) --")
     for r in an["strategies"]:
         ci = f"[{r['ci_lo']:.3g}, {r['ci_hi']:.3g}]" if r.get("ci_lo") else "n/a"
@@ -62,13 +69,13 @@ def main(path: str) -> int:
     if an["best_available"]:
         print("best strategy per device (cross-strategy, exploration):")
         for b in an["best_available"]:
-            print(f"  {b['point']}: CPU {b['best_cpu']} {f(b['best_cpu_ips'])} ind/s vs GPU {b['best_gpu']} {f(b['best_gpu_ips'])} ind/s -> {f(b['ratio_best_gpu_over_best_cpu'])}x")
+            print(f"  {b['point']} [{b.get('population_mode', '')}]: CPU {b['best_cpu']} {f(b['best_cpu_ips'])} ind/s vs GPU {b['best_gpu']} {f(b['best_gpu_ips'])} ind/s -> {f(b['ratio_best_gpu_over_best_cpu'])}x")
 
     print("\n-- where the time goes (sequential, share of wall time) --")
     for c in an["components"]:
         s = c["share"]
         print(f"{c['device']}/{c['tier']:<7} construct {s['construct']:.0%} trace {s['trace']:.0%} first_exec {s['first_exec']:.0%} train {s['train']:.0%} "
-              f"fitness {s['fitness']:.0%} ga {s['ga']:.1%} cleanup {s['cleanup']:.1%} other {s['unattributed']:.1%} (wall {c['wall_s']:.0f}s, {c['evaluations']} evals)")
+              f"fitness {s['fitness']:.0%} teardown {s.get('teardown', 0):.0%} ga {s['ga']:.1%} cleanup {s['cleanup']:.1%} other {s['unattributed']:.1%} (wall {c['wall_s']:.0f}s, {c['evaluations']} evals)")
     print("\n-- cost model (ESTIMATED) --")
     for t, b in an["cost_model"]["break_even"].items():
         be = f"{b['break_even_steps']:.0f} steps" if b["break_even_steps"] else (b["reason_none"] or "n/a")

@@ -73,7 +73,7 @@ class CostModel:
             if step is not None:
                 d["step"].append(step)
             d["fixed_raw"] = d.get("fixed_raw", [])
-            d["fixed_raw"].append((c["construct"] + c["trace"] + c["first_exec"] + c["fitness"]) / e)
+            d["fixed_raw"].append((c["construct"] + c["trace"] + c["first_exec"] + c["fitness"] + c.get("teardown", 0.0)) / e)
         for key, d in acc.items():
             if d["step"] and d.get("fixed_raw"):
                 step = stats.median_cv(d["step"])["median"]

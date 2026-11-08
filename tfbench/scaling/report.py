@@ -13,7 +13,7 @@ from .workload import TIER_ORDER, Point, Settings, point_param_stats
 
 CELL_COLUMNS = ["cell_id", "phase", "rep", "tier", "population", "population_mode", "steps", "generations", "strategy", "device",
                 "placement", "status", "reason", "evaluations", "failed_evaluations", "wall_s", "ips", "steps_per_s", "train_steps_per_s",
-                "construct_s", "trace_s", "first_exec_s", "train_s", "fitness_s", "ga_s", "cleanup_s", "unattributed_s",
+                "construct_s", "trace_s", "first_exec_s", "train_s", "fitness_s", "teardown_s", "ga_s", "cleanup_s", "unattributed_s",
                 "peak_additional_gb", "swap_growth_mb", "retained_gb", "batched_member_fraction", "padded_ratio_mean",
                 "best_val_r2", "signature"]
 
@@ -27,7 +27,7 @@ def cells_csv(cells: List[Dict[str, Any]]) -> str:
         row = {**r, "tier": p["tier"], "population": p["population"], "population_mode": p["mode"], "steps": p["steps"],
                "generations": p["generations"], "device": s["device"],
                "strategy": f'{s["device"]}-{s["mode"]}' + (str(s["workers"]) if s["mode"] == "mp" else "")}
-        for k in ("construct", "trace", "first_exec", "train", "fitness", "ga", "cleanup", "unattributed"):
+        for k in ("construct", "trace", "first_exec", "train", "fitness", "teardown", "ga", "cleanup", "unattributed"):
             row[f"{k}_s"] = (r.get("comps") or {}).get(k)
         w.writerow(row)
     return buf.getvalue()
@@ -108,10 +108,15 @@ def markdown(job: Dict[str, Any], chart_dir: str = "charts") -> str:
     for e in cr["candidate_crossings"]:
         A(f"- *Candidate, NOT confirmed*: ratio crosses 1 along {e['axis']} between {e['between'][0]:g} and {e['between'][1]:g}.")
     A("")
+    bp = [p for p in an.get("batched_points", []) if p["ratio"] is not None]
+    if bp:
+        A("**Batched strategy, CPU vs GPU (identical strategy, same workload):**\n")
+        A(_table(["Point", "Exploration GPU/CPU", "Confirmed [95% CI]", "Verdict"],
+                 [[p["key"], p["explore_ratio"], (f'{p["confirm"]["ratio"]:.3g} [{p["confirm"]["lo"]:.3g}, {p["confirm"]["hi"]:.3g}]' if p["confirm"].get("lo") is not None else "n/a"), p["verdict"]] for p in bp]))
     for name in ("ratio_vs_steps.svg", "ratio_vs_model_size.svg", "heatmap_ratio.svg"):
         A(f"![{name}]({chart_dir}/{name})\n")
     A("### 11.4 Timing decomposition (sequential strategy, share of wall time)\n")
-    A(_table(["Device", "Tier", "Wall (s)", "Evals", "Construct", "Trace", "First exec", "Train", "Fitness", "GA", "Cleanup", "Unattributed"],
+    A(_table(["Device", "Tier", "Wall (s)", "Evals", "Construct", "Trace", "First exec", "Train", "Fitness", "Teardown", "GA", "Cleanup", "Unattributed"],
              [[c["device"], c["tier"], c["wall_s"], c["evaluations"]] + [f'{c["share"][k]:.1%}' for k in COMP_ORDER] for c in an["components"]]))
     A("Components are measured per individual with host read-back barriers; *First exec* includes graph optimisation, kernel/shader compilation and training step #1.\n")
     A(f"![time_components.svg]({chart_dir}/time_components.svg)\n")
@@ -121,8 +126,8 @@ def markdown(job: Dict[str, Any], chart_dir: str = "charts") -> str:
                r["batched_member_fraction"], r["padded_ratio"], r["parallel_efficiency"], r["pool_startup_s"]] for r in an["strategies"]]))
     if an["best_available"]:
         A("**Best available strategy per device (cross-strategy, exploration data):**\n")
-        A(_table(["Point", "Best CPU", "CPU ind/s", "Best GPU", "GPU ind/s", "GPU/CPU"],
-                 [[b["point"], b["best_cpu"], b["best_cpu_ips"], b["best_gpu"], b["best_gpu_ips"], b["ratio_best_gpu_over_best_cpu"]] for b in an["best_available"]]))
+        A(_table(["Point", "Pop. mode", "Best CPU", "CPU ind/s", "Best GPU", "GPU ind/s", "GPU/CPU"],
+                 [[b["point"], b.get("population_mode"), b["best_cpu"], b["best_cpu_ips"], b["best_gpu"], b["best_gpu_ips"], b["ratio_best_gpu_over_best_cpu"]] for b in an["best_available"]]))
     A("### 11.6 Memory\n")
     A(_table(["Strategy", "Tier", "Pop. mode", "P", "Peak additional (GB)", "Retained after cleanup (GB)", "Swap growth (MB)", "n"],
              [[m["strategy"], m["tier"], m["population_mode"], m["population"], m["peak_additional_gb"], m["retained_gb"], m["swap_growth_mb"], m["n"]] for m in an["memory"]]))

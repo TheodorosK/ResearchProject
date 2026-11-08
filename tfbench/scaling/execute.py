@@ -6,6 +6,7 @@ Per-individual timing components (seconds, each closed by a host read-back barri
   first_exec  first call: graph optimisation, kernel / shader compilation, dispatch warm-up, and training step #1
   train       training steps 2..S  (0 when S == 1)
   fitness     validation forward pass + host-side R2
+  teardown    dropping the model / optimiser / function / device buffers at the end of the evaluation
 plus, per cell: ga (selection / crossover / mutation), cleanup (gc.collect) and unattributed (loop overhead).
 The training budget is exactly S optimiser steps per individual, so S=1 has no ``train`` component.
 """
@@ -30,7 +31,7 @@ from .workload import (Cell, Point, Settings, Strategy, batch_indices, bucket_ge
                        individual_seed, initial_population, make_space, padding_overhead, params_of, workload_signature)
 
 pc = time.perf_counter
-COMP_KEYS = ("construct", "trace", "first_exec", "train", "fitness")
+COMP_KEYS = ("construct", "trace", "first_exec", "train", "fitness", "teardown")
 
 
 class CellTimeout(Exception):
@@ -47,7 +48,7 @@ def eval_individual(tf, device: str, genome: G.Genome, data: Dict[str, np.ndarra
     comps = _zero_comps()
     res: Dict[str, Any] = {"uid": genome.uid, "status": "ok", "error": "", "val_r2": None, "comps": comps,
                            "params": params_of(genome, st), "batched": False, "bucket_size": 1}
-    model = None
+    model = opt = step = xb = yb = tvars = loss = pred = None
     try:
         with tfenv.device_scope(tf, device):
             t = pc()
@@ -93,7 +94,9 @@ def eval_individual(tf, device: str, genome: G.Genome, data: Dict[str, np.ndarra
             raise
         res["status"], res["error"] = "failed", f"{type(e).__name__}: {str(e)[:160]}"
     finally:
-        del model
+        t = pc()
+        model = opt = step = xb = yb = tvars = loss = pred = None       # release references (device buffers, traced function)
+        comps["teardown"] = pc() - t
     return res
 
 
@@ -142,6 +145,7 @@ def eval_bucket_batched(tf, device: str, genomes: List[G.Genome], data: Dict[str
     n = len(data["x_train"])
     results = [{"uid": g.uid, "status": "ok", "error": "", "val_r2": None, "params": params_of(g, st), "batched": True,
                 "bucket_size": P, "padded_ratio": padding_overhead(genomes, st.in_dim)} for g in genomes]
+    Wv = bv = masks = tvars = opt = xbt = ybt = step = forward = loss = pred = None
     try:
         t = pc()
         W_np = [np.zeros((P, in_d[l], out_d[l]), np.float32) for l in range(depth + 1)]
@@ -216,6 +220,10 @@ def eval_bucket_batched(tf, device: str, genomes: List[G.Genome], data: Dict[str
             raise
         for r in results:
             r["status"], r["error"] = "failed", f"{type(e).__name__}: {str(e)[:160]}"
+    finally:
+        t = pc()
+        Wv = bv = masks = tvars = opt = xbt = ybt = step = forward = loss = pred = None
+        comps["teardown"] = pc() - t
     share = {k: v / P for k, v in comps.items()}                      # bucket cost is shared equally by its members
     for r in results:
         r["comps"] = dict(share)

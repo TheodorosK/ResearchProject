@@ -31,7 +31,7 @@ def _cell_features(r: Dict[str, Any], st: Settings) -> Optional[Dict[str, float]
         return None
     c, e, s = r["comps"], r["evaluations"], r["point"]["steps"]
     step = c["train"] / (e * (s - 1))
-    fixed = max(0.0, (c["construct"] + c["trace"] + c["first_exec"] + c["fitness"]) / e - step)
+    fixed = max(0.0, (c["construct"] + c["trace"] + c["first_exec"] + c["fitness"] + c.get("teardown", 0.0)) / e - step)
     ps = point_param_stats(Point(**r["point"]), st)
     return {"device": r["strategy"]["device"], "tier": r["point"]["tier"], "layers": ps["layers_mean"], "params": ps["mean"],
             "steps": s, "fixed": fixed, "step": step, "work": ps["mean"] * st.batch}

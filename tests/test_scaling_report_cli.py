@@ -172,6 +172,18 @@ class AnalysisTests(unittest.TestCase):
         mp = next(r for r in rows if r["strategy"].startswith("cpu-mp"))
         self.assertAlmostEqual(mp["speedup_vs_sequential"], int(mp["strategy"][-1]) * 0.75, delta=0.4)
 
+    def test_batched_cpu_vs_gpu_is_an_identical_strategy_pair_and_best_available_covers_homogeneous(self):
+        _, job = synth_job()
+        an = job["data"]["analysis"]
+        paired = [p for p in an["batched_points"] if p["ratio"] is not None]      # points run on only one device have no ratio
+        self.assertTrue(paired)
+        self.assertTrue(all(p["ratio"] > 0 for p in paired))
+        self.assertTrue(any(p["key"].endswith("/homo") for p in paired))
+        self.assertTrue(any(b["population_mode"] == "homo" for b in an["best_available"]))
+        self.assertIn("Batched strategy, CPU vs GPU", SR.markdown(job))
+        q4 = next(a for a in an["answers"] if "batching" in a["q"])
+        self.assertIn("GPU-batched vs CPU-batched", q4["a"])
+
     def test_eight_questions_are_answered(self):
         _, job = synth_job()
         qs = [a["q"] for a in job["data"]["analysis"]["answers"]]

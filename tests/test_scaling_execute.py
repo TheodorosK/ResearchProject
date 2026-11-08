@@ -60,8 +60,9 @@ class ExecuteTests(unittest.TestCase):
         c = r["comps"]
         self.assertAlmostEqual(sum(v for v in c.values() if v is not None), r["wall_s"], delta=0.02 * r["wall_s"] + 1e-3)
         self.assertGreaterEqual(c["unattributed"], -1e-3)
-        for k in ("construct", "trace", "first_exec", "train", "fitness"):
+        for k in ("construct", "trace", "first_exec", "train", "fitness", "teardown"):
             self.assertGreaterEqual(c[k], 0.0)
+        self.assertIn("teardown", c)
         self.assertAlmostEqual(r["ips"], r["evaluations"] / r["wall_s"])
 
     def test_single_step_budget_has_no_train_component(self):
