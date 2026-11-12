@@ -515,7 +515,7 @@ async function renderSearch(view, params) {
   const title = params.get("title");
   $("#top-search-input").value = title ? "" : q;
   const filters = new URLSearchParams();
-  for (const k of ["year_from", "year_to", "folder_id", "sort", "like", "dislike", "colors"]) if (params.get(k)) filters.set(k, params.get(k));
+  for (const k of ["year_from", "year_to", "folder_id", "sort", "like", "dislike", "colors", "deep"]) if (params.get(k)) filters.set(k, params.get(k));
   const head = h(`<div class="search-head fade-in">
       <div class="search-top"><h1 class="search-title">${title ? `${esc(title)}` : q ? `<q>${esc(q)}</q>` : "By colour"}</h1><div class="row-actions"></div></div>
       <div class="filters"></div>
@@ -574,6 +574,35 @@ async function renderSearch(view, params) {
     pinBtn.onclick = () => api("/api/searches/pin", { method: "POST", body: { query: q, pinned: !pinBtn.dataset.on } })
       .then((list) => paint(list.some((x) => x.pinned && x.query === q))).catch(fail);
     $(".row-actions", head).append(pinBtn);
+  }
+  if (q && res.items.length > 1) {
+    // Closer look: a vision-language model rates only the top few results (slow, so on request).
+    api("/api/settings").then((st) => {
+      if (!st.rerank?.enabled) return;
+      const n = Math.min(st.rerank.top, res.items.length);
+      const btn = h(`<button class="btn small" title="A slower model looks at the top ${n} photos one by one and re-orders them">✨ ${res.deep ? "Look again" : "Look closer"}</button>`);
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          const { job_id, total } = await api("/api/search/rerank", { method: "POST", body: { q, ids: res.items.slice(0, n).map((i) => i.id) } });
+          for (;;) {
+            const j = await api(`/api/jobs/${job_id}`);
+            if (j.state === "failed") throw new Error(j.error);
+            if (j.state === "done") break;
+            btn.textContent = `Looking… ${j.done}/${total}`;
+            await new Promise((r) => setTimeout(r, 600));
+          }
+          const p = new URLSearchParams(params);
+          if (p.get("deep")) route(); else { p.set("deep", "1"); go(`#/search?${p}`); }
+        } catch (e) { fail(e); btn.disabled = false; btn.textContent = "✨ Look closer"; }
+      };
+      $(".row-actions", head).append(btn);
+    }).catch(() => {});
+  }
+  if (res.deep) {
+    const note = h(`<span class="chip" title="Show the usual order">✨ Top ${res.deep} re-ordered by a closer look ✕</span>`);
+    note.onclick = () => setParam("deep", "");
+    f.append(note);
   }
 
   results.innerHTML = "";
@@ -1220,7 +1249,26 @@ async function settingsPanels(settings) {
     const body = key === "device" ? { device: inp.checked ? "auto" : "cpu" } : { [key]: inp.checked };
     try { await api("/api/settings", { method: "PUT", body }); toast("Saved"); } catch (e) { fail(e); inp.checked = !inp.checked; }
   }));
-  wrap.append(lanPanel, sys);
+  // Closer look (vision-language re-ranking of the top results)
+  const deep = h('<div class="panel fade-in"></div>');
+  const drawDeep = async () => {
+    const st = await api("/api/rerank").catch(() => ({ enabled: false, url: "", model: "", top: 12, detail: "" }));
+    deep.innerHTML = `<h2>✨ Closer look</h2>
+      <p class="muted" style="margin:0 0 12px">Optional. A vision-language model running on this computer (for example Qwen2.5-VL in <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>) looks at the top results of a search one by one when you press <strong>Look closer</strong>, and re-orders them. Slower (seconds per photo), but it reads the whole scene: who is doing what, where, in what light. Indexing is not affected.</p>
+      <label class="switch"><input type="checkbox" data-d="rerank" ${st.enabled ? "checked" : ""}> <span>${st.enabled ? "On" : "Off"}</span></label>
+      ${st.enabled ? `<p style="margin:12px 0 8px">${st.available ? "✅ Ready" : "⚠️ " + esc(st.detail)}</p>
+      <div class="setting"><div><strong>Model</strong><p class="muted">With Ollama: <code>ollama pull ${esc(st.model)}</code></p></div><input class="input" data-d="rerank_model" value="${esc(st.model)}" style="width:190px"></div>
+      <div class="setting"><div><strong>Model server</strong><p class="muted">Any OpenAI-compatible address (Ollama, LM Studio, llama.cpp).</p></div><input class="input" data-d="rerank_url" value="${esc(st.url)}" style="width:250px"></div>
+      <div class="setting"><div><strong>Photos to look at</strong><p class="muted">More is slower. Each one is rated once per search and remembered.</p></div><input class="input" type="number" min="1" max="40" data-d="rerank_top" value="${st.top}" style="width:80px"></div>` : ""}`;
+    $$("[data-d]", deep).forEach((inp) => (inp.onchange = async () => {
+      const k = inp.dataset.d;
+      const v = k === "rerank" ? inp.checked : k === "rerank_top" ? Math.max(1, Math.min(40, parseInt(inp.value, 10) || 12)) : inp.value.trim();
+      try { await api("/api/settings", { method: "PUT", body: { [k]: v } }); } catch (e) { fail(e); }
+      drawDeep();
+    }));
+  };
+  await drawDeep();
+  wrap.append(lanPanel, sys, deep);
   return wrap;
 }
 
