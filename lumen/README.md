@@ -76,6 +76,41 @@ there (📌), or ✕ to forget it. Only searches you submit are saved, not Explo
 Results come in *Spot on*, *Strong* and *Possible* tiers. *Best looking first* sorts each tier by
 photo quality. Videos are searched frame by frame: a match opens at the moment that fits.
 
+## A closer look (optional)
+
+Lumen's image model sees a photo as one overall impression, so "a dog on the beach" can put any
+dog first. With **Closer look** switched on (*Sources → Closer look*), a **✨ Look closer** button
+appears on search results. It has a vision-language model look at the top 12 photos one by one,
+rate how well each fits your words, and re-order them. The chip *Top 12 re-ordered* undoes it.
+
+- It only ever looks at the top results of a search you press it on. Indexing is not affected.
+- Each rating is remembered, so the same search is instant the next time.
+- The model runs in a separate program on your computer. The simplest is [Ollama](https://ollama.com):
+  install it, then run `ollama pull qwen2.5vl:7b` (about 6 GB; `qwen2.5vl:3b` is lighter). LM Studio
+  and llama.cpp's `llama-server` work too: any OpenAI-compatible address can be set in the panel.
+- Expect seconds per photo. `python tools/bench_speed.py --closer-look` measures it on your computer.
+
+## Measuring it on your own photos
+
+Two small tools in `tools/` tell you how Lumen does on *your* library and *your* computer.
+
+**How good are the results?** Write the searches you care about and the photo you'd want first:
+
+```
+# my-searches.txt
+a dog on the beach => IMG_2887.jpeg
+golden hour => R0005726.JPG, IMG_3657.jpeg
+```
+
+With Lumen running, `python tools/score_searches.py my-searches.txt` prints where each expected
+photo landed and a summary (how often first, in the top 5, top 10). Add `--deep` to score the closer
+look as well, and `--compare scores-earlier.json` to see what a change did. Twenty to thirty searches
+give a number you can trust.
+
+**How fast is it?** `python tools/bench_speed.py` times each model on the GPU/Neural Engine and on
+the CPU: photos per second, the time to index 10,000 photos, and how long a search takes. Use
+`--folder` to time it on your own photos.
+
 ## Everything else
 
 - **Memories.** Lumen cuts your library into events and joins days away from home into trips:
@@ -184,6 +219,7 @@ query ──▶ who / where / when / "text" / #tags taken out as filters
 | `marks.py` | favourites, ratings, tags, XMP sidecars |
 | `share.py`, `jobs.py` | web gallery and H.264 slideshow export; background jobs |
 | `lan.py` | phone access: second listener, PIN (PBKDF2), signed session cookies, rate limiting |
+| `rerank.py`, `history.py` | the closer look (vision-language re-ranking of the top results); remembered searches |
 | `watcher.py`, `autostart.py`, `tray.py` | live folder watching, start with the computer, tray icon |
 | `server.py`, `static/` | FastAPI JSON API (localhost only, unless phone access is on) and the no-build UI |
 
