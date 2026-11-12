@@ -61,12 +61,11 @@ def status():
     return s
 
 
-def _image(photo_id: int) -> str:
-    with Image.open(preview_path(photo_id)) as im:
-        im = im.convert("RGB")
-        im.thumbnail((IMAGE_SIDE, IMAGE_SIDE))
-        buf = io.BytesIO()
-        im.save(buf, "JPEG", quality=85)
+def _data_url(im: Image.Image) -> str:
+    im = im.convert("RGB")
+    im.thumbnail((IMAGE_SIDE, IMAGE_SIDE))
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=85)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
@@ -80,12 +79,18 @@ def parse_score(text: str):
 
 
 def score_photo(photo_id: int, query: str, cfg) -> float | None:
+    with Image.open(preview_path(photo_id)) as im:
+        return score_image(im, query, cfg)
+
+
+def score_image(im: Image.Image, query: str, cfg) -> float | None:
+    """Ask the model to rate one picture against the search. cfg needs "url" and "model"."""
     body = {
         "model": cfg["model"], "temperature": 0, "max_tokens": 8,
         "messages": [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": _image(photo_id)}},
+                {"type": "image_url", "image_url": {"url": _data_url(im)}},
                 {"type": "text", "text": PROMPT.format(q=query.replace('"', "'"))},
             ]},
         ],
