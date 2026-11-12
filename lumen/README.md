@@ -89,6 +89,10 @@ rate how well each fits your words, and re-order them. The chip *Top 12 re-order
   install it, then run `ollama pull qwen2.5vl:7b` (about 6 GB; `qwen2.5vl:3b` is lighter). LM Studio
   and llama.cpp's `llama-server` work too: any OpenAI-compatible address can be set in the panel.
 - Expect seconds per photo. `python tools/bench_speed.py --closer-look` measures it on your computer.
+- Measured with Qwen2.5-VL-7B (Q4) on Flickr captions, top 5 of the base model: of 15 searches where
+  the right photo was in the top 5 but not first, it moved 10 to first place; of 15 already right, it
+  kept 14. The 3B model was not better than no closer look (it fixed 2 and broke 2 of 30). A small
+  sample, on a CPU, served by llama.cpp rather than Ollama.
 
 ## Measuring it on your own photos
 
