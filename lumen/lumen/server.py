@@ -1,5 +1,6 @@
 """HTTP API and static UI. Binds to localhost only: your photos stay on your machine."""
 import io
+import re
 import os
 import platform
 import string
@@ -17,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import autostart, config, db, describe, duplicates, history, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, search
+from . import autostart, config, db, describe, duplicates, history, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, rerank, search
 from .indexer import delete_photos, preview_path, switch_model, watcher, worker
 from .vectors import index
 
@@ -190,6 +191,7 @@ def get_settings():
         "device_setting": db.get_setting("device") or "auto",
         "accelerators": [label for provider, label in embedder.ACCELERATORS if provider in _providers()],
         "autostart": autostart.is_enabled(),
+        "rerank": rerank.settings(),
     }
 
 
@@ -202,11 +204,18 @@ def _providers():
         return []
 
 
+RERANK_MAX_TOP = rerank.MAX_TOP      # (SettingsIn has a field called rerank)
+
+
 class SettingsIn(BaseModel):
     model: str | None = None
     write_xmp: bool | None = None
     device: str | None = None      # auto | cpu
     autostart: bool | None = None
+    rerank: bool | None = None                                    # the "closer look" at top results
+    rerank_url: str | None = Field(default=None, max_length=300)
+    rerank_model: str | None = Field(default=None, max_length=120)
+    rerank_top: int | None = Field(default=None, ge=1, le=RERANK_MAX_TOP)
 
 
 @app.put("/api/settings")
@@ -218,6 +227,17 @@ def put_settings(body: SettingsIn):
         emb = embedder.get()
         if hasattr(emb, "_image"):  # reload on the chosen hardware next time it's needed
             emb._image = emb._text = None
+    if body.rerank is not None:
+        db.set_setting("rerank", "1" if body.rerank else "0")
+    if body.rerank_url is not None:
+        url = body.rerank_url.strip().rstrip("/")
+        if url and not re.match(r"^https?://[^\s/]+", url):
+            raise HTTPException(400, "The model server address should look like http://127.0.0.1:11434/v1")
+        db.set_setting("rerank_url", url)
+    if body.rerank_model is not None:
+        db.set_setting("rerank_model", body.rerank_model.strip())
+    if body.rerank_top is not None:
+        db.set_setting("rerank_top", str(body.rerank_top))
     if body.autostart is not None:
         try:
             autostart.set_enabled(body.autostart)
@@ -589,7 +609,7 @@ def do_search(
     q: str = "", limit: int = Query(300, le=1000), folder_id: int | None = None,
     year_from: int | None = None, year_to: int | None = None, collection_id: int | None = None,
     sort: str = "relevance", like: str | None = None, dislike: str | None = None, colors: str | None = None,
-    remember: bool = False,
+    remember: bool = False, deep: bool = False,
 ):
     require_model()
     if remember and q.strip():
@@ -597,6 +617,9 @@ def do_search(
     like_ids, dislike_ids = _ids_param(like), _ids_param(dislike)
     hits = search.text_search(q, limit, sort=sort, filters=filters_from(folder_id, year_from, year_to, collection_id),
                               like=like_ids, dislike=dislike_ids, colors=_hex_param(colors))
+    looked = 0
+    if deep and q.strip() and rerank.settings()["enabled"]:
+        hits, looked = rerank.apply(hits, q)
     u = search.understand(q)
     label = u["expression"]
     expression = {"label": label, "emoji": faces.EXPRESSION_EMOJI[label], "everyone": u["everyone"]} if label else None
@@ -605,7 +628,29 @@ def do_search(
                                    "places": [p["label"] for p in u["places"]], "when": u["when"].label or None,
                                    "expression": expression, "tone": {-1: "dark", 1: "bright"}.get(u["tone"]),
                                    "like": like_ids, "dislike": dislike_ids},
-            "items": hydrate(hits), "indexed": len(index)}
+            "items": hydrate(hits), "indexed": len(index), "deep": looked}
+
+
+class RerankIn(BaseModel):
+    q: str = Field(min_length=1, max_length=300)
+    ids: list[int] = Field(min_length=1, max_length=rerank.MAX_TOP)
+
+
+@app.get("/api/rerank")
+def rerank_status():
+    return rerank.status()
+
+
+@app.post("/api/search/rerank")
+def start_rerank(body: RerankIn):
+    """Have the vision-language model rate the top results of a search. Follow it with /api/jobs/{id},
+    then ask /api/search again with deep=1."""
+    st = rerank.status()
+    if not st["available"]:
+        raise HTTPException(409, st["detail"])
+    ids = body.ids[: st["top"]]
+    return {"job_id": jobs.start("rerank", len(ids), lambda progress: rerank.run(ids, body.q, progress)),
+            "total": len(ids)}
 
 
 class SearchMemoryIn(BaseModel):

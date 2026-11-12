@@ -91,6 +91,13 @@ CREATE TABLE IF NOT EXISTS search_history (
     uses INTEGER NOT NULL DEFAULT 1,
     pinned INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS rerank_scores (
+    photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+    query TEXT NOT NULL,
+    model TEXT NOT NULL,
+    score REAL NOT NULL,
+    PRIMARY KEY (photo_id, query, model)
+);
 CREATE TABLE IF NOT EXISTS collection_items (
     collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
     photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
