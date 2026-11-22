@@ -96,6 +96,30 @@ rate how well each fits your words, and re-order them. The chip *Top 12 re-order
   kept 14. The 3B model was not better than no closer look (it fixed 2 and broke 2 of 30). A small
   sample, on a CPU, served by llama.cpp rather than Ollama.
 
+## Deep understanding (optional)
+
+The same vision-language model can **describe the photos you choose**, once each: who is in them,
+what they are doing together, expressions and emotions, colours and light, the setting, the mood.
+The description is shown in the viewer and matched against your searches, so *two people laughing
+together*, *a tender moment* or *a child alone, a little sad* find photos by what is going on in them.
+
+- It is slow (seconds per photo on a Mac, about a minute on a plain CPU), so it never runs on its
+  own. Queue a folder in *Sources → Deep understanding*, or press **✨ Describe** on a collection or
+  on a selection of photos. Start with a few hundred photos you care about.
+- It works in the background, can be paused, and continues where it stopped. If the model server
+  isn't running it waits and says so.
+- Photos without a description are found as before; described ones get an extra boost when their
+  description fits the search.
+
+## Your taste
+
+Lumen learns what you like from favourites, 4–5 star ratings, photos you put in collections and
+👍/👎 on search results (1–2 stars and 👎 count against). From ten liked photos it shapes *Best
+shots* and nudges every search. From twenty it also trains a small model on your examples, and
+uses it only if it ranks examples it hasn't seen better than the simple average of what you like.
+*Sources → This computer → Your taste* says which is in use and how it scored. Everything is
+computed on this computer in milliseconds.
+
 ## Measuring it on your own photos
 
 Two small tools in `tools/` tell you how Lumen does on *your* library and *your* computer.
@@ -225,6 +249,7 @@ query ──▶ who / where / when / "text" / #tags taken out as filters
 | `marks.py` | favourites, ratings, tags, XMP sidecars |
 | `share.py`, `jobs.py` | web gallery and H.264 slideshow export; background jobs |
 | `lan.py` | phone access: second listener, PIN (PBKDF2), signed session cookies, rate limiting |
+| `deep.py`, `taste.py` | descriptions of chosen photos by a vision-language model and their use in search; your taste, learned from what you like |
 | `rerank.py`, `history.py` | the closer look (vision-language re-ranking of the top results); remembered searches |
 | `watcher.py`, `autostart.py`, `tray.py` | live folder watching, start with the computer, tray icon |
 | `server.py`, `static/` | FastAPI JSON API (localhost only, unless phone access is on) and the no-build UI |
