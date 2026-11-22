@@ -63,6 +63,9 @@ MODELS = {
 }
 DEFAULT_MODEL = os.environ.get("LUMEN_MODEL", "siglip2")
 
+# Search shows the same picture saved several times once (LUMEN_COLLAPSE_COPIES=0 shows every copy).
+COLLAPSE_COPIES = os.environ.get("LUMEN_COLLAPSE_COPIES", "1") != "0"
+
 # "fastembed" for real use; "fake" is a deterministic stand-in used by the tests.
 EMBEDDER = os.environ.get("LUMEN_EMBEDDER", "fastembed")
 

@@ -203,6 +203,7 @@ class JGrid {
         <button class="check" data-act="select" aria-label="Select">${I.check}</button>
         <div class="quick">${this.feedback ? `<button data-act="like" title="More like this" aria-label="More like this" class="${this.feedback.like.has(it.id) ? "on" : ""}">${I.up}</button><button data-act="dislike" title="Less like this" aria-label="Less like this" class="${this.feedback.dislike.has(it.id) ? "on" : ""}">${I.down}</button>` : ""}<button data-act="fav" title="Favourite" aria-label="Favourite" class="${it.fav ? "on" : ""}">${I.heart}</button><button data-act="similar" title="Find similar photos" aria-label="Find similar">${I.similar}</button></div>
         ${it.fav ? '<span class="fav-badge" aria-label="Favourite">♥</span>' : ""}
+        ${it.copies?.length ? `<span class="copies-badge" title="${it.copies.length + 1} copies of this picture">×${it.copies.length + 1}</span>` : ""}
         ${it.kind === "video" ? `<span class="vid-badge">${I.play}${it.t != null ? `${fmtClock(it.t)} / ` : ""}${fmtClock(it.duration)}</span>` : ""}
         ${this.showTier && it.tier ? `<i class="tier ${it.tier}"></i>` : ""}
         ${this.coverId === it.id ? '<span class="cover-flag">Cover</span>' : ""}
@@ -515,7 +516,7 @@ async function renderSearch(view, params) {
   const title = params.get("title");
   $("#top-search-input").value = title ? "" : q;
   const filters = new URLSearchParams();
-  for (const k of ["year_from", "year_to", "folder_id", "sort", "like", "dislike", "colors", "deep"]) if (params.get(k)) filters.set(k, params.get(k));
+  for (const k of ["year_from", "year_to", "folder_id", "sort", "like", "dislike", "colors", "deep", "copies"]) if (params.get(k)) filters.set(k, params.get(k));
   const head = h(`<div class="search-head fade-in">
       <div class="search-top"><h1 class="search-title">${title ? `${esc(title)}` : q ? `<q>${esc(q)}</q>` : "By colour"}</h1><div class="row-actions"></div></div>
       <div class="filters"></div>
@@ -598,6 +599,11 @@ async function renderSearch(view, params) {
       };
       $(".row-actions", head).append(btn);
     }).catch(() => {});
+  }
+  if (res.hidden_copies || params.get("copies")) {
+    const c = h(`<span class="chip" title="The same picture saved more than once is shown once">${params.get("copies") ? "Showing every copy ✕" : `${res.hidden_copies} ${res.hidden_copies === 1 ? "copy" : "copies"} hidden · show`}</span>`);
+    c.onclick = () => setParam("copies", params.get("copies") ? "" : "1");
+    f.append(c);
   }
   if (res.deep) {
     const note = h(`<span class="chip" title="Show the usual order">✨ Top ${res.deep} re-ordered by a closer look ✕</span>`);

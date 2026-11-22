@@ -66,7 +66,7 @@ def rank_of(items, names):
     """1-based position of the best expected photo, or None if none of them came back."""
     want = {n.lower() for n in names}
     for i, it in enumerate(items, 1):
-        if it["name"].lower() in want:
+        if it["name"].lower() in want or any(n.lower() in want for n in it.get("copy_names", [])):
             return i
     return None
 

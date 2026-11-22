@@ -609,7 +609,7 @@ def do_search(
     q: str = "", limit: int = Query(300, le=1000), folder_id: int | None = None,
     year_from: int | None = None, year_to: int | None = None, collection_id: int | None = None,
     sort: str = "relevance", like: str | None = None, dislike: str | None = None, colors: str | None = None,
-    remember: bool = False, deep: bool = False,
+    remember: bool = False, deep: bool = False, copies: bool | None = None,
 ):
     require_model()
     if remember and q.strip():
@@ -617,6 +617,10 @@ def do_search(
     like_ids, dislike_ids = _ids_param(like), _ids_param(dislike)
     hits = search.text_search(q, limit, sort=sort, filters=filters_from(folder_id, year_from, year_to, collection_id),
                               like=like_ids, dislike=dislike_ids, colors=_hex_param(colors))
+    hidden = 0
+    if not (copies if copies is not None else not config.COLLAPSE_COPIES):
+        # The same picture saved several times would otherwise fill the top of the results.
+        hits, hidden = duplicates.collapse(hits)
     looked = 0
     if deep and q.strip() and rerank.settings()["enabled"]:
         hits, looked = rerank.apply(hits, q)
@@ -628,7 +632,22 @@ def do_search(
                                    "places": [p["label"] for p in u["places"]], "when": u["when"].label or None,
                                    "expression": expression, "tone": {-1: "dark", 1: "bright"}.get(u["tone"]),
                                    "like": like_ids, "dislike": dislike_ids},
-            "items": hydrate(hits), "indexed": len(index), "deep": looked}
+            "items": _with_copy_names(hydrate(hits)), "indexed": len(index), "deep": looked,
+            "hidden_copies": hidden}
+
+
+def _with_copy_names(items):
+    """Name the hidden copies of each result, so a copy can be recognised by its filename."""
+    ids = [i for it in items for i in it.get("copies", [])]
+    names = {}
+    for k in range(0, len(ids), 900):
+        chunk = ids[k : k + 900]
+        for r in db.q(f"SELECT id, path FROM photos WHERE id IN ({','.join('?' * len(chunk))})", chunk):
+            names[r["id"]] = os.path.basename(r["path"])
+    for it in items:
+        if it.get("copies"):
+            it["copy_names"] = [names[i] for i in it["copies"] if i in names]
+    return items
 
 
 class RerankIn(BaseModel):

@@ -8,6 +8,7 @@ from pathlib import Path
 _home = tempfile.mkdtemp(prefix="lumen-test-")
 os.environ["LUMEN_HOME"] = _home
 os.environ["LUMEN_EMBEDDER"] = "fake"
+os.environ["LUMEN_COLLAPSE_COPIES"] = "0"  # the flat-colour test pictures all look like copies of each other
 os.environ["LUMEN_OCR_GREEK"] = "0"  # the Greek text model is a download; its merging is tested without it
 os.environ["XDG_DATA_HOME"] = os.path.join(_home, "xdg")  # where send2trash puts the Trash on Linux
 

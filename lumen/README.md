@@ -73,6 +73,8 @@ towards what you mean.
 Searches you run are remembered on the home page (🕘). Press **Pin search** on a results page to keep one
 there (📌), or ✕ to forget it. Only searches you submit are saved, not Explore or mood cards.
 
+The same picture saved more than once is shown once, with a ×3 badge. *N copies hidden · show* reveals them all.
+
 Results come in *Spot on*, *Strong* and *Possible* tiers. *Best looking first* sorts each tier by
 photo quality. Videos are searched frame by frame: a match opens at the moment that fits.
 

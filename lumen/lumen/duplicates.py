@@ -159,3 +159,27 @@ def summary():
         "burst_groups": len(b),
         "burst_extra": sum(len(g["photo_ids"]) - 1 for g in b),
     }
+
+
+def collapse(hits):
+    """Fold copies of the same photo in a ranked list into the first one that appears, which gets
+    "copies": [ids of the hidden ones]. Bursts (different shots of a moment) are left alone, and so
+    are groups dismissed in Tidy up. Returns (hits, how many were hidden)."""
+    group_of = {pid: g["key"] for g in find("duplicates") for pid in g["photo_ids"]}
+    if not group_of:
+        return hits, 0
+    first, out, hidden = {}, [], 0
+    for h in hits:
+        key = group_of.get(h["id"])
+        if key is None:
+            out.append(h)
+        elif key in first:
+            first[key]["copies"].append(h["id"])
+            hidden += 1
+        else:
+            first[key] = {**h, "copies": []}
+            out.append(first[key])
+    for h in first.values():
+        if not h["copies"]:
+            del h["copies"]
+    return out, hidden
