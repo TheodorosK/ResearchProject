@@ -110,6 +110,13 @@ together*, *a tender moment* or *a child alone, a little sad* find photos by wha
   isn't running it waits and says so.
 - Photos without a description are found as before; described ones get an extra boost when their
   description fits the search.
+- **Measured so far, no clear gain.** With Qwen2.5-VL-7B describing 52 Flickr photos, searches such as
+  *people playing together*, *a child*, *a quiet calm moment* (judged against the photos' human
+  captions) ranked the right photos above the others 84.5% of the time with the image model alone and
+  83.7–85.2% with descriptions added, which is within noise. Descriptions alone did worse (74%). The
+  test is small and its labels are literal captions that rarely mention feelings, so it can't show
+  whether moods and emotions improve. Try it on a folder you know and judge with
+  `tools/score_searches.py` before describing your whole library.
 
 ## Your taste
 

@@ -195,7 +195,7 @@ BRIGHT_WORDS = {
     "bright", "brighter", "sunny", "sunlit", "highkey", "high-key", "airy", "luminous",
     "φωτεινό", "φωτεινή", "φωτεινός", "φωτεινά", "φωτεινές", "ηλιόλουστο", "ηλιόλουστη", "ηλιόλουστες",
 }
-DEEP_WEIGHT = 1.0   # z-score units per unit of description-match z (see tools/ and README for the measurement)
+DEEP_WEIGHT = 0.5   # z-score units per unit of description-match z; 1.0 was sometimes worse than none (README)
 DEEP_CLIP = 4.0
 TONE_WEIGHT = 1.0   # z-score units per unit of (clipped) brightness z
 
