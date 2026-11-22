@@ -91,6 +91,13 @@ CREATE TABLE IF NOT EXISTS search_history (
     uses INTEGER NOT NULL DEFAULT 1,
     pinned INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS search_feedback (
+    photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+    query TEXT NOT NULL,
+    verdict INTEGER NOT NULL,
+    at REAL NOT NULL,
+    PRIMARY KEY (photo_id, query)
+);
 CREATE TABLE IF NOT EXISTS photo_descriptions (
     photo_id INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
     model TEXT NOT NULL,

@@ -636,6 +636,8 @@ async function renderSearch(view, params) {
       const [on, off] = act === "like" ? [like, dislike] : [dislike, like];
       on.has(id) ? on.delete(id) : on.add(id);
       off.delete(id);
+      // Saved as well, so Lumen can learn your taste from it over time.
+      api("/api/feedback", { method: "POST", body: { q, photo_id: id, verdict: like.has(id) ? 1 : dislike.has(id) ? -1 : 0 } }).catch(() => {});
       const p = new URLSearchParams(params);
       like.size ? p.set("like", [...like].join(",")) : p.delete("like");
       dislike.size ? p.set("dislike", [...dislike].join(",")) : p.delete("dislike");
@@ -1231,6 +1233,14 @@ async function renderSources(view) {
   drawIndexPanel();
 }
 
+function tasteLine(t) {
+  if (!t) return "";
+  const from = `${fmt(t.liked)} photos you like${t.disliked ? ` and ${fmt(t.disliked)} you don't` : ""} (favourites, 4–5 stars, collections, 👍/👎)`;
+  if (t.method === "none") return `Lumen learns what you like from favourites, 4–5 stars, collections and 👍/👎. It needs ${t.needed} liked photos to start; you have ${fmt(t.liked)}.`;
+  if (t.method === "trained") return `A model trained on ${from}. On examples it hadn't seen it ranked a liked photo above another ${Math.round(t.trained_auc * 100)}% of the time (the simple average managed ${Math.round(t.simple_auc * 100)}%). It shapes Best shots and nudges every search.`;
+  return `Learned from ${from}, as an average of what you like.${t.trained_auc != null ? ` A trained model was tried and wasn't better (${Math.round(t.trained_auc * 100)}% vs ${Math.round(t.simple_auc * 100)}%), so it isn't used.` : ` A trained model is tried from ${t.needed_for_training} liked photos.`}`;
+}
+
 async function settingsPanels(settings) {
   const wrap = h('<div class="settings-grid"></div>');
   // Phone access
@@ -1261,6 +1271,7 @@ async function settingsPanels(settings) {
       <label class="switch"><input type="checkbox" data-s="autostart" ${settings.autostart ? "checked" : ""}> <span></span></label></div>
     <div class="setting"><div><strong>Write ratings & tags to XMP sidecars</strong><p class="muted">Lightroom, Bridge, Capture One and digiKam will see your stars, favourites and tags. Lumen writes small <code>.xmp</code> files next to your photos and never touches the photos themselves.</p></div>
       <label class="switch"><input type="checkbox" data-s="write_xmp" ${settings.write_xmp ? "checked" : ""}> <span></span></label></div>
+    <div class="setting"><div><strong>🎯 Your taste</strong><p class="muted">${tasteLine(settings.taste)}</p></div></div>
     <p class="muted" style="font-size:13px;margin:10px 0 0">👀 Folder watching: ${esc(state.status?.watching || "—")}</p></div>`);
   $$("input[data-s]", sys).forEach((inp) => (inp.onchange = async () => {
     const key = inp.dataset.s;

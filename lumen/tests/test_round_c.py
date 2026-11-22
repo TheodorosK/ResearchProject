@@ -92,8 +92,8 @@ def test_xmp_sidecars_are_written_without_losing_other_data(client):
 
 
 def test_taste_learns_from_favourites(client, monkeypatch):
-    from lumen import quality
-    monkeypatch.setattr(quality, "TASTE_MIN_EXAMPLES", 3)
+    from lumen import quality, taste
+    monkeypatch.setattr(taste, "MIN_EXAMPLES", 3)
     items = by_name(client)
     everyone = [i["id"] for i in items.values()]
     client.post("/api/photos/marks", json={"photo_ids": everyone, "favorite": False, "rating": 0})

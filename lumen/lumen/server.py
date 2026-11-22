@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import autostart, config, db, deep, describe, duplicates, history, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, rerank, search
+from . import autostart, config, db, deep, describe, duplicates, history, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, rerank, search, taste
 from .indexer import delete_photos, preview_path, switch_model, watcher, worker
 from .vectors import index
 
@@ -193,6 +193,7 @@ def get_settings():
         "accelerators": [label for provider, label in embedder.ACCELERATORS if provider in _providers()],
         "autostart": autostart.is_enabled(),
         "rerank": rerank.settings(),
+        "taste": taste.status(),
     }
 
 
@@ -655,6 +656,21 @@ def _with_copy_names(items):
 class RerankIn(BaseModel):
     q: str = Field(min_length=1, max_length=300)
     ids: list[int] = Field(min_length=1, max_length=rerank.MAX_TOP)
+
+
+class FeedbackIn(BaseModel):
+    q: str = Field(max_length=300)
+    photo_id: int
+    verdict: int = Field(ge=-1, le=1)      # 1 = 👍, -1 = 👎, 0 = taken back
+
+
+@app.post("/api/feedback")
+def search_feedback(body: FeedbackIn):
+    """Remember a 👍/👎 on a search result, so Lumen can learn your taste from it."""
+    if not db.one("SELECT 1 FROM photos WHERE id=?", (body.photo_id,)):
+        raise HTTPException(404, "No such photo")
+    taste.record_feedback(body.photo_id, body.q, body.verdict)
+    return {"ok": True}
 
 
 class DeepQueueIn(BaseModel):
