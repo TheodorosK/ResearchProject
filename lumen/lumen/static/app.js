@@ -100,6 +100,15 @@ function toast(msg, { action, onAction, error = false, ms = 4200 } = {}) {
 }
 const fail = (e) => toast(esc(e.message || e), { error: true });
 
+// Queue photos for a description by the vision-language model (deep understanding).
+async function describePhotos(body, what) {
+  try {
+    const r = await api("/api/deep/queue", { method: "POST", body });
+    if (!r.added) return toast("These photos are already described.");
+    toast(`✨ ${plural(r.added, "photo")} queued for a closer description${r.seconds_per_photo ? ` · ${fmtDuration(r.queued * r.seconds_per_photo)}` : ""}. Progress is in Sources.`, { action: "Open", onAction: () => go("#/sources") });
+  } catch (e) { fail(e); }
+}
+
 // ------------------------------------------------------------------ selection
 function isSelected(id) { return state.selection.has(id); }
 function setSelected(item, on) {
@@ -131,6 +140,7 @@ function renderTray() {
   add("Add to collection", I.collection, () => openAddToCollection(ids()), state.target ? "" : "primary");
   add("Favourite", I.heart, async () => { const items = [...state.selection.values()]; if (await toggleFavourite(items, !items.every((i) => i.fav))) toast(items.every((i) => i.fav) ? "Added to favourites ♥" : "Removed from favourites"); });
   add("Tag", I.tag, () => openTagger([...state.selection.values()]));
+  add("Describe", "✨", () => describePhotos({ photo_ids: ids() }, `${ids().length} selected`));
   add("More like these", I.similar, () => go(`#/like?ids=${ids().slice(0, 60).join(",")}`));
 }
 
@@ -794,6 +804,7 @@ async function renderCollection(view, id) {
     });
   }
   if (c.count) btn("Play", I.slides, () => playSlideshow(c.items, c.name, c.description || ""));
+  if (c.count) btn("Describe", "✨", () => describePhotos({ photo_ids: c.items.map((i) => i.id) }, c.name));
   btn("Edit", I.edit, () => openCollectionEditor({ existing: c }));
   if (c.count) btn("Share", I.share, () => openShare(`/api/collections/${c.id}/share`, c.name));
   if (c.count) {
@@ -1144,6 +1155,7 @@ async function drawLightbox() {
       ${d.quality != null ? `<dt>⭐</dt><dd>${d.quality >= 90 ? "One of your best shots · " : d.quality >= 70 ? "Looks great · " : ""}<span class="muted">Quality ${d.quality}/100</span></dd>` : ""}
       ${it.tier ? `<dt>🎯</dt><dd>${{ best: "Spot-on match", good: "Strong match", maybe: "Possible match" }[it.tier]}</dd>` : ""}
     </dl>
+    ${d.deep ? `<div><h4>✨ A closer description</h4><p class="lb-caption">${esc(d.deep.text)}</p></div>` : ""}
     ${d.seen && (d.seen.caption || d.seen.tags.length) ? `<div><h4>What Lumen sees</h4>${d.seen.caption ? `<p class="lb-caption">${esc(d.seen.caption)}</p>` : ""}<div class="chips">${d.seen.tags.map((t) => `<a class="chip" href="#/search?q=${encodeURIComponent(t)}">${esc(t)}</a>`).join("")}</div></div>` : ""}
     ${d.text ? `<div><h4>Text in this photo <button class="link" data-a="copytext">Copy</button></h4><pre class="lb-text">${esc(d.text)}</pre></div>` : ""}
     ${d.people.length ? `<div><h4>People${d.people.some((p) => p.kind === "pet") ? " & pets" : ""}</h4><div class="lb-people">${d.people.map((p) => `<a class="lb-person" href="${p.id ? `#/person/${p.id}` : "#/people"}"><span class="lb-face"><img src="${faceUrl(p.face_id)}" alt="">${p.expression_emoji ? `<i title="${esc(p.expression === "happiness" ? "smiling" : p.expression)}">${p.expression_emoji}</i>` : ""}</span><span>${p.kind === "pet" ? (p.species === "dog" ? "🐶 " : "🐱 ") : ""}${p.id ? esc(p.name || "Add a name") : "Not grouped yet"}</span></a>`).join("")}</div></div>` : ""}
@@ -1262,10 +1274,10 @@ async function settingsPanels(settings) {
     deep.innerHTML = `<h2>✨ Closer look</h2>
       <p class="muted" style="margin:0 0 12px">Optional. A vision-language model running on this computer (for example Qwen2.5-VL in <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>) looks at the top results of a search one by one when you press <strong>Look closer</strong>, and re-orders them. Slower (seconds per photo), but it reads the whole scene: who is doing what, where, in what light. Indexing is not affected.</p>
       <label class="switch"><input type="checkbox" data-d="rerank" ${st.enabled ? "checked" : ""}> <span>${st.enabled ? "On" : "Off"}</span></label>
-      ${st.enabled ? `<p style="margin:12px 0 8px">${st.available ? "✅ Ready" : "⚠️ " + esc(st.detail)}</p>
-      <div class="setting"><div><strong>Model</strong><p class="muted">With Ollama: <code>ollama pull ${esc(st.model)}</code></p></div><input class="input" data-d="rerank_model" value="${esc(st.model)}" style="width:190px"></div>
+      ${st.enabled ? `<p style="margin:12px 0 8px">${st.available ? "✅ Ready" : "⚠️ " + esc(st.detail)}</p>` : `<p class="muted" style="margin:12px 0 8px">The model and server below are also used by Deep understanding.</p>`}
+      ${`<div class="setting"><div><strong>Model</strong><p class="muted">With Ollama: <code>ollama pull ${esc(st.model)}</code></p></div><input class="input" data-d="rerank_model" value="${esc(st.model)}" style="width:190px"></div>
       <div class="setting"><div><strong>Model server</strong><p class="muted">Any OpenAI-compatible address (Ollama, LM Studio, llama.cpp).</p></div><input class="input" data-d="rerank_url" value="${esc(st.url)}" style="width:250px"></div>
-      <div class="setting"><div><strong>Photos to look at</strong><p class="muted">More is slower. Each one is rated once per search and remembered.</p></div><input class="input" type="number" min="1" max="40" data-d="rerank_top" value="${st.top}" style="width:80px"></div>` : ""}`;
+      <div class="setting"><div><strong>Photos to look at</strong><p class="muted">More is slower. Each one is rated once per search and remembered.</p></div><input class="input" type="number" min="1" max="40" data-d="rerank_top" value="${st.top}" style="width:80px"></div>`}`;
     $$("[data-d]", deep).forEach((inp) => (inp.onchange = async () => {
       const k = inp.dataset.d;
       const v = k === "rerank" ? inp.checked : k === "rerank_top" ? Math.max(1, Math.min(40, parseInt(inp.value, 10) || 12)) : inp.value.trim();
@@ -1274,7 +1286,34 @@ async function settingsPanels(settings) {
     }));
   };
   await drawDeep();
-  wrap.append(lanPanel, sys, deep);
+  // Deep understanding (descriptions of chosen photos)
+  const und = h('<div class="panel fade-in"></div>');
+  const folders = await api("/api/folders").catch(() => []);
+  const drawUnd = async () => {
+    const st = await api("/api/deep").catch(() => null);
+    if (!st) return;
+    und.innerHTML = `<h2>✨ Deep understanding</h2>
+      <p class="muted" style="margin:0 0 12px">The same vision-language model can describe photos you choose, once each: who is in them, what they are doing together, expressions and emotions, colours and light, the mood. Searches like <em>two people laughing together</em> or <em>a tender moment</em> then find them. Slow, so it only runs on what you pick: a folder here, or <strong>Describe</strong> on a collection or a selection.</p>
+      <p style="margin:0 0 10px"><strong>${fmt(st.described)}</strong> described${st.queued ? ` · <strong>${fmt(st.queued)}</strong> waiting${st.eta_seconds ? ` · ${fmtDuration(st.eta_seconds)} left` : ""}${st.seconds_per_photo ? ` (${st.seconds_per_photo} s per photo)` : ""}` : ""}${st.state === "paused" ? " · paused" : ""}</p>
+      ${st.error ? `<p style="margin:0 0 10px">⚠️ ${esc(st.error)}</p>` : ""}
+      <div class="row-actions" style="justify-content:flex-start;flex-wrap:wrap">
+        <select class="input" style="height:36px;width:auto;max-width:260px" aria-label="Folder to describe">${folders.map((x) => `<option value="${x.id}">${esc(x.name)} (${fmt(x.count ?? x.photos ?? 0)})</option>`).join("")}</select>
+        <button class="btn small" data-u="queue">✨ Describe this folder</button>
+        ${st.queued ? `<button class="btn small" data-u="pause">${st.paused ? "Resume" : "Pause"}</button><button class="btn small" data-u="clear">Clear queue</button>` : ""}
+      </div>`;
+    $("[data-u=queue]", und).onclick = async () => {
+      const sel = $("select", und);
+      if (!sel.value) return;
+      if (!(await confirmDialog("Describe this folder?", "The model looks at every photo in it, one at a time. This can take hours for a large folder; you can pause it, and it continues where it stopped.", "Describe"))) return;
+      await describePhotos({ folder_id: Number(sel.value) }, sel.selectedOptions[0].textContent); drawUnd();
+    };
+    $("[data-u=pause]", und)?.addEventListener("click", async () => { await api("/api/deep/pause", { method: "POST", body: { paused: !st.paused } }).catch(fail); drawUnd(); });
+    $("[data-u=clear]", und)?.addEventListener("click", async () => { await api("/api/deep/clear", { method: "POST" }).catch(fail); drawUnd(); });
+  };
+  await drawUnd();
+  const undTimer = setInterval(() => (und.isConnected ? drawUndIfIdle() : clearInterval(undTimer)), 5000);
+  const drawUndIfIdle = () => { if (!und.contains(document.activeElement)) drawUnd(); };
+  wrap.append(lanPanel, sys, deep, und);
   return wrap;
 }
 

@@ -91,6 +91,17 @@ CREATE TABLE IF NOT EXISTS search_history (
     uses INTEGER NOT NULL DEFAULT 1,
     pinned INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS photo_descriptions (
+    photo_id INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+    model TEXT NOT NULL,
+    text TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS deep_queue (
+    photo_id INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+    added_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS rerank_scores (
     photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
     query TEXT NOT NULL,

@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 
-from . import autostart, config, db, describe, duplicates, history, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, rerank, search
+from . import autostart, config, db, deep, describe, duplicates, history, lan, marks, share, embedder, events, faces, jobs, ocr, places, quality, rerank, search
 from .indexer import delete_photos, preview_path, switch_model, watcher, worker
 from .vectors import index
 
@@ -31,6 +31,7 @@ async def lifespan(app):
     db.init()
     index.load(embedder.get().key)
     worker.start()
+    deep.worker.start()
     if os.environ.get("LUMEN_WATCH", "1") != "0":
         watcher.start()
     if db.get_setting("lan") == "1":
@@ -476,6 +477,7 @@ def photo_detail(photo_id: int):
         "quality": quality.scores().get(photo_id, (None, None))[1],
         "text": ocr.text_of(photo_id),
         "seen": describe.describe(photo_id),
+        "deep": deep.get(photo_id),
         "tags": marks.tags_of(photo_id),
         "sharpness": r["sharpness"],
     }
@@ -653,6 +655,48 @@ def _with_copy_names(items):
 class RerankIn(BaseModel):
     q: str = Field(min_length=1, max_length=300)
     ids: list[int] = Field(min_length=1, max_length=rerank.MAX_TOP)
+
+
+class DeepQueueIn(BaseModel):
+    folder_id: int | None = None
+    collection_id: int | None = None
+    photo_ids: list[int] | None = Field(default=None, max_length=100000)
+
+
+@app.get("/api/deep")
+def deep_status():
+    return deep.worker.status()
+
+
+@app.post("/api/deep/queue")
+def deep_queue(body: DeepQueueIn):
+    """Queue photos for a description: a folder, a collection, or a list of photos."""
+    ids = set(body.photo_ids or [])
+    if body.folder_id is not None:
+        ids |= {r["id"] for r in db.q("SELECT id FROM photos WHERE folder_id=? AND status='ready'", (body.folder_id,))}
+    if body.collection_id is not None:
+        ids |= {r["photo_id"] for r in db.q("SELECT photo_id FROM collection_items WHERE collection_id=?",
+                                            (body.collection_id,))}
+    if not ids:
+        raise HTTPException(400, "Nothing to describe: choose a folder, a collection or some photos")
+    return {"added": deep.enqueue(sorted(ids)), **deep.worker.status()}
+
+
+class DeepPauseIn(BaseModel):
+    paused: bool
+
+
+@app.post("/api/deep/pause")
+def deep_pause(body: DeepPauseIn):
+    deep.worker.paused = body.paused
+    deep.worker.nudge()
+    return deep.worker.status()
+
+
+@app.post("/api/deep/clear")
+def deep_clear():
+    deep.clear_queue()
+    return deep.worker.status()
 
 
 @app.get("/api/rerank")

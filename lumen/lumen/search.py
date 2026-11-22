@@ -6,7 +6,7 @@ from datetime import datetime
 
 import numpy as np
 
-from . import colors as colour, dates, db, embedder, faces, ocr, places, quality
+from . import colors as colour, dates, db, deep, embedder, faces, ocr, places, quality
 from .vectors import index
 
 # Cutoffs on a robust z-score (median/MAD of the whole library), so they hold for any model and
@@ -195,6 +195,8 @@ BRIGHT_WORDS = {
     "bright", "brighter", "sunny", "sunlit", "highkey", "high-key", "airy", "luminous",
     "φωτεινό", "φωτεινή", "φωτεινός", "φωτεινά", "φωτεινές", "ηλιόλουστο", "ηλιόλουστη", "ηλιόλουστες",
 }
+DEEP_WEIGHT = 1.0   # z-score units per unit of description-match z (see tools/ and README for the measurement)
+DEEP_CLIP = 4.0
 TONE_WEIGHT = 1.0   # z-score units per unit of (clipped) brightness z
 
 
@@ -369,6 +371,15 @@ def _text_search(raw, limit, filters, min_z, min_count, like=(), dislike=(), col
         text_hits = ocr.matches(positive)
         if text_hits:
             bonus = bonus + TEXT_WEIGHT * np.array([text_hits.get(int(i), 0.0) for i in ids])
+    if positive:
+        # Photos a vision-language model has described: what is going on in them counts too.
+        d = deep.scores(ids, positive)
+        if d is not None:
+            have = ~np.isnan(d)
+            if have.sum() > 2:
+                dz = np.zeros(len(ids))
+                dz[have] = np.clip(robust_z(d[have]), 0, DEEP_CLIP)
+                bonus = bonus + DEEP_WEIGHT * dz
     if u["tone"]:
         bonus = bonus + _tone_bonus(ids, u["tone"])
     if u["expression"]:
